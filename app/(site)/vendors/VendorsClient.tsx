@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useLocale } from "@/lib/i18n/context";
-import { formatAed } from "@/lib/constants";
+import { PhoneField } from "@/components/PhoneField";
 
 interface EventOption {
   id: string;
@@ -12,14 +12,7 @@ interface EventOption {
   startDate: string;
 }
 
-interface Tier {
-  sizeKey: string;
-  label: string;
-  priceAedFils: number;
-  vatInclusive: boolean;
-}
-
-export function VendorsClient({ events, tiers }: { events: EventOption[]; tiers: Tier[] }) {
+export function VendorsClient({ events }: { events: EventOption[] }) {
   const { t, locale } = useLocale();
   const [eventId, setEventId] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -85,34 +78,25 @@ export function VendorsClient({ events, tiers }: { events: EventOption[]; tiers:
         <p className="mt-3 text-brown-light">{t("vendorInfo.subtitle")}</p>
       </header>
 
-      <section className="grid md:grid-cols-2 gap-10 mb-16">
-        <div>
-          <h2 className="font-heading text-xl text-brown-dark mb-3">
-            {locale === "ar" ? "رسوم الأكشاك" : "Booth fees"}
-          </h2>
-          <ul className="space-y-2 text-brown-light">
-            {tiers.map((t2) => (
-              <li key={t2.sizeKey} className="flex justify-between border-b border-brown/10 pb-2">
-                <span>{t2.label}</span>
-                <span className="text-brown">
-                  {formatAed(t2.priceAedFils)}
-                  {t2.vatInclusive ? (locale === "ar" ? " (شامل الضريبة)" : " (VAT incl.)") : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div>
-          <h2 className="font-heading text-xl text-brown-dark mb-3">
-            {locale === "ar" ? "المتطلبات والتوقعات" : "Requirements & expectations"}
-          </h2>
-          <ul className="space-y-2 text-brown-light text-sm list-disc pl-4">
-            <li>{locale === "ar" ? "رخصة تجارية سارية وتأمين مناسب" : "Valid trade license and appropriate insurance"}</li>
-            <li>{locale === "ar" ? "الالتزام بمواعيد الإعداد والتفكيك" : "On-time setup and breakdown per the event schedule"}</li>
-            <li>{locale === "ar" ? "تقديم منتج/خدمة تتماشى مع هوية دار الحي" : "A product or service that fits the DAH brand and mix"}</li>
-            <li>{locale === "ar" ? "الالتزام بشروط وأحكام الحجز" : "Agreement to the booking Terms & Conditions"}</li>
-          </ul>
-        </div>
+      <section className="max-w-xl mb-16">
+        <h2 className="font-heading text-xl text-brown-dark mb-3">
+          {locale === "ar" ? "المتطلبات والتوقعات" : "Requirements & expectations"}
+        </h2>
+        <ul className="space-y-2 text-brown-light text-sm list-disc pl-4">
+          <li>
+            {locale === "ar"
+              ? "رخصة تجارية (اختيارية — أخبرنا إن لم تكن لديك بعد) وتأمين مناسب"
+              : "Trade license (optional — let us know if you don't have one yet) and appropriate insurance"}
+          </li>
+          <li>{locale === "ar" ? "الالتزام بمواعيد الإعداد والتفكيك" : "On-time setup and breakdown per the event schedule"}</li>
+          <li>{locale === "ar" ? "تقديم منتج/خدمة تتماشى مع هوية دار الحي" : "A product or service that fits the DAH brand and mix"}</li>
+          <li>{locale === "ar" ? "الالتزام بشروط وأحكام الحجز" : "Agreement to the booking Terms & Conditions"}</li>
+        </ul>
+        <p className="mt-4 text-xs text-brown-light">
+          {locale === "ar"
+            ? "رسوم الأكشاك تُشارك معك بعد قبول طلبك."
+            : "Booth fees are shared with you once your application is accepted."}
+        </p>
       </section>
 
       <section id="apply" className="bg-cream rounded-2xl border border-brown/10 p-6 md:p-10">
@@ -156,7 +140,7 @@ export function VendorsClient({ events, tiers }: { events: EventOption[]; tiers:
             <Field name="businessName" label={t("form.businessName")} required />
             <Field name="contactName" label={t("form.contactName")} required />
             <Field name="email" type="email" label={t("form.email")} required />
-            <Field name="phone" label={t("form.phone")} required />
+            <PhoneField name="phone" label={t("form.phone")} required />
             <Field name="category" label={t("form.category")} required />
             <Field name="instagram" label={t("form.instagram")} />
 
