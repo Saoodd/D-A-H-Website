@@ -1,0 +1,234 @@
+// Dar Al Hay (DAH) — data model
+// SQLite for local dev / small deployments. Swap `provider`/`url` to point at
+// Postgres (e.g. Vercel Postgres, Neon, Supabase) for a production deployment
+// with concurrent serverless writes — see README "Database" section.
+//
+// NOTE: SQLite has no native enum support in Prisma, so status-like fields
+// below are plain Strings. The allowed values are enforced in TypeScript —
+// see lib/constants.ts for the canonical lists (kept in sync with the
+// comments here).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Site-wide settings (singleton row, id = "singleton")
+// ---------------------------------------------------------------------------
+model Settings {
+  id                             String   @id @default("singleton")
+  mainCommunityWhatsappLink      String? // Main DAH Community Group — account-level, not tied to any event
+  defaultAcceptanceDeadlineHours Int      @default(24)
+  updatedAt                      DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Pricing — global, editable from the admin panel. Booths reference a tier by
+// `sizeKey`. Changing a tier's price only affects new/unsold bookings; a sold
+// booth keeps `priceAedFilsAtSale` as a historical record.
+// ---------------------------------------------------------------------------
+model PricingTier {
+  id           String   @id @default(cuid())
+  sizeKey      String   @unique // e.g. "2x2", "3x2" — matches Booth.size
+  label        String // e.g. "2m x 2m kiosk"
+  priceAedFils Int // stored in fils (1 AED = 100 fils) to avoid float errors
+  vatInclusive Boolean  @default(true)
+  active       Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Event {
+  id            String   @id @default(cuid())
+  slug          String   @unique
+  name          String
+  description   String   @default("")
+  startDate     DateTime
+  endDate       DateTime?
+  location      String
+  coverImage    String?
+  categoryNeeds String   @default("") // general vendor category requirements shown publicly
+  status        String   @default("DRAFT") // DRAFT | PUBLISHED | CLOSED
+
+  whatsappVendorGroupLink String? // event-specific, payment-gated
+
+  // Overrides Settings.defaultAcceptanceDeadlineHours for this event only.
+  acceptanceDeadlineHours Int?
+
+  booths       Booth[]
+  features     FloorPlanFeature[]
+  applications Application[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FloorPlanFeature {
+  id    String @id @default(cuid())
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  // ENTRANCE_MAIN | ENTRANCE_SIDE | TOILET_FEMALE | TOILET_MALE | OFFICE | LOADING | STAIRS | OTHER
+  type  String
+  label String
+  // Position/size in a simple grid-cell coordinate system used by the floor
+  // plan renderer (1 cell ~= 1 meter). See app/components/floorplan.
+  gridX    Float
+  gridY    Float
+  gridW    Float
+  gridH    Float
+  rotation Int   @default(0) // degrees, for arrow/door orientation
+
+  createdAt DateTime @default(now())
+}
+
+model Booth {
+  id      String @id @default(cuid())
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  code String // unique WITHIN the event, e.g. "A5", "B29"
+  size String // references PricingTier.sizeKey, e.g. "2x2" / "3x2"
+
+  gridX Float
+  gridY Float
+  gridW Float
+  gridH Float
+
+  status String @default("AVAILABLE") // AVAILABLE | HELD | RESERVED | SOLD
+
+  // System-driven hold (5 min review / 5 min payment) — enforced server-side
+  // by checking holdExpiresAt on every read/write, never trusting the client.
+  holdStage           String? // REVIEW | PAYMENT
+  holdExpiresAt        DateTime?
+  heldByApplicationId  String?
+  heldByApplication    Application? @relation("BoothHeldBy", fields: [heldByApplicationId], references: [id])
+
+  // Admin-driven manual reservation/sale — no timer.
+  assignedApplicationId String?
+  assignedApplication   Application? @relation("BoothAssignedTo", fields: [assignedApplicationId], references: [id])
+  manualAssigneeName    String? // for walk-ins/favors with no application on file
+
+  priceAedFilsAtSale Int? // snapshot of price actually charged/reserved at, historical
+  soldAt             DateTime?
+
+  payments Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, code])
+}
+
+model Vendor {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  passwordHash String
+  businessName String
+  contactName  String
+  phone        String
+  instagram    String?
+
+  applications Application[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Application {
+  id       String @id @default(cuid())
+  vendorId String
+  vendor   Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  eventId  String
+  event    Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  // Snapshot of the submitted info (vendor profile may change later; keep
+  // what was actually submitted for this application).
+  businessName String
+  contactName  String
+  phone        String
+  email        String
+  category     String
+  instagram    String?
+  message      String @default("")
+
+  status String @default("PENDING") // PENDING | REJECTED | ACCEPTED | ACCEPTANCE_EXPIRED
+
+  acceptedAt          DateTime?
+  acceptanceExpiresAt DateTime? // deadline to complete payment; independent of booth holds
+  acceptanceHoursUsed Int? // the hours value actually applied, for display/audit
+  expiredAt           DateTime?
+  rejectedAt          DateTime?
+
+  cancellationRequests CancellationRequest[]
+  adjustments          Adjustment[]
+  payments             Payment[]
+
+  heldBooths     Booth[] @relation("BoothHeldBy")
+  assignedBooths Booth[] @relation("BoothAssignedTo")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([eventId, status])
+  @@index([vendorId])
+}
+
+model Payment {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  eventId       String
+  boothId       String
+  booth         Booth       @relation(fields: [boothId], references: [id])
+
+  amountAedFils Int
+  currency      String @default("AED")
+  status        String @default("PENDING") // PENDING | SUCCEEDED | FAILED
+
+  provider    String // e.g. "sandbox", "ziina", "shopify_payments", "adcb"
+  providerRef String? // charge/session id from the gateway
+
+  createdAt DateTime  @default(now())
+  paidAt    DateTime?
+}
+
+model Adjustment {
+  id             String      @id @default(cuid())
+  applicationId  String
+  application    Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  amountAedFils  Int // can be negative for a discount/credit
+  reason         String
+  createdByAdmin Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+}
+
+model CancellationRequest {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  reason        String
+  status        String      @default("PENDING") // PENDING | ACKNOWLEDGED
+  createdAt     DateTime    @default(now())
+}
+
+model GalleryImage {
+  id        String   @id @default(cuid())
+  url       String
+  caption   String   @default("")
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  message   String
+  createdAt DateTime @default(now())
+}

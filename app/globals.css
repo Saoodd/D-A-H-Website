@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+:root {
+  --color-cream-soft: #f7f4ef;
+  --color-cream: #ede9e2;
+  --color-cream-deep: #ddd3c3;
+  --color-brown-light: #96775c;
+  --color-brown: #6b4429;
+  --color-brown-dark: #4a2e1b;
+  --color-ink: #372315;
+
+  --background: var(--color-cream-soft);
+  --foreground: var(--color-ink);
+}
+
+@theme inline {
+  --color-cream-soft: var(--color-cream-soft);
+  --color-cream: var(--color-cream);
+  --color-cream-deep: var(--color-cream-deep);
+  --color-brown-light: var(--color-brown-light);
+  --color-brown: var(--color-brown);
+  --color-brown-dark: var(--color-brown-dark);
+  --color-ink: var(--color-ink);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-heading: var(--font-heading);
+  --font-body: var(--font-body);
+  --font-arabic: var(--font-arabic);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body), Arial, Helvetica, sans-serif;
+}
+
+html[dir="rtl"] body {
+  font-family: var(--font-arabic), var(--font-body), Arial, sans-serif;
+}
+
+h1, h2, h3, h4, .font-heading {
+  font-family: var(--font-heading), var(--font-body), sans-serif;
+  letter-spacing: 0.02em;
+}
+
+html[dir="rtl"] h1, html[dir="rtl"] h2, html[dir="rtl"] h3, html[dir="rtl"] h4, html[dir="rtl"] .font-heading {
+  font-family: var(--font-arabic), var(--font-body), sans-serif;
+  letter-spacing: 0;
+}
+
+::selection {
+  background: var(--color-brown);
+  color: var(--color-cream-soft);
+}
+
+.container-page {
+  max-width: 72rem;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .container-page {
+    padding-left: 2.5rem;
+    padding-right: 2.5rem;
+  }
+}
