@@ -8,16 +8,22 @@ export const honeypotSchema = z.object({
   website: z.string().max(0, "Spam detected").optional().default(""),
 });
 
-export const applicationSchema = honeypotSchema.extend({
-  eventId: z.string().min(1),
+// Vendor business account signup — not tied to any event. `category` is
+// normally one of VENDOR_CATEGORIES, but "Other" reveals a free-text field
+// on the client, so this stays a generic string rather than a strict enum.
+export const vendorRegisterSchema = honeypotSchema.extend({
   businessName: z.string().trim().min(2).max(150),
   contactName: z.string().trim().min(2).max(150),
   email: z.string().trim().email().max(200),
   phone: z.string().trim().min(5).max(30),
   category: z.string().trim().min(2).max(100),
   instagram: z.string().trim().max(150).optional().or(z.literal("")),
-  message: z.string().trim().max(2000).optional().or(z.literal("")),
+  description: z.string().trim().max(500).optional().or(z.literal("")),
   password: z.string().min(8).max(200),
+});
+
+export const applyToEventSchema = z.object({
+  eventId: z.string().min(1),
 });
 
 export const contactSchema = honeypotSchema.extend({

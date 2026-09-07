@@ -36,6 +36,21 @@ export const FEATURE_TYPE = [
 ] as const;
 export type FeatureType = (typeof FEATURE_TYPE)[number];
 
+// Fixed list of business categories offered on vendor account signup — this
+// describes the vendor's own business, distinct from Event.categories
+// (the categories DAH is looking for at a specific market).
+export const VENDOR_CATEGORIES = [
+  "Food and Beverage",
+  "Retail",
+  "Perfume",
+  "Beauty & Wellness",
+  "Fashion & Apparel",
+  "Home & Lifestyle",
+  "Art & Crafts",
+  "Other",
+] as const;
+export type VendorCategory = (typeof VENDOR_CATEGORIES)[number];
+
 // Timing rules (see build spec: "Booth reservation & holds")
 export const BOOTH_REVIEW_HOLD_MINUTES = 5;
 export const BOOTH_PAYMENT_HOLD_MINUTES = 5;

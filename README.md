@@ -39,8 +39,9 @@ npm run dev               # http://localhost:3000
 Admin panel: [http://localhost:3000/admin/login](http://localhost:3000/admin/login)
 — password is whatever you set as `ADMIN_PASSWORD`.
 
-A seeded demo vendor login (for testing the vendor dashboard):
-`demo.vendor@example.com` / `password123`.
+Seeded demo vendor logins (for testing the vendor dashboard):
+- `demo.vendor@example.com` / `password123` — pre-verified, has one pending application
+- `pending.vendor@example.com` / `password123` — unverified, to see the verification-gated dashboard
 
 ## Environment variables
 
@@ -91,16 +92,30 @@ deploy.
 Everything else in the app (queries, the booth-hold logic, etc.) is
 already Postgres-ready and needs no other changes.
 
+## How vendor accounts work
+
+Signing up on `/vendors` creates a **DAH business account** — it is not tied
+to any specific event. A new account can log in immediately, but its
+dashboard shows nothing until DAH **verifies the business** (Admin →
+Vendors). Once verified, the dashboard lists every published event with a
+one-click **Apply** button — no form, since the vendor's business info is
+already on file. From there it's the same flow as before per event: DAH
+approves/rejects, the vendor gets a payment deadline, picks a booth, and
+checks out.
+
 ## Admin panel
 
 `/admin/login` — single admin password (`ADMIN_PASSWORD`). From there DAH can:
 
+- **Vendors** — every business account, filterable by verified/unverified,
+  with a one-click Verify/Unverify. A vendor can't apply to any event until
+  verified.
 - **Applications** — view every vendor application, filter by
   Pending / Rejected / Accepted / Unpaid / Paid / Expired, approve/reject,
   extend or revoke an acceptance deadline, resend the approval email, add a
   manual charge/adjustment with a reason, export to CSV.
 - **Events** — create/edit/delete events (dates, location, description,
-  cover image, category needs, status, its own WhatsApp vendor group link,
+  cover image, vendor categories, status, its own WhatsApp vendor group link,
   and an optional acceptance-deadline-hours override), build that event's
   floor plan and booth inventory from scratch, or duplicate an existing
   event's floor plan into a new one (fresh, independent booth records, all

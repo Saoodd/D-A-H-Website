@@ -42,7 +42,34 @@ function wrap(bodyHtml: string) {
 
 const siteUrl = () => process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
-export async function sendApplicationReceivedEmails(opts: {
+export async function sendAccountCreatedEmails(opts: { vendorEmail: string; businessName: string }) {
+  await send(
+    opts.vendorEmail,
+    `Welcome to Dar Al Hay — verification pending`,
+    wrap(`<h2 style="margin-top:0;">Thanks, ${opts.businessName}!</h2>
+      <p>We've received your DAH business account. Our team will review and verify your business shortly — you'll get another email once that's done.</p>
+      <p>You can log into your <a href="${siteUrl()}/vendor/dashboard">vendor dashboard</a> at any time.</p>`)
+  );
+  if (ADMIN_NOTIFY_EMAIL) {
+    await send(
+      ADMIN_NOTIFY_EMAIL,
+      `New business account — ${opts.businessName}`,
+      wrap(`<p>New business account from <strong>${opts.businessName}</strong> (${opts.vendorEmail}) — awaiting verification.</p>
+        <p><a href="${siteUrl()}/admin/vendors">Review in admin panel</a></p>`)
+    );
+  }
+}
+
+export async function sendVendorVerifiedEmail(opts: { vendorEmail: string; businessName: string }) {
+  await send(
+    opts.vendorEmail,
+    `You're verified — welcome to Dar Al Hay`,
+    wrap(`<h2 style="margin-top:0;">You're verified, ${opts.businessName}!</h2>
+      <p>Your business account has been verified. You can now log into your <a href="${siteUrl()}/vendor/dashboard">dashboard</a> and apply to upcoming DAH markets.</p>`)
+  );
+}
+
+export async function sendAppliedToEventEmails(opts: {
   vendorEmail: string;
   businessName: string;
   eventName: string;
@@ -51,13 +78,13 @@ export async function sendApplicationReceivedEmails(opts: {
     opts.vendorEmail,
     `We received your application — ${opts.eventName}`,
     wrap(`<h2 style="margin-top:0;">Thanks, ${opts.businessName}!</h2>
-      <p>We've received your vendor application for <strong>${opts.eventName}</strong>. Our team will review it and be in touch soon.</p>
+      <p>We've received your application for <strong>${opts.eventName}</strong>. Our team will review it and be in touch soon.</p>
       <p>You can log into your <a href="${siteUrl()}/vendor/dashboard">vendor dashboard</a> at any time to check its status.</p>`)
   );
   if (ADMIN_NOTIFY_EMAIL) {
     await send(
       ADMIN_NOTIFY_EMAIL,
-      `New vendor application — ${opts.businessName} (${opts.eventName})`,
+      `New event application — ${opts.businessName} (${opts.eventName})`,
       wrap(`<p>New application from <strong>${opts.businessName}</strong> (${opts.vendorEmail}) for <strong>${opts.eventName}</strong>.</p>
         <p><a href="${siteUrl()}/admin/applications">Review in admin panel</a></p>`)
     );

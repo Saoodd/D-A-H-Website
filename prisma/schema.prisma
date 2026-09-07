@@ -149,6 +149,11 @@ model Booth {
   @@unique([eventId, code])
 }
 
+// A Vendor is a DAH business account — created once at signup, independent
+// of any event. `verified` gates the vendor dashboard: an unverified vendor
+// can log in but sees nothing until DAH manually verifies their business
+// (Admin → Vendors). Once verified, they can apply to individual published
+// events from their dashboard (see Application below).
 model Vendor {
   id           String  @id @default(cuid())
   email        String  @unique
@@ -156,7 +161,10 @@ model Vendor {
   businessName String
   contactName  String
   phone        String
+  category     String // one of lib/constants.ts VENDOR_CATEGORIES, or free text under "Other"
+  description  String  @default("") // short business description, shown to admin during verification
   instagram    String?
+  verified     Boolean @default(false)
 
   applications Application[]
 
@@ -164,6 +172,8 @@ model Vendor {
   updatedAt DateTime @updatedAt
 }
 
+// A verified vendor's one-click application to a specific event, applied
+// from their dashboard (no form — business info is already on file).
 model Application {
   id       String @id @default(cuid())
   vendorId String
@@ -171,15 +181,14 @@ model Application {
   eventId  String
   event    Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
-  // Snapshot of the submitted info (vendor profile may change later; keep
-  // what was actually submitted for this application).
+  // Snapshot of the vendor's profile at the time they applied (vendor
+  // profile may change later; keep what was true for this application).
   businessName String
   contactName  String
   phone        String
   email        String
   category     String
   instagram    String?
-  message      String @default("")
 
   status String @default("PENDING") // PENDING | REJECTED | ACCEPTED | ACCEPTANCE_EXPIRED
 

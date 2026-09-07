@@ -13,7 +13,8 @@ interface Application {
   phone: string;
   category: string;
   instagram: string | null;
-  message: string;
+  vendorDescription: string;
+  vendorVerified: boolean;
   status: string;
   displayStatus: string;
   acceptedAt: string | null;
@@ -85,7 +86,8 @@ export function ApplicationDetailAdminClient({ application: a }: { application: 
         <Row label="Phone" value={a.phone} />
         <Row label="Category" value={a.category} />
         <Row label="Instagram / social" value={a.instagram || "—"} />
-        <Row label="Message" value={a.message || "—"} full />
+        <Row label="Business verified" value={a.vendorVerified ? "Yes" : "No — see Admin → Vendors"} />
+        <Row label="Business description" value={a.vendorDescription || "—"} full />
       </section>
 
       <section className="mt-6 flex flex-wrap gap-3">

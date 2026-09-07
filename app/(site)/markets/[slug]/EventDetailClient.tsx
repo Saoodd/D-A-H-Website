@@ -69,7 +69,7 @@ export function EventDetailClient({ event }: { event: EventDetail }) {
 
         <div className="mt-10">
           <Link
-            href={`/vendors?event=${event.slug}`}
+            href="/vendors"
             className="inline-block px-7 py-3 rounded-full bg-brown text-cream-soft text-sm tracking-wide hover:bg-brown-dark transition-colors"
           >
             {t("markets.apply")}

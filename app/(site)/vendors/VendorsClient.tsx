@@ -1,41 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useLocale } from "@/lib/i18n/context";
 import { PhoneField } from "@/components/PhoneField";
 import { Reveal } from "@/components/Reveal";
+import { VENDOR_CATEGORIES } from "@/lib/constants";
 
-interface EventOption {
-  id: string;
-  slug: string;
-  name: string;
-  startDate: string;
-  categories: string[];
-}
-
-export function VendorsClient({ events }: { events: EventOption[] }) {
+export function VendorsClient() {
   const { t, locale } = useLocale();
-  const [eventId, setEventId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [category, setCategory] = useState("");
-  const [categoryOther, setCategoryOther] = useState(false);
-
-  const selectedEvent = events.find((e) => e.id === eventId);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const slug = params.get("event");
-    if (slug) {
-      const match = events.find((e) => e.slug === slug);
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reads the ?event= query param after mount, not derivable during render
-      if (match) setEventId(match.id);
-    } else if (events.length > 0) {
-      setEventId(events[0].id);
-    }
-  }, [events]);
+  const [category, setCategory] = useState<string>(VENDOR_CATEGORIES[0]);
+  const [categoryOther, setCategoryOther] = useState("");
+  const [instagramHandle, setInstagramHandle] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -47,20 +26,24 @@ export function VendorsClient({ events }: { events: EventOption[] }) {
       setError(locale === "ar" ? "كلمتا المرور غير متطابقتين" : "Passwords do not match");
       return;
     }
+    const finalCategory = category === "Other" ? categoryOther.trim() : category;
+    if (!finalCategory) {
+      setError(locale === "ar" ? "يرجى تحديد الفئة" : "Please specify your category");
+      return;
+    }
     setSubmitting(true);
     try {
-      const res = await fetch("/api/applications", {
+      const res = await fetch("/api/vendor/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          eventId,
           businessName: form.get("businessName"),
           contactName: form.get("contactName"),
           email: form.get("email"),
           phone: form.get("phone"),
-          category: form.get("category"),
-          instagram: form.get("instagram"),
-          message: form.get("message"),
+          category: finalCategory,
+          instagram: instagramHandle.trim() ? `@${instagramHandle.trim().replace(/^@/, "")}` : "",
+          description: form.get("description"),
           password,
           website: form.get("website"), // honeypot
         }),
@@ -102,20 +85,31 @@ export function VendorsClient({ events }: { events: EventOption[] }) {
         </ul>
         <p className="mt-4 text-xs text-brown-light">
           {locale === "ar"
-            ? "رسوم الأكشاك تُشارك معك بعد قبول طلبك."
-            : "Booth fees are shared with you once your application is accepted."}
+            ? "بعد إنشاء حسابك، سيقوم فريقنا بمراجعة عملك والتحقق منه. بمجرد التحقق، يمكنك التقديم لأي سوق قادم من لوحتك — عندها تُشارك رسوم الأكشاك."
+            : "After you create your account, our team reviews and verifies your business. Once verified, you can apply to any upcoming market from your dashboard — booth fees are shared with you at that point."}
         </p>
       </Reveal>
 
       <Reveal delayMs={200} id="apply" className="bg-cream rounded-2xl border border-brown/10 p-6 md:p-10">
-        <h2 className="font-heading text-2xl text-brown-dark mb-6">{t("vendorInfo.applyTitle")}</h2>
+        <h2 className="font-heading text-2xl text-brown-dark mb-1">{t("vendorInfo.applyTitle")}</h2>
+        <p className="text-sm text-brown-light mb-6">
+          {locale === "ar"
+            ? "أنشئ حساب عملك في دار الحي — ليس مرتبطاً بفعالية معينة."
+            : "Create your Dar Al Hay business account — this isn't tied to a specific event."}
+        </p>
 
         {done ? (
           <div className="text-center py-10">
-            <h3 className="font-heading text-xl text-brown-dark mb-2">{t("vendorInfo.success")}</h3>
-            <p className="text-brown-light mb-6">{t("vendorInfo.successBody")}</p>
-            <Link href="/vendor/login" className="underline text-brown">
-              {t("nav.vendorLogin")}
+            <h3 className="font-heading text-xl text-brown-dark mb-2">
+              {locale === "ar" ? "تم إنشاء الحساب" : "Account created"}
+            </h3>
+            <p className="text-brown-light mb-6">
+              {locale === "ar"
+                ? "شكراً لك — سيقوم فريقنا بمراجعة عملك والتحقق منه. سجّل الدخول إلى لوحتك في أي وقت لمتابعة الحالة."
+                : "Thanks — our team will review and verify your business. Log into your dashboard any time to check the status."}
+            </p>
+            <Link href="/vendor/dashboard" className="underline text-brown">
+              {t("nav.vendorDashboard")}
             </Link>
           </div>
         ) : (
@@ -128,80 +122,56 @@ export function VendorsClient({ events }: { events: EventOption[] }) {
               </label>
             </div>
 
-            <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-              {t("form.event")}
-              <select
-                required
-                value={eventId}
-                onChange={(e) => {
-                  setEventId(e.target.value);
-                  setCategory("");
-                  setCategoryOther(false);
-                }}
-                className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
-              >
-                {events.length === 0 && <option value="">—</option>}
-                {events.map((ev) => (
-                  <option key={ev.id} value={ev.id}>
-                    {ev.name} ({new Date(ev.startDate).toLocaleDateString()})
-                  </option>
-                ))}
-              </select>
-            </label>
-
             <Field name="businessName" label={t("form.businessName")} required />
             <Field name="contactName" label={t("form.contactName")} required />
             <Field name="email" type="email" label={t("form.email")} required />
             <PhoneField name="phone" label={t("form.phone")} required />
 
-            {selectedEvent && selectedEvent.categories.length > 0 ? (
-              <label className="flex flex-col gap-1 text-sm">
-                {t("form.category")}
-                <select
-                  required={!categoryOther}
-                  name={categoryOther ? undefined : "category"}
-                  value={categoryOther ? "__other__" : category}
-                  onChange={(e) => {
-                    if (e.target.value === "__other__") {
-                      setCategoryOther(true);
-                      setCategory("");
-                    } else {
-                      setCategoryOther(false);
-                      setCategory(e.target.value);
-                    }
-                  }}
-                  className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
-                >
-                  <option value="">—</option>
-                  {selectedEvent.categories.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                  <option value="__other__">{locale === "ar" ? "أخرى" : "Other"}</option>
-                </select>
-                {categoryOther && (
-                  <input
-                    name="category"
-                    required
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    placeholder={locale === "ar" ? "حدد فئتك" : "Tell us your category"}
-                    className="mt-1 border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
-                  />
-                )}
-              </label>
-            ) : (
-              <Field name="category" label={t("form.category")} required />
-            )}
+            <label className="flex flex-col gap-1 text-sm">
+              {t("form.category")}
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                required
+                className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
+              >
+                {VENDOR_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              {category === "Other" && (
+                <input
+                  value={categoryOther}
+                  onChange={(e) => setCategoryOther(e.target.value)}
+                  required
+                  placeholder={locale === "ar" ? "حدد فئتك" : "Tell us your category"}
+                  className="mt-1 border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
+                />
+              )}
+            </label>
 
-            <Field name="instagram" label={t("form.instagram")} />
+            <label className="flex flex-col gap-1 text-sm">
+              {t("form.instagram")}
+              <div className="flex items-center border border-brown/20 rounded-lg bg-cream-soft overflow-hidden focus-within:ring-1 focus-within:ring-brown">
+                <span className="pl-3 pr-1 text-brown-light select-none">@</span>
+                <input
+                  value={instagramHandle}
+                  onChange={(e) => setInstagramHandle(e.target.value.replace(/^@/, ""))}
+                  placeholder="yourbusiness"
+                  className="flex-1 min-w-0 px-1 py-2 pr-3 bg-transparent outline-none"
+                />
+              </div>
+            </label>
 
             <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-              {t("form.message")}
+              {locale === "ar" ? "وصف قصير عن عملك" : "Short business description"}
               <textarea
-                name="message"
-                rows={4}
+                name="description"
+                rows={3}
+                maxLength={500}
+                placeholder={locale === "ar" ? "بضع جمل عن ما تقدمه" : "A couple of sentences about what you offer"}
                 className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
               />
             </label>
@@ -214,7 +184,7 @@ export function VendorsClient({ events }: { events: EventOption[] }) {
             <div className="sm:col-span-2">
               <button
                 type="submit"
-                disabled={submitting || !eventId}
+                disabled={submitting}
                 className="px-7 py-3 rounded-full bg-brown text-cream-soft text-sm tracking-wide hover:bg-brown-dark transition-colors disabled:opacity-50"
               >
                 {submitting ? "…" : t("vendorInfo.submit")}

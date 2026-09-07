@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLocale } from "@/lib/i18n/context";
@@ -14,6 +15,14 @@ interface AppRow {
   acceptanceExpiresAt: string | null;
 }
 
+interface AvailableEvent {
+  id: string;
+  name: string;
+  location: string;
+  startDate: string;
+  categories: string[];
+}
+
 const statusColor: Record<DisplayStatus, string> = {
   PENDING: "bg-cream-deep text-brown-dark",
   REJECTED: "bg-red-100 text-red-800",
@@ -26,18 +35,41 @@ export function DashboardClient({
   businessName,
   communityLink,
   applications,
+  availableEvents,
 }: {
   businessName: string;
   communityLink: string | null;
   applications: AppRow[];
+  availableEvents: AvailableEvent[];
 }) {
   const { t, locale } = useLocale();
   const router = useRouter();
+  const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function logout() {
     await fetch("/api/vendor/logout", { method: "POST" });
     router.push("/");
     router.refresh();
+  }
+
+  async function applyToEvent(eventId: string) {
+    setApplyingId(eventId);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/vendor/apply-event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not apply");
+      router.refresh();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Could not apply");
+    } finally {
+      setApplyingId(null);
+    }
   }
 
   return (
@@ -56,7 +88,7 @@ export function DashboardClient({
         <div>
           <p className="text-xs uppercase tracking-widest text-brown-light">{t("vendor.communityLink")}</p>
           <p className="text-sm text-brown-light mt-1">
-            {locale === "ar" ? "متاحة دائماً لكل بائع مسجل." : "Always visible to any registered vendor."}
+            {locale === "ar" ? "متاحة دائماً لكل بائع تم التحقق منه." : "Always visible to any verified vendor."}
           </p>
         </div>
         {communityLink ? (
@@ -75,16 +107,61 @@ export function DashboardClient({
         )}
       </div>
 
+      {notice && (
+        <div className="mb-6 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm px-4 py-3">
+          {notice}
+        </div>
+      )}
+
+      <h2 className="font-heading text-xl text-brown-dark mb-4">
+        {locale === "ar" ? "الأسواق القادمة" : "Upcoming markets"}
+      </h2>
+
+      {availableEvents.length === 0 ? (
+        <p className="text-brown-light text-sm mb-10">
+          {locale === "ar" ? "لا توجد أسواق جديدة للتقديم إليها حالياً." : "No new markets to apply to right now."}
+        </p>
+      ) : (
+        <div className="space-y-3 mb-10">
+          {availableEvents.map((ev) => (
+            <div
+              key={ev.id}
+              className="flex items-center justify-between flex-wrap gap-3 rounded-xl border border-brown/10 bg-cream-soft p-5"
+            >
+              <div>
+                <p className="font-heading text-brown-dark">{ev.name}</p>
+                <p className="text-xs text-brown-light">
+                  {new Date(ev.startDate).toLocaleDateString(locale === "ar" ? "ar-AE" : "en-AE")} · {ev.location}
+                </p>
+                {ev.categories.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {ev.categories.map((c) => (
+                      <span key={c} className="text-[11px] bg-cream-deep text-brown-dark rounded-full px-2.5 py-0.5">
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => applyToEvent(ev.id)}
+                disabled={applyingId === ev.id}
+                className="px-5 py-2 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark transition-colors disabled:opacity-50"
+              >
+                {applyingId === ev.id ? "…" : locale === "ar" ? "تقديم" : "Apply"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <h2 className="font-heading text-xl text-brown-dark mb-4">
         {locale === "ar" ? "طلباتك" : "Your applications"}
       </h2>
 
       {applications.length === 0 ? (
         <p className="text-brown-light text-sm">
-          {locale === "ar" ? "لا توجد طلبات بعد." : "No applications yet."}{" "}
-          <Link href="/vendors" className="underline text-brown">
-            {t("vendorInfo.applyTitle")}
-          </Link>
+          {locale === "ar" ? "لا توجد طلبات بعد — قدّم لأحد الأسواق أعلاه." : "No applications yet — apply to a market above."}
         </p>
       ) : (
         <div className="space-y-4">

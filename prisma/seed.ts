@@ -143,8 +143,11 @@ async function main() {
         passwordHash: await bcrypt.hash("password123", 10),
         businessName: "Demo Vendor Co.",
         contactName: "Demo Vendor",
-        phone: "+971500000000",
+        phone: "+971 500000000",
+        category: "Food and Beverage",
+        description: "Seed demo account — verified, so you can test the full apply/booth/checkout flow.",
         instagram: "@demovendor",
+        verified: true,
       },
     });
   }
@@ -159,16 +162,33 @@ async function main() {
         contactName: vendor.contactName,
         phone: vendor.phone,
         email: vendor.email,
-        category: "Coffee & bakery",
+        category: vendor.category,
         instagram: vendor.instagram,
-        message: "Seed demo application — pending review.",
         status: "PENDING",
       },
     });
   }
 
+  const unverifiedEmail = "pending.vendor@example.com";
+  const unverifiedExists = await prisma.vendor.findUnique({ where: { email: unverifiedEmail } });
+  if (!unverifiedExists) {
+    await prisma.vendor.create({
+      data: {
+        email: unverifiedEmail,
+        passwordHash: await bcrypt.hash("password123", 10),
+        businessName: "Pending Vendor Co.",
+        contactName: "Pending Vendor",
+        phone: "+971 500000001",
+        category: "Retail",
+        description: "Seed demo account — still unverified, to test the verification-gated dashboard.",
+        verified: false,
+      },
+    });
+  }
+
   console.log("Seed complete.");
-  console.log(`Demo vendor login: ${demoEmail} / password123`);
+  console.log(`Demo vendor login (verified): ${demoEmail} / password123`);
+  console.log(`Demo vendor login (unverified): ${unverifiedEmail} / password123`);
   console.log(`Demo events: ${event.slug}, ${secondEvent.slug}`);
 }
 

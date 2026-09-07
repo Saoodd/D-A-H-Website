@@ -6,23 +6,28 @@ import { formatAed } from "@/lib/constants";
 export const metadata: Metadata = { title: "Admin Dashboard" };
 
 export default async function AdminDashboardPage() {
-  const [totalApplications, pending, accepted, rejected, expired, events, revenueAgg] = await Promise.all([
-    prisma.application.count(),
-    prisma.application.count({ where: { status: "PENDING" } }),
-    prisma.application.count({ where: { status: "ACCEPTED" } }),
-    prisma.application.count({ where: { status: "REJECTED" } }),
-    prisma.application.count({ where: { status: "ACCEPTANCE_EXPIRED" } }),
-    prisma.event.findMany({
-      include: { booths: true },
-      orderBy: { startDate: "desc" },
-      take: 8,
-    }),
-    prisma.payment.aggregate({ where: { status: "SUCCEEDED" }, _sum: { amountAedFils: true } }),
-  ]);
+  const [totalApplications, pending, accepted, rejected, expired, events, revenueAgg, unverifiedVendors, verifiedVendors] =
+    await Promise.all([
+      prisma.application.count(),
+      prisma.application.count({ where: { status: "PENDING" } }),
+      prisma.application.count({ where: { status: "ACCEPTED" } }),
+      prisma.application.count({ where: { status: "REJECTED" } }),
+      prisma.application.count({ where: { status: "ACCEPTANCE_EXPIRED" } }),
+      prisma.event.findMany({
+        include: { booths: true },
+        orderBy: { startDate: "desc" },
+        take: 8,
+      }),
+      prisma.payment.aggregate({ where: { status: "SUCCEEDED" }, _sum: { amountAedFils: true } }),
+      prisma.vendor.count({ where: { verified: false } }),
+      prisma.vendor.count({ where: { verified: true } }),
+    ]);
 
   const totalRevenue = revenueAgg._sum.amountAedFils || 0;
 
   const cards = [
+    { label: "Vendors awaiting verification", value: unverifiedVendors },
+    { label: "Verified vendors", value: verifiedVendors },
     { label: "Total applications", value: totalApplications },
     { label: "Pending review", value: pending },
     { label: "Accepted", value: accepted },

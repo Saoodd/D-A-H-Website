@@ -30,7 +30,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "home.heroTitle": "A stage for Dubai's next generation of entrepreneurs.",
     "home.heroSubtitle":
       "DAH curates community markets that give young and emerging businesses a real audience, real sales, and room to grow — one market at a time.",
-    "home.ctaMarkets": "See upcoming markets",
+    "home.ctaMarkets": "See upcoming events",
     "home.ctaVendors": "Become a vendor",
     "home.missionTitle": "Our story",
     "home.missionBody":
@@ -50,8 +50,8 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     "vendorInfo.title": "Vendor Info & Application",
     "vendorInfo.subtitle": "Requirements, expectations, and how to bring your business to a DAH market.",
-    "vendorInfo.applyTitle": "Apply now",
-    "vendorInfo.submit": "Submit application",
+    "vendorInfo.applyTitle": "Create your account",
+    "vendorInfo.submit": "Create account",
     "vendorInfo.success": "Application received",
     "vendorInfo.successBody": "Thanks — we've received your application and will be in touch.",
 
@@ -76,7 +76,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "form.name": "Name",
 
     "vendor.loginTitle": "Vendor Login",
-    "vendor.registerNote": "New here? Applying for an event creates your vendor account automatically.",
+    "vendor.registerNote": "New here? Create your DAH business account to get started.",
     "vendor.dashboardTitle": "My Dashboard",
     "vendor.communityLink": "Main DAH Community Group",
     "vendor.status.PENDING": "Pending review",
@@ -123,7 +123,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "home.heroTitle": "منصة للجيل القادم من رواد الأعمال في دبي.",
     "home.heroSubtitle":
       "دار الحي تنسّق أسواقاً مجتمعية تمنح المشاريع الشابة والناشئة جمهوراً حقيقياً، ومبيعات حقيقية، ومساحة للنمو — سوقاً بعد سوق.",
-    "home.ctaMarkets": "شاهد الأسواق القادمة",
+    "home.ctaMarkets": "شاهد الفعاليات القادمة",
     "home.ctaVendors": "كن بائعاً معنا",
     "home.missionTitle": "قصتنا",
     "home.missionBody":
@@ -143,8 +143,8 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     "vendorInfo.title": "معلومات البائعين والتقديم",
     "vendorInfo.subtitle": "المتطلبات والتوقعات وكيفية إحضار مشروعك إلى سوق دار الحي.",
-    "vendorInfo.applyTitle": "قدّم الآن",
-    "vendorInfo.submit": "إرسال الطلب",
+    "vendorInfo.applyTitle": "أنشئ حسابك",
+    "vendorInfo.submit": "إنشاء الحساب",
     "vendorInfo.success": "تم استلام الطلب",
     "vendorInfo.successBody": "شكراً لكم — لقد استلمنا طلبكم وسنتواصل معكم قريباً.",
 
@@ -169,7 +169,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "form.name": "الاسم",
 
     "vendor.loginTitle": "دخول البائعين",
-    "vendor.registerNote": "جديد هنا؟ التقديم لفعالية ينشئ حسابك تلقائياً.",
+    "vendor.registerNote": "جديد هنا؟ أنشئ حساب عملك في دار الحي للبدء.",
     "vendor.dashboardTitle": "لوحتي",
     "vendor.communityLink": "مجموعة دار الحي المجتمعية",
     "vendor.status.PENDING": "قيد المراجعة",

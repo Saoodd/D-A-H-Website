@@ -5,6 +5,7 @@ import { AdminLogoutButton } from "./AdminLogoutButton";
 
 const links = [
   { href: "/admin", label: "Dashboard" },
+  { href: "/admin/vendors", label: "Vendors" },
   { href: "/admin/applications", label: "Applications" },
   { href: "/admin/events", label: "Events" },
   { href: "/admin/pricing", label: "Pricing" },
