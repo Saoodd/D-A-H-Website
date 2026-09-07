@@ -15,7 +15,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   data.endDate = body.endDate ? new Date(body.endDate) : null;
   if (typeof body.location === "string") data.location = body.location;
   data.coverImage = body.coverImage || null;
-  if (typeof body.categoryNeeds === "string") data.categoryNeeds = body.categoryNeeds;
+  if (Array.isArray(body.categories)) data.categories = body.categories.map(String).filter(Boolean);
+  data.floorPlanImageUrl = body.floorPlanImageUrl || null;
   if (["DRAFT", "PUBLISHED", "CLOSED"].includes(body.status)) data.status = body.status;
   data.whatsappVendorGroupLink = body.whatsappVendorGroupLink || null;
   data.acceptanceDeadlineHours = body.acceptanceDeadlineHours ? Number(body.acceptanceDeadlineHours) : null;

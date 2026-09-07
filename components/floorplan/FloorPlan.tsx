@@ -3,8 +3,12 @@
 import { useRef, useState, useCallback } from "react";
 import { FloorFeature, FloorBooth, SizeStyle } from "./types";
 
-const CELL_PX = 26;
-const PAD = 2; // grid cells of padding around content
+// The floor plan canvas is always a 0-100 x 0-100 percentage space, whether
+// or not there's a background image — booths/features store gridX/Y/W/H as
+// percentages of this canvas. That keeps a single coordinate system for
+// "click on the map to place a booth" regardless of whether admin is
+// working over a real venue photo or the plain dotted background.
+const VIEWBOX = 100;
 
 const featureLabel: Record<string, string> = {
   ENTRANCE_MAIN: "Main entrance",
@@ -32,6 +36,9 @@ export function FloorPlan({
   onSelectBooth,
   interactive = true,
   allowAnyStatusClick = false,
+  backgroundImageUrl,
+  placementMode = false,
+  onCanvasClick,
 }: {
   features: FloorFeature[];
   booths: FloorBooth[];
@@ -40,46 +47,56 @@ export function FloorPlan({
   onSelectBooth?: (booth: FloorBooth) => void;
   interactive?: boolean;
   allowAnyStatusClick?: boolean;
+  /** URL of a real venue photo/drawing to place behind the plan. */
+  backgroundImageUrl?: string | null;
+  /** When true, clicking empty canvas calls onCanvasClick instead of panning. */
+  placementMode?: boolean;
+  onCanvasClick?: (xPercent: number, yPercent: number) => void;
 }) {
-  const allX = [
-    ...features.map((f) => f.gridX + f.gridW),
-    ...booths.map((b) => b.gridX + b.gridW),
-    10,
-  ];
-  const allY = [
-    ...features.map((f) => f.gridY + f.gridH),
-    ...booths.map((b) => b.gridY + b.gridH),
-    10,
-  ];
-  const maxX = Math.max(...allX) + PAD;
-  const maxY = Math.max(...allY) + PAD;
-
-  const width = maxX * CELL_PX;
-  const height = maxY * CELL_PX;
-
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
-  const dragState = useRef<{ x: number; y: number; startTranslate: { x: number; y: number } } | null>(null);
+  const dragState = useRef<{ x: number; y: number; startTranslate: { x: number; y: number }; moved: boolean } | null>(null);
   const pinchState = useRef<{ dist: number; scale: number } | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
 
-  const clampScale = (s: number) => Math.min(3, Math.max(0.5, s));
+  const clampScale = (s: number) => Math.min(4, Math.max(0.5, s));
+
+  const pointToPercent = useCallback((clientX: number, clientY: number) => {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    const loc = pt.matrixTransform(ctm.inverse());
+    return { x: Math.min(100, Math.max(0, loc.x)), y: Math.min(100, Math.max(0, loc.y)) };
+  }, []);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     (e.target as Element).setPointerCapture?.(e.pointerId);
-    dragState.current = { x: e.clientX, y: e.clientY, startTranslate: translate };
+    dragState.current = { x: e.clientX, y: e.clientY, startTranslate: translate, moved: false };
   }, [translate]);
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragState.current) return;
     const dx = e.clientX - dragState.current.x;
     const dy = e.clientY - dragState.current.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragState.current.moved = true;
     setTranslate({ x: dragState.current.startTranslate.x + dx, y: dragState.current.startTranslate.y + dy });
   }, []);
 
-  const onPointerUp = useCallback(() => {
-    dragState.current = null;
-  }, []);
+  const onPointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      const wasClick = dragState.current && !dragState.current.moved;
+      dragState.current = null;
+      if (wasClick && placementMode && onCanvasClick) {
+        const pct = pointToPercent(e.clientX, e.clientY);
+        if (pct) onCanvasClick(pct.x, pct.y);
+      }
+    },
+    [placementMode, onCanvasClick, pointToPercent]
+  );
 
   const onWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
@@ -110,7 +127,13 @@ export function FloorPlan({
   return (
     <div className="rounded-xl border border-brown/15 bg-cream-soft overflow-hidden">
       <div className="flex items-center justify-between px-4 py-2 border-b border-brown/10 text-xs text-brown-light">
-        <span>{interactive ? "Drag to pan, scroll or pinch to zoom" : "Preview"}</span>
+        <span>
+          {placementMode
+            ? "Click the map to place a booth"
+            : interactive
+            ? "Drag to pan, scroll or pinch to zoom"
+            : "Preview"}
+        </span>
         <div className="flex gap-2">
           <button
             type="button"
@@ -140,8 +163,9 @@ export function FloorPlan({
       </div>
 
       <div
-        ref={containerRef}
-        className="relative w-full h-[420px] overflow-hidden touch-none cursor-grab active:cursor-grabbing bg-[repeating-linear-gradient(45deg,rgba(107,68,41,0.03),rgba(107,68,41,0.03)_10px,transparent_10px,transparent_20px)]"
+        className={`relative w-full h-[460px] overflow-hidden touch-none ${
+          placementMode ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"
+        } ${!backgroundImageUrl ? "bg-[repeating-linear-gradient(45deg,rgba(107,68,41,0.03),rgba(107,68,41,0.03)_10px,transparent_10px,transparent_20px)]" : ""}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -152,34 +176,40 @@ export function FloorPlan({
         onTouchEnd={onTouchEnd}
       >
         <svg
-          width={width}
-          height={height}
-          viewBox={`0 0 ${width} ${height}`}
+          ref={svgRef}
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`}
+          preserveAspectRatio="none"
           style={{
             transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
             transformOrigin: "0 0",
           }}
         >
-          <rect x={0} y={0} width={width} height={height} fill="none" stroke="#DDD3C3" strokeWidth={2} />
+          <rect x={0} y={0} width={VIEWBOX} height={VIEWBOX} fill="transparent" stroke="#DDD3C3" strokeWidth={0.3} />
+
+          {backgroundImageUrl && (
+            <image href={backgroundImageUrl} x={0} y={0} width={VIEWBOX} height={VIEWBOX} preserveAspectRatio="none" />
+          )}
 
           {features.map((f) => (
             <g key={f.id}>
               <rect
-                x={(f.gridX + PAD / 2) * CELL_PX}
-                y={(f.gridY + PAD / 2) * CELL_PX}
-                width={f.gridW * CELL_PX}
-                height={f.gridH * CELL_PX}
-                fill="#E3D9CC"
+                x={f.gridX}
+                y={f.gridY}
+                width={f.gridW}
+                height={f.gridH}
+                fill={backgroundImageUrl ? "rgba(227,217,204,0.75)" : "#E3D9CC"}
                 stroke="#B79A7C"
-                strokeDasharray={f.type.startsWith("ENTRANCE") ? "4 3" : undefined}
-                rx={4}
+                strokeWidth={0.15}
+                strokeDasharray={f.type.startsWith("ENTRANCE") ? "1 0.7" : undefined}
               />
               <text
-                x={(f.gridX + PAD / 2 + f.gridW / 2) * CELL_PX}
-                y={(f.gridY + PAD / 2 + f.gridH / 2) * CELL_PX}
+                x={f.gridX + f.gridW / 2}
+                y={f.gridY + f.gridH / 2}
                 textAnchor="middle"
                 dominantBaseline="middle"
-                fontSize={10}
+                fontSize={2.2}
                 fill="#6B4429"
               >
                 {f.label || featureLabel[f.type]}
@@ -191,30 +221,33 @@ export function FloorPlan({
             const style = sizeStyles[b.size] || { color: "#B58A63", label: b.size };
             const isSelected = selectedBoothId === b.id;
             const fill = b.status === "AVAILABLE" ? style.color : statusFill[b.status] || style.color;
-            const clickable = interactive && (allowAnyStatusClick || b.status === "AVAILABLE" || b.isMine);
+            const clickable = interactive && !placementMode && (allowAnyStatusClick || b.status === "AVAILABLE" || b.isMine);
             return (
               <g
                 key={b.id}
-                onClick={() => clickable && onSelectBooth?.(b)}
+                onClick={(e) => {
+                  if (!clickable) return;
+                  e.stopPropagation();
+                  onSelectBooth?.(b);
+                }}
                 style={{ cursor: clickable ? "pointer" : "default" }}
               >
                 <rect
-                  x={(b.gridX + PAD / 2) * CELL_PX}
-                  y={(b.gridY + PAD / 2) * CELL_PX}
-                  width={b.gridW * CELL_PX}
-                  height={b.gridH * CELL_PX}
+                  x={b.gridX}
+                  y={b.gridY}
+                  width={b.gridW}
+                  height={b.gridH}
                   fill={fill}
-                  opacity={b.status === "SOLD" ? 0.55 : 1}
+                  opacity={b.status === "SOLD" ? 0.6 : backgroundImageUrl ? 0.85 : 1}
                   stroke={isSelected || b.isMine ? "#2E7D32" : "#3A2417"}
-                  strokeWidth={isSelected || b.isMine ? 3 : 1}
-                  rx={3}
+                  strokeWidth={isSelected || b.isMine ? 0.6 : 0.15}
                 />
                 <text
-                  x={(b.gridX + PAD / 2 + b.gridW / 2) * CELL_PX}
-                  y={(b.gridY + PAD / 2 + b.gridH / 2) * CELL_PX}
+                  x={b.gridX + b.gridW / 2}
+                  y={b.gridY + b.gridH / 2}
                   textAnchor="middle"
                   dominantBaseline="middle"
-                  fontSize={10}
+                  fontSize={2.4}
                   fontWeight={600}
                   fill="#FBF8F3"
                 >

@@ -4,7 +4,7 @@ import { VendorsClient } from "./VendorsClient";
 
 export const metadata: Metadata = {
   title: "Vendor Info & Application",
-  description: "Requirements, expectations and how to apply to sell at a Dar Al Hay market.",
+  description: "Grow your business at a Dar Al Hay market — requirements, expectations, and how to apply.",
 };
 
 export default async function VendorsPage() {
@@ -15,7 +15,13 @@ export default async function VendorsPage() {
 
   return (
     <VendorsClient
-      events={events.map((e) => ({ id: e.id, slug: e.slug, name: e.name, startDate: e.startDate.toISOString() }))}
+      events={events.map((e) => ({
+        id: e.id,
+        slug: e.slug,
+        name: e.name,
+        startDate: e.startDate.toISOString(),
+        categories: e.categories,
+      }))}
     />
   );
 }

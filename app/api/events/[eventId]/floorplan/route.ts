@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getVendorSession } from "@/lib/auth";
 import { runExpiryPass } from "@/lib/expiry";
-import { getActivePricingTiers } from "@/lib/pricing";
+import { getEventPricingTiers } from "@/lib/pricing";
 
 // Approved-vendor-only: never expose full booth-level detail to the public.
 // A vendor may only view the floor plan for an event they have an
@@ -29,14 +29,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ even
     return NextResponse.json({ error: "Booth selection is not available for this application." }, { status: 403 });
   }
 
-  const [features, booths, tiers] = await Promise.all([
+  const [features, booths, tiers, event] = await Promise.all([
     prisma.floorPlanFeature.findMany({ where: { eventId } }),
     prisma.booth.findMany({ where: { eventId } }),
-    getActivePricingTiers(),
+    getEventPricingTiers(eventId),
+    prisma.event.findUnique({ where: { id: eventId }, select: { floorPlanImageUrl: true } }),
   ]);
 
   return NextResponse.json({
     features,
+    floorPlanImageUrl: event?.floorPlanImageUrl ?? null,
     booths: booths.map((b) => ({
       id: b.id,
       code: b.code,

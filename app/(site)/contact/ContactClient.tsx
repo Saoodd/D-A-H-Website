@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useLocale } from "@/lib/i18n/context";
+import { Reveal } from "@/components/Reveal";
 
 export function ContactClient({ communityLink }: { communityLink: string | null }) {
   const { t, locale } = useLocale();
@@ -36,7 +37,7 @@ export function ContactClient({ communityLink }: { communityLink: string | null 
 
   return (
     <div className="container-page py-16 grid md:grid-cols-2 gap-14 max-w-4xl">
-      <div>
+      <Reveal>
         <h1 className="font-heading text-3xl md:text-4xl text-brown-dark">{t("contact.title")}</h1>
         <p className="mt-3 text-brown-light">{t("contact.subtitle")}</p>
 
@@ -63,9 +64,9 @@ export function ContactClient({ communityLink }: { communityLink: string | null 
             </a>
           )}
         </div>
-      </div>
+      </Reveal>
 
-      <div className="bg-cream rounded-2xl border border-brown/10 p-6 md:p-8">
+      <Reveal delayMs={150} className="bg-cream rounded-2xl border border-brown/10 p-6 md:p-8">
         {done ? (
           <p className="text-brown-dark">{locale === "ar" ? "شكراً لتواصلك معنا!" : "Thanks for reaching out — we'll reply soon."}</p>
         ) : (
@@ -98,7 +99,7 @@ export function ContactClient({ communityLink }: { communityLink: string | null 
             </button>
           </form>
         )}
-      </div>
+      </Reveal>
     </div>
   );
 }

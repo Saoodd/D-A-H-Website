@@ -17,7 +17,7 @@ export default async function MarketsPage() {
       location: e.location,
       startDate: e.startDate.toISOString(),
       coverImage: e.coverImage,
-      categoryNeeds: e.categoryNeeds,
+      categories: e.categories,
       minPriceAedFils: await getMinPriceForEvent(e.id),
     }))
   );

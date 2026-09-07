@@ -19,7 +19,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "nav.vendorDashboard": "My Dashboard",
     "nav.admin": "Admin",
 
-    "footer.tagline": "Community pop-up markets in Dubai.",
+    "footer.tagline": "Giving Dubai's young entrepreneurs room to grow.",
     "footer.legal": "Legal",
     "footer.terms": "Terms & Conditions",
     "footer.privacy": "Privacy Policy",
@@ -27,13 +27,19 @@ export const translations: Record<Locale, Record<string, string>> = {
     "footer.rights": "All rights reserved.",
 
     "home.heroKicker": "Dar Al Hay Events",
-    "home.heroTitle": "Community markets, curated with care.",
+    "home.heroTitle": "A stage for Dubai's next generation of entrepreneurs.",
     "home.heroSubtitle":
-      "DAH brings together Dubai's best food, drink and craft vendors for warm, boutique pop-up markets.",
+      "DAH curates community markets that give young and emerging businesses a real audience, real sales, and room to grow — one market at a time.",
     "home.ctaMarkets": "See upcoming markets",
     "home.ctaVendors": "Become a vendor",
     "home.missionTitle": "Our story",
+    "home.missionBody":
+      "Dar Al Hay (DAH) exists to give Dubai's young and emerging entrepreneurs a place to grow — a warm, curated stage where a first small business can meet its first hundred customers, and a growing one can meet a thousand more. Every DAH market is considered, not crowded: a small, thoughtfully chosen mix of vendors in a warm setting, not a sprawling trade show.",
     "home.whatTitle": "What we do",
+    "home.whatItem1": "Monthly markets that put young businesses in front of real Dubai audiences",
+    "home.whatItem2": "A curated, F&B-heavy mix alongside craft & lifestyle makers just starting out",
+    "home.whatItem3": "A managed application & booking process, so vendors can focus on their craft, not logistics",
+    "home.whatItem4": "A connected community of entrepreneurs — on the ground and on WhatsApp",
 
     "markets.title": "Upcoming Markets",
     "markets.subtitle": "Our next community pop-ups — new dates added roughly monthly.",
@@ -43,7 +49,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "markets.apply": "Apply as a vendor",
 
     "vendorInfo.title": "Vendor Info & Application",
-    "vendorInfo.subtitle": "Booth fees, requirements and how to apply.",
+    "vendorInfo.subtitle": "Requirements, expectations, and how to bring your business to a DAH market.",
     "vendorInfo.applyTitle": "Apply now",
     "vendorInfo.submit": "Submit application",
     "vendorInfo.success": "Application received",
@@ -106,7 +112,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "nav.vendorDashboard": "لوحتي",
     "nav.admin": "الإدارة",
 
-    "footer.tagline": "أسواق مجتمعية منبثقة في دبي.",
+    "footer.tagline": "نمنح رواد الأعمال الشباب في دبي مساحة للنمو.",
     "footer.legal": "قانوني",
     "footer.terms": "الشروط والأحكام",
     "footer.privacy": "سياسة الخصوصية",
@@ -114,13 +120,19 @@ export const translations: Record<Locale, Record<string, string>> = {
     "footer.rights": "جميع الحقوق محفوظة.",
 
     "home.heroKicker": "دار الحي للفعاليات",
-    "home.heroTitle": "أسواق مجتمعية، منسّقة بعناية.",
+    "home.heroTitle": "منصة للجيل القادم من رواد الأعمال في دبي.",
     "home.heroSubtitle":
-      "دار الحي تجمع أفضل بائعي الطعام والمشروبات والحرف اليدوية في دبي في أسواق منبثقة أنيقة ودافئة.",
+      "دار الحي تنسّق أسواقاً مجتمعية تمنح المشاريع الشابة والناشئة جمهوراً حقيقياً، ومبيعات حقيقية، ومساحة للنمو — سوقاً بعد سوق.",
     "home.ctaMarkets": "شاهد الأسواق القادمة",
     "home.ctaVendors": "كن بائعاً معنا",
     "home.missionTitle": "قصتنا",
+    "home.missionBody":
+      "دار الحي وُجدت لتمنح رواد الأعمال الشباب والناشئين في دبي مساحة للنمو — منصة دافئة ومنسّقة حيث يمكن لمشروع صغير أن يلتقي بأول مئة عميل له، ولمشروع نامٍ أن يصل إلى ألف عميل آخرين. كل سوق من أسواق دار الحي مدروس، لا مزدحم: مزيج صغير ومختار بعناية من البائعين في أجواء دافئة، لا معرضاً تجارياً واسعاً.",
     "home.whatTitle": "ماذا نقدم",
+    "home.whatItem1": "أسواق شهرية تضع المشاريع الشابة أمام جمهور دبي الحقيقي",
+    "home.whatItem2": "مزيج منسّق يغلب عليه الطعام والمشروبات إلى جانب صنّاع الحرف ونمط الحياة في بداياتهم",
+    "home.whatItem3": "عملية تقديم وحجز مُدارة، ليتفرغ البائعون لحرفتهم لا للوجستيات",
+    "home.whatItem4": "مجتمع مترابط من رواد الأعمال — على أرض الواقع وعبر واتساب",
 
     "markets.title": "الأسواق القادمة",
     "markets.subtitle": "فعالياتنا المجتمعية القادمة — مواعيد جديدة تُضاف شهرياً تقريباً.",
@@ -130,7 +142,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "markets.apply": "التقديم كبائع",
 
     "vendorInfo.title": "معلومات البائعين والتقديم",
-    "vendorInfo.subtitle": "رسوم الأكشاك والمتطلبات وكيفية التقديم.",
+    "vendorInfo.subtitle": "المتطلبات والتوقعات وكيفية إحضار مشروعك إلى سوق دار الحي.",
     "vendorInfo.applyTitle": "قدّم الآن",
     "vendorInfo.submit": "إرسال الطلب",
     "vendorInfo.success": "تم استلام الطلب",

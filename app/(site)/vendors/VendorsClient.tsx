@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useLocale } from "@/lib/i18n/context";
 import { PhoneField } from "@/components/PhoneField";
+import { Reveal } from "@/components/Reveal";
 
 interface EventOption {
   id: string;
   slug: string;
   name: string;
   startDate: string;
+  categories: string[];
 }
 
 export function VendorsClient({ events }: { events: EventOption[] }) {
@@ -18,6 +20,10 @@ export function VendorsClient({ events }: { events: EventOption[] }) {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [category, setCategory] = useState("");
+  const [categoryOther, setCategoryOther] = useState(false);
+
+  const selectedEvent = events.find((e) => e.id === eventId);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -73,12 +79,14 @@ export function VendorsClient({ events }: { events: EventOption[] }) {
 
   return (
     <div className="container-page py-16 max-w-4xl">
-      <header className="max-w-2xl mb-12">
-        <h1 className="font-heading text-3xl md:text-4xl text-brown-dark">{t("vendorInfo.title")}</h1>
-        <p className="mt-3 text-brown-light">{t("vendorInfo.subtitle")}</p>
-      </header>
+      <Reveal>
+        <header className="max-w-2xl mb-12">
+          <h1 className="font-heading text-3xl md:text-4xl text-brown-dark">{t("vendorInfo.title")}</h1>
+          <p className="mt-3 text-brown-light">{t("vendorInfo.subtitle")}</p>
+        </header>
+      </Reveal>
 
-      <section className="max-w-xl mb-16">
+      <Reveal delayMs={100} className="max-w-xl mb-16">
         <h2 className="font-heading text-xl text-brown-dark mb-3">
           {locale === "ar" ? "المتطلبات والتوقعات" : "Requirements & expectations"}
         </h2>
@@ -97,9 +105,9 @@ export function VendorsClient({ events }: { events: EventOption[] }) {
             ? "رسوم الأكشاك تُشارك معك بعد قبول طلبك."
             : "Booth fees are shared with you once your application is accepted."}
         </p>
-      </section>
+      </Reveal>
 
-      <section id="apply" className="bg-cream rounded-2xl border border-brown/10 p-6 md:p-10">
+      <Reveal delayMs={200} id="apply" className="bg-cream rounded-2xl border border-brown/10 p-6 md:p-10">
         <h2 className="font-heading text-2xl text-brown-dark mb-6">{t("vendorInfo.applyTitle")}</h2>
 
         {done ? (
@@ -125,7 +133,11 @@ export function VendorsClient({ events }: { events: EventOption[] }) {
               <select
                 required
                 value={eventId}
-                onChange={(e) => setEventId(e.target.value)}
+                onChange={(e) => {
+                  setEventId(e.target.value);
+                  setCategory("");
+                  setCategoryOther(false);
+                }}
                 className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
               >
                 {events.length === 0 && <option value="">—</option>}
@@ -141,7 +153,48 @@ export function VendorsClient({ events }: { events: EventOption[] }) {
             <Field name="contactName" label={t("form.contactName")} required />
             <Field name="email" type="email" label={t("form.email")} required />
             <PhoneField name="phone" label={t("form.phone")} required />
-            <Field name="category" label={t("form.category")} required />
+
+            {selectedEvent && selectedEvent.categories.length > 0 ? (
+              <label className="flex flex-col gap-1 text-sm">
+                {t("form.category")}
+                <select
+                  required={!categoryOther}
+                  name={categoryOther ? undefined : "category"}
+                  value={categoryOther ? "__other__" : category}
+                  onChange={(e) => {
+                    if (e.target.value === "__other__") {
+                      setCategoryOther(true);
+                      setCategory("");
+                    } else {
+                      setCategoryOther(false);
+                      setCategory(e.target.value);
+                    }
+                  }}
+                  className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
+                >
+                  <option value="">—</option>
+                  {selectedEvent.categories.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                  <option value="__other__">{locale === "ar" ? "أخرى" : "Other"}</option>
+                </select>
+                {categoryOther && (
+                  <input
+                    name="category"
+                    required
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    placeholder={locale === "ar" ? "حدد فئتك" : "Tell us your category"}
+                    className="mt-1 border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
+                  />
+                )}
+              </label>
+            ) : (
+              <Field name="category" label={t("form.category")} required />
+            )}
+
             <Field name="instagram" label={t("form.instagram")} />
 
             <label className="flex flex-col gap-1 text-sm sm:col-span-2">
@@ -169,7 +222,7 @@ export function VendorsClient({ events }: { events: EventOption[] }) {
             </div>
           </form>
         )}
-      </section>
+      </Reveal>
     </div>
   );
 }

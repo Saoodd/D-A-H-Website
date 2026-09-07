@@ -29,7 +29,12 @@ export function ApplicationDetailClient({
 }) {
   const { t, locale } = useLocale();
   const [view, setView] = useState(initialView);
-  const [floorplan, setFloorplan] = useState<{ features: FloorFeature[]; booths: FloorBooth[]; tiers: { sizeKey: string; label: string; priceAedFils: number }[] } | null>(null);
+  const [floorplan, setFloorplan] = useState<{
+    features: FloorFeature[];
+    booths: FloorBooth[];
+    tiers: { sizeKey: string; label: string; priceAedFils: number }[];
+    floorPlanImageUrl: string | null;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [checkoutSession, setCheckoutSession] = useState<{ paymentId: string; amountAedFils: number } | null>(null);
@@ -221,6 +226,7 @@ export function ApplicationDetailClient({
                     features={floorplan.features}
                     booths={floorplan.booths}
                     sizeStyles={sizeStyles}
+                    backgroundImageUrl={floorplan.floorPlanImageUrl}
                     onSelectBooth={selectBooth}
                   />
                   <Legend sizeStyles={sizeStyles} />

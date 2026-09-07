@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
-import { getPriceForSize } from "@/lib/pricing";
+import { getPriceForSizeAtEvent } from "@/lib/pricing";
 import { BOOTH_STATUS } from "@/lib/constants";
 
 // Admin booth management: manual status changes, assign/reassign to a
@@ -26,6 +26,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.status && (BOOTH_STATUS as readonly string[]).includes(body.status)) {
     data.status = body.status;
   }
+  if (typeof body.code === "string" && body.code.trim()) {
+    const code = body.code.trim();
+    if (code !== booth.code) {
+      const clash = await prisma.booth.findUnique({ where: { eventId_code: { eventId: booth.eventId, code } } });
+      if (clash) return NextResponse.json({ error: `Booth ${code} already exists for this event.` }, { status: 409 });
+    }
+    data.code = code;
+  }
+  if (typeof body.size === "string" && body.size.trim()) {
+    data.size = body.size.trim();
+  }
+  for (const key of ["gridX", "gridY", "gridW", "gridH"] as const) {
+    if (body[key] !== undefined) {
+      const n = Number(body[key]);
+      if (!Number.isNaN(n)) data[key] = n;
+    }
+  }
   if ("assignedApplicationId" in body) {
     if (body.assignedApplicationId) {
       const app = await prisma.application.findUnique({ where: { id: body.assignedApplicationId } });
@@ -45,7 +62,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (data.status === "SOLD") {
     if (!booth.priceAedFilsAtSale) {
-      data.priceAedFilsAtSale = await getPriceForSize(booth.size);
+      data.priceAedFilsAtSale = await getPriceForSizeAtEvent(booth.eventId, (data.size as string) || booth.size);
     }
     data.soldAt = booth.soldAt || new Date();
   } else if (data.status === "AVAILABLE") {

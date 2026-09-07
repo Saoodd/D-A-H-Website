@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getVendorSession } from "@/lib/auth";
 import { runExpiryPass } from "@/lib/expiry";
-import { getPriceForSize } from "@/lib/pricing";
+import { getPriceForSizeAtEvent } from "@/lib/pricing";
 import { getGateway } from "@/payments/gateway";
 import { BOOTH_PAYMENT_HOLD_MINUTES } from "@/lib/constants";
 
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
     return NextResponse.json({ error: "No active booth hold — please select a booth first." }, { status: 409 });
   }
 
-  const price = await getPriceForSize(booth.size);
+  const price = await getPriceForSizeAtEvent(application.eventId, booth.size);
   if (price == null) {
     return NextResponse.json({ error: "Pricing is not configured for this booth size." }, { status: 500 });
   }

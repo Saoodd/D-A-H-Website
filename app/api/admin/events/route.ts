@@ -18,6 +18,11 @@ export async function POST(req: NextRequest) {
   const existingSlug = await prisma.event.findUnique({ where: { slug } });
   if (existingSlug) slug = `${slug}-${Date.now().toString(36)}`;
 
+  const duplicateFromEventId = body.duplicateFromEventId as string | undefined;
+  const sourceEvent = duplicateFromEventId
+    ? await prisma.event.findUnique({ where: { id: duplicateFromEventId } })
+    : null;
+
   const event = await prisma.event.create({
     data: {
       slug,
@@ -27,14 +32,14 @@ export async function POST(req: NextRequest) {
       endDate: body.endDate ? new Date(body.endDate) : null,
       location,
       coverImage: body.coverImage || null,
-      categoryNeeds: String(body.categoryNeeds || ""),
+      categories: Array.isArray(body.categories) ? body.categories.map(String).filter(Boolean) : [],
+      floorPlanImageUrl: body.floorPlanImageUrl || sourceEvent?.floorPlanImageUrl || null,
       status: ["DRAFT", "PUBLISHED", "CLOSED"].includes(body.status) ? body.status : "DRAFT",
       whatsappVendorGroupLink: body.whatsappVendorGroupLink || null,
       acceptanceDeadlineHours: body.acceptanceDeadlineHours ? Number(body.acceptanceDeadlineHours) : null,
     },
   });
 
-  const duplicateFromEventId = body.duplicateFromEventId as string | undefined;
   if (duplicateFromEventId) {
     const [sourceBooths, sourceFeatures] = await Promise.all([
       prisma.booth.findMany({ where: { eventId: duplicateFromEventId } }),

@@ -43,7 +43,7 @@ export default async function EventDetailPage({
         startDate: event.startDate.toISOString(),
         endDate: event.endDate ? event.endDate.toISOString() : null,
         coverImage: event.coverImage,
-        categoryNeeds: event.categoryNeeds,
+        categories: event.categories,
         minPriceAedFils: minPrice,
       }}
     />

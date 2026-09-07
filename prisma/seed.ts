@@ -49,10 +49,10 @@ async function main() {
       slug: "dah-community-market",
       name: "DAH Community Market",
       description:
-        "A warm, curated pop-up market featuring Dubai's best food, drink and craft vendors. Placeholder description — replace with real event copy.",
+        "A warm, curated pop-up market giving young and emerging Dubai entrepreneurs an audience to grow with. Placeholder description — replace with real event copy.",
       startDate: nextMonth,
       location: "Dubai (venue TBC)",
-      categoryNeeds: "F&B, coffee, bakery, craft & lifestyle",
+      categories: ["F&B", "Coffee", "Bakery", "Craft & lifestyle"],
       status: "PUBLISHED",
     },
     update: {},
@@ -66,7 +66,7 @@ async function main() {
       description: "Placeholder for next month's edition — duplicate a floor plan from Admin → Events to reuse the same layout.",
       startDate: monthAfter,
       location: "Dubai (venue TBC)",
-      categoryNeeds: "F&B, coffee, bakery, craft & lifestyle",
+      categories: ["F&B", "Coffee", "Bakery", "Craft & lifestyle"],
       status: "DRAFT",
     },
     update: {},
@@ -74,18 +74,19 @@ async function main() {
 
   // A small placeholder floor plan modelled loosely on the reference spec's
   // structural zones — replace booth codes/positions with the real layout.
+  // Coordinates are percentages (0-100) of the floor plan canvas.
   const existingFeatures = await prisma.floorPlanFeature.count({ where: { eventId: event.id } });
   if (existingFeatures === 0) {
     await prisma.floorPlanFeature.createMany({
       data: [
-        { eventId: event.id, type: "ENTRANCE_MAIN", label: "Main entrance", gridX: 14, gridY: 20, gridW: 5, gridH: 1 },
-        { eventId: event.id, type: "ENTRANCE_SIDE", label: "Side entrance", gridX: 1, gridY: 20, gridW: 2, gridH: 1 },
-        { eventId: event.id, type: "ENTRANCE_SIDE", label: "Side entrance", gridX: 30, gridY: 20, gridW: 2, gridH: 1 },
-        { eventId: event.id, type: "TOILET_FEMALE", label: "Female toilets", gridX: 34, gridY: 2, gridW: 3, gridH: 3 },
-        { eventId: event.id, type: "TOILET_MALE", label: "Male toilets", gridX: 34, gridY: 6, gridW: 3, gridH: 3 },
-        { eventId: event.id, type: "OFFICE", label: "Office", gridX: 34, gridY: 10, gridW: 3, gridH: 3 },
-        { eventId: event.id, type: "LOADING", label: "Loading area", gridX: 34, gridY: 14, gridW: 3, gridH: 3 },
-        { eventId: event.id, type: "STAIRS", label: "Stairs to mezzanine", gridX: 34, gridY: 18, gridW: 3, gridH: 2 },
+        { eventId: event.id, type: "ENTRANCE_MAIN", label: "Main entrance", gridX: 40, gridY: 92, gridW: 14, gridH: 5 },
+        { eventId: event.id, type: "ENTRANCE_SIDE", label: "Side entrance", gridX: 3, gridY: 92, gridW: 6, gridH: 5 },
+        { eventId: event.id, type: "ENTRANCE_SIDE", label: "Side entrance", gridX: 88, gridY: 92, gridW: 6, gridH: 5 },
+        { eventId: event.id, type: "TOILET_FEMALE", label: "Female toilets", gridX: 88, gridY: 5, gridW: 9, gridH: 10 },
+        { eventId: event.id, type: "TOILET_MALE", label: "Male toilets", gridX: 88, gridY: 18, gridW: 9, gridH: 10 },
+        { eventId: event.id, type: "OFFICE", label: "Office", gridX: 88, gridY: 31, gridW: 9, gridH: 10 },
+        { eventId: event.id, type: "LOADING", label: "Loading area", gridX: 88, gridY: 44, gridW: 9, gridH: 10 },
+        { eventId: event.id, type: "STAIRS", label: "Stairs to mezzanine", gridX: 88, gridY: 57, gridW: 9, gridH: 8 },
       ],
     });
   }
@@ -95,17 +96,17 @@ async function main() {
     const booths: { code: string; size: string; gridX: number; gridY: number; gridW: number; gridH: number }[] = [];
     // Top row — A1..A10
     for (let i = 0; i < 10; i++) {
-      booths.push({ code: `A${i + 1}`, size: i % 3 === 0 ? "3x2" : "2x2", gridX: 1 + i * 3, gridY: 1, gridW: 2.5, gridH: 2 });
+      booths.push({ code: `A${i + 1}`, size: i % 3 === 0 ? "3x2" : "2x2", gridX: 3 + i * 8, gridY: 5, gridW: 6, gridH: 8 });
     }
     // Bottom row — B1..B10
     for (let i = 0; i < 10; i++) {
-      booths.push({ code: `B${i + 1}`, size: i % 4 === 0 ? "3x2" : "2x2", gridX: 1 + i * 3, gridY: 16, gridW: 2.5, gridH: 2 });
+      booths.push({ code: `B${i + 1}`, size: i % 4 === 0 ? "3x2" : "2x2", gridX: 3 + i * 8, gridY: 78, gridW: 6, gridH: 8 });
     }
     // A couple of central cluster booths
-    booths.push({ code: "A11", size: "2x2", gridX: 12, gridY: 8, gridW: 2.5, gridH: 2 });
-    booths.push({ code: "A12", size: "2x2", gridX: 12, gridY: 11, gridW: 2.5, gridH: 2 });
-    booths.push({ code: "B11", size: "3x2", gridX: 18, gridY: 8, gridW: 3, gridH: 2 });
-    booths.push({ code: "B12", size: "3x2", gridX: 18, gridY: 11, gridW: 3, gridH: 2 });
+    booths.push({ code: "A11", size: "2x2", gridX: 30, gridY: 40, gridW: 6, gridH: 8 });
+    booths.push({ code: "A12", size: "2x2", gridX: 30, gridY: 50, gridW: 6, gridH: 8 });
+    booths.push({ code: "B11", size: "3x2", gridX: 45, gridY: 40, gridW: 7, gridH: 8 });
+    booths.push({ code: "B12", size: "3x2", gridX: 45, gridY: 50, gridW: 7, gridH: 8 });
 
     await prisma.booth.createMany({
       data: booths.map((b) => ({ eventId: event.id, status: "AVAILABLE", ...b })),

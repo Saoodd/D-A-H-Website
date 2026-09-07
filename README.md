@@ -124,14 +124,26 @@ Nothing here requires touching code — it's all done through
 
 - **New monthly market**: Admin → Events → New event → optionally pick
   "Base floor plan on existing event" to copy last month's layout, then
-  tweak individual booths.
+  tweak individual booths. Add the vendor categories relevant to this
+  market as chips — they show on the public event page and become the
+  choices offered to vendors applying to it.
+- **Floor plan image**: paste a URL to a photo/scan of the real venue in
+  the event's "Floor plan image URL" field, and the floor plan builder
+  (and the vendor's booth-selection map) renders booths directly on top of
+  it — click anywhere on the image to place one.
 - **Floor plan / booths**: Admin → Events → an event → the floor plan
-  builder. Add booths one at a time, or paste the **full real booth list**
-  as JSON via "Bulk import booths" — this is how you load the real A#/B#
-  kiosk IDs and layout once confirmed (see the TODOs in `prisma/seed.ts`).
-  Click any booth on the map to change its status, assign/reassign it to an
-  approved vendor, or clear it back to available.
-- **Pricing**: Admin → Pricing.
+  builder. The primary flow is **click the map to add a booth** — pick a
+  size and code prefix, then click; the next code (e.g. `A1`, `A2`, …) is
+  filled in automatically. Click an existing booth to change its status,
+  assign/reassign it to an approved vendor, fine-tune its position, or
+  delete it. "Advanced" (collapsed by default) still has the old single-add
+  form, plus **bulk import** — paste the **full real booth list** as JSON,
+  which is how you load the real A#/B# kiosk IDs and layout once confirmed
+  (see the TODOs in `prisma/seed.ts`).
+- **Pricing**: Admin → Pricing sets the site-wide default per booth size.
+  Admin → Events → an event → "Pricing for this event" overrides that
+  default for just that market (e.g. a launch discount) without touching
+  the global price.
 - **Gallery photos**: Admin → Gallery.
 
 ## Payments

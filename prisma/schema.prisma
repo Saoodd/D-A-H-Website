@@ -45,28 +45,50 @@ model PricingTier {
 }
 
 model Event {
-  id            String   @id @default(cuid())
-  slug          String   @unique
-  name          String
-  description   String   @default("")
-  startDate     DateTime
-  endDate       DateTime?
-  location      String
-  coverImage    String?
-  categoryNeeds String   @default("") // general vendor category requirements shown publicly
-  status        String   @default("DRAFT") // DRAFT | PUBLISHED | CLOSED
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  name        String
+  description String    @default("")
+  startDate   DateTime
+  endDate     DateTime?
+  location    String
+  coverImage  String?
+  categories  String[]  @default([]) // vendor categories relevant to this market — shown publicly and offered as choices on the application form
+  status      String    @default("DRAFT") // DRAFT | PUBLISHED | CLOSED
+
+  // Optional background image for the floor plan builder/viewer — when set,
+  // booth/feature gridX/Y/W/H are read as percentages (0-100) of this
+  // image's width/height, so admin can click directly on a real venue photo
+  // or architectural drawing to place booths instead of guessing coordinates.
+  floorPlanImageUrl String?
 
   whatsappVendorGroupLink String? // event-specific, payment-gated
 
   // Overrides Settings.defaultAcceptanceDeadlineHours for this event only.
   acceptanceDeadlineHours Int?
 
-  booths       Booth[]
-  features     FloorPlanFeature[]
-  applications Application[]
+  booths         Booth[]
+  features       FloorPlanFeature[]
+  applications   Application[]
+  pricingOverrides EventPricing[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Per-event override of a PricingTier's price — lets DAH charge a
+// different booth fee at a specific market without changing the global
+// default. Falls back to PricingTier.priceAedFils when no row exists here.
+model EventPricing {
+  id            String   @id @default(cuid())
+  eventId       String
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  sizeKey       String // matches PricingTier.sizeKey
+  priceAedFils  Int
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([eventId, sizeKey])
 }
 
 model FloorPlanFeature {
@@ -76,8 +98,8 @@ model FloorPlanFeature {
   // ENTRANCE_MAIN | ENTRANCE_SIDE | TOILET_FEMALE | TOILET_MALE | OFFICE | LOADING | STAIRS | OTHER
   type  String
   label String
-  // Position/size in a simple grid-cell coordinate system used by the floor
-  // plan renderer (1 cell ~= 1 meter). See app/components/floorplan.
+  // Position/size as a percentage (0-100) of the floor plan canvas/image.
+  // See components/floorplan.
   gridX    Float
   gridY    Float
   gridW    Float
@@ -95,6 +117,8 @@ model Booth {
   code String // unique WITHIN the event, e.g. "A5", "B29"
   size String // references PricingTier.sizeKey, e.g. "2x2" / "3x2"
 
+  // Position/size as a percentage (0-100) of the floor plan canvas/image —
+  // lets the admin click-to-place a booth instead of typing coordinates.
   gridX Float
   gridY Float
   gridW Float
