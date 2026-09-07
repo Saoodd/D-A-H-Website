@@ -4,7 +4,7 @@ DAH's own branded site for showcasing its community pop-up markets and running
 vendor applications, booth bookings and payments — plus a full admin panel for
 DAH to manage events, floor plans, pricing and vendors day to day.
 
-Built with Next.js (App Router, TypeScript), Prisma + SQLite, Tailwind CSS,
+Built with Next.js (App Router, TypeScript), Prisma + Postgres, Tailwind CSS,
 Resend for email, and a swappable sandbox payment gateway.
 
 ## Contents
@@ -27,9 +27,10 @@ Resend for email, and a swappable sandbox payment gateway.
 ```bash
 npm install
 cp .env.example .env
-# edit .env — at minimum set ADMIN_PASSWORD and AUTH_SECRET
+# edit .env — set ADMIN_PASSWORD, AUTH_SECRET, and DATABASE_URL (a Postgres
+# connection string — see "Database" below for a local option)
 
-npx prisma migrate dev   # creates prisma/dev.db and applies the schema
+npx prisma migrate dev   # applies the schema
 npm run db:seed          # seeds pricing, a demo event/floor plan, gallery placeholders
 
 npm run dev               # http://localhost:3000
@@ -47,7 +48,7 @@ See `.env.example` for the full list with comments. Never commit a real `.env`.
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | Prisma datasource. `file:./dev.db` locally; a hosted Postgres URL in production (see [Database](#database)). |
+| `DATABASE_URL` | Postgres connection string, local and in production (see [Database](#database)). |
 | `ADMIN_PASSWORD` | The single admin login password. |
 | `AUTH_SECRET` | Random secret used to sign admin/vendor session cookies. Generate with `openssl rand -base64 32`. |
 | `RESEND_API_KEY` | [Resend](https://resend.com) API key. Leave empty in dev — emails are logged to the console instead of sent. |
@@ -58,27 +59,37 @@ See `.env.example` for the full list with comments. Never commit a real `.env`.
 
 ## Database
 
-Local development uses SQLite (`prisma/schema.prisma`, `provider = "sqlite"`)
-— zero setup, a single file (`prisma/dev.db`). This is fine for development
-and even a very low-traffic production deployment, but SQLite does **not**
-handle concurrent writes safely across multiple serverless function
-instances (Vercel/Netlify run your API routes as separate, ephemeral
-instances). **Before a real production launch**, switch to a hosted
-Postgres database:
+The app runs on Postgres everywhere — locally and in production
+(`prisma/schema.prisma`, `provider = "postgresql"`). This is deliberate:
+SQLite does **not** handle concurrent writes safely across multiple
+serverless function instances (Vercel/Netlify run your API routes as
+separate, ephemeral instances), so this project doesn't use it at all,
+including for local dev.
 
-1. Provision a Postgres database (Vercel Postgres, Neon, Supabase, etc.) and
-   copy its connection string into `DATABASE_URL`.
-2. In `prisma/schema.prisma`, change the datasource:
-   ```prisma
-   datasource db {
-     provider = "postgresql"
-     url      = env("DATABASE_URL")
-   }
-   ```
-3. Run `npx prisma migrate deploy` against the new database.
+**In production**: provision a Postgres database — Vercel Postgres (Storage
+tab → Create Database; auto-injects `DATABASE_URL`), Neon, or Supabase all
+work — then run `npx prisma migrate deploy` against it once after the first
+deploy.
+
+**For local development**, either:
+- Point `DATABASE_URL` at a free cloud Postgres (Neon/Supabase both have
+  generous free tiers, and it's the least setup), or
+- Run Postgres locally, e.g.:
+  ```bash
+  # macOS
+  brew install postgresql@16 && brew services start postgresql@16
+  createuser -s dah && createdb dah_dev -O dah
+
+  # Debian/Ubuntu
+  sudo apt-get install postgresql && sudo pg_ctlcluster 16 main start
+  sudo -u postgres psql -c "CREATE ROLE dah LOGIN PASSWORD 'dah_dev_pw' CREATEDB;"
+  sudo -u postgres psql -c "CREATE DATABASE dah_dev OWNER dah;"
+  ```
+  then set `DATABASE_URL="postgresql://dah:dah_dev_pw@localhost:5432/dah_dev"`
+  (adjust if you didn't set a password) and run `npx prisma migrate dev`.
 
 Everything else in the app (queries, the booth-hold logic, etc.) is
-database-agnostic and needs no other changes.
+already Postgres-ready and needs no other changes.
 
 ## Admin panel
 
