@@ -47,6 +47,20 @@ export const translations: Record<Locale, Record<string, string>> = {
     "markets.viewDetails": "View details",
     "markets.apply": "Apply as a vendor",
 
+    "eventDetail.loginPrompt": "Log in to apply as a vendor for this event.",
+    "eventDetail.loginCta": "Log in to apply",
+    "eventDetail.signupCta": "Create a business account",
+    "eventDetail.unverifiedTitle": "Verification in progress",
+    "eventDetail.unverifiedBody": "Your DAH business account is under review. Once verified, you'll be able to apply to this and every future event directly from your dashboard.",
+    "eventDetail.unverifiedCta": "Go to my dashboard",
+    "eventDetail.applyCta": "Apply as a vendor",
+    "eventDetail.applying": "Applying…",
+    "eventDetail.viewApplicationCta": "View your application",
+    "eventDetail.alreadyApplied": "You've already applied to this event.",
+
+    "home.galleryTitle": "From past events",
+    "home.galleryCta": "See the full gallery",
+
     "vendorInfo.title": "Become a DAH Vendor",
     "vendorInfo.subtitle": "Create your DAH business account, then apply to individual events once you're verified.",
     "vendorInfo.applyTitle": "Create your DAH Business Account",
@@ -76,6 +90,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "form.confirmPassword": "Confirm password",
     "form.event": "Event",
     "form.name": "Name",
+    "form.showPassword": "Show",
+    "form.hidePassword": "Hide",
 
     "vendor.loginTitle": "Vendor Login",
     "vendor.registerNote": "New here? Create your DAH business account to get started.",
@@ -142,6 +158,20 @@ export const translations: Record<Locale, Record<string, string>> = {
     "markets.viewDetails": "عرض التفاصيل",
     "markets.apply": "التقديم كبائع",
 
+    "eventDetail.loginPrompt": "سجّل الدخول للتقديم كبائع في هذه الفعالية.",
+    "eventDetail.loginCta": "سجّل الدخول للتقديم",
+    "eventDetail.signupCta": "أنشئ حساب عمل",
+    "eventDetail.unverifiedTitle": "التحقق قيد المعالجة",
+    "eventDetail.unverifiedBody": "حساب عملك في دار الحي قيد المراجعة. بعد التحقق، ستتمكن من التقديم لهذه الفعالية ولكل فعالية قادمة مباشرة من لوحتك.",
+    "eventDetail.unverifiedCta": "الذهاب إلى لوحتي",
+    "eventDetail.applyCta": "التقديم كبائع",
+    "eventDetail.applying": "جارٍ التقديم…",
+    "eventDetail.viewApplicationCta": "عرض طلبك",
+    "eventDetail.alreadyApplied": "لقد قدّمت بالفعل لهذه الفعالية.",
+
+    "home.galleryTitle": "من فعالياتنا السابقة",
+    "home.galleryCta": "عرض المعرض الكامل",
+
     "vendorInfo.title": "كن بائعاً مع دار الحي",
     "vendorInfo.subtitle": "أنشئ حساب عملك في دار الحي، ثم قدّم على الفعاليات الفردية بعد التحقق.",
     "vendorInfo.applyTitle": "أنشئ حساب عملك في دار الحي",
@@ -171,6 +201,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "form.confirmPassword": "تأكيد كلمة المرور",
     "form.event": "الفعالية",
     "form.name": "الاسم",
+    "form.showPassword": "إظهار",
+    "form.hidePassword": "إخفاء",
 
     "vendor.loginTitle": "دخول البائعين",
     "vendor.registerNote": "جديد هنا؟ أنشئ حساب عملك في دار الحي للبدء.",

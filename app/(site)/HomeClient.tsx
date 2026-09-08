@@ -12,7 +12,19 @@ interface NextEvent {
   startDate: string;
 }
 
-export function HomeClient({ nextEvent }: { nextEvent: NextEvent | null }) {
+interface GalleryPreviewImage {
+  id: string;
+  url: string;
+  caption: string;
+}
+
+export function HomeClient({
+  nextEvent,
+  galleryPreview,
+}: {
+  nextEvent: NextEvent | null;
+  galleryPreview: GalleryPreviewImage[];
+}) {
   const { t, locale } = useLocale();
 
   return (
@@ -99,6 +111,31 @@ export function HomeClient({ nextEvent }: { nextEvent: NextEvent | null }) {
           </ul>
         </Reveal>
       </section>
+
+      {galleryPreview.length > 0 && (
+        <section className="container-page pb-20">
+          <Reveal>
+            <div className="flex items-end justify-between mb-6">
+              <h2 className="font-heading text-2xl text-brown-dark">{t("home.galleryTitle")}</h2>
+              <Link href="/gallery" className="text-sm underline text-brown whitespace-nowrap">
+                {t("home.galleryCta")}
+              </Link>
+            </div>
+          </Reveal>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {galleryPreview.map((img, i) => (
+              <Reveal key={img.id} delayMs={(i % 4) * 80}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- admin-managed external URLs, not local static assets */}
+                <img
+                  src={img.url}
+                  alt={img.caption || "Dar Al Hay event"}
+                  className="w-full h-40 object-cover rounded-[10px]"
+                />
+              </Reveal>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

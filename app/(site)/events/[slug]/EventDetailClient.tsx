@@ -1,11 +1,15 @@
 "use client";
 
-import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useLocale } from "@/lib/i18n/context";
 import { formatAed } from "@/lib/constants";
 import { Reveal } from "@/components/Reveal";
+import { LinkButton, Button } from "@/components/ui/Button";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 
 interface EventDetail {
+  id: string;
   slug: string;
   name: string;
   description: string;
@@ -17,8 +21,24 @@ interface EventDetail {
   minPriceAedFils: number | null;
 }
 
-export function EventDetailClient({ event }: { event: EventDetail }) {
+interface VendorState {
+  authState: "logged_out" | "unverified" | "verified";
+  application: { id: string; displayStatus: string } | null;
+}
+
+const statusTone: Record<string, "neutral" | "positive" | "attention" | "negative"> = {
+  PENDING: "neutral",
+  REJECTED: "negative",
+  ACCEPTED_UNPAID: "attention",
+  PAID: "positive",
+  EXPIRED: "neutral",
+};
+
+export function EventDetailClient({ event, vendorState }: { event: EventDetail; vendorState: VendorState }) {
   const { t, locale } = useLocale();
+  const router = useRouter();
+  const [applying, setApplying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const dateFmt = (iso: string) =>
     new Date(iso).toLocaleDateString(locale === "ar" ? "ar-AE" : "en-AE", {
@@ -27,6 +47,24 @@ export function EventDetailClient({ event }: { event: EventDetail }) {
       month: "long",
       year: "numeric",
     });
+
+  async function applyNow() {
+    setApplying(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/vendor/apply-event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId: event.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not apply");
+      router.push(`/vendor/applications/${data.applicationId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not apply");
+      setApplying(false);
+    }
+  }
 
   return (
     <div>
@@ -68,12 +106,50 @@ export function EventDetailClient({ event }: { event: EventDetail }) {
         )}
 
         <div className="mt-10">
-          <Link
-            href="/vendors"
-            className="inline-block px-7 py-3 rounded-full bg-brown text-cream-soft text-sm tracking-wide hover:bg-brown-dark transition-colors"
-          >
-            {t("markets.apply")}
-          </Link>
+          {vendorState.authState === "logged_out" && (
+            <div>
+              <p className="text-sm text-brown-light mb-4">{t("eventDetail.loginPrompt")}</p>
+              <div className="flex flex-wrap gap-3">
+                <LinkButton href={`/vendor/login?next=/events/${event.slug}`} size="lg">
+                  {t("eventDetail.loginCta")}
+                </LinkButton>
+                <LinkButton href="/vendors" variant="secondary" size="lg">
+                  {t("eventDetail.signupCta")}
+                </LinkButton>
+              </div>
+            </div>
+          )}
+
+          {vendorState.authState === "unverified" && (
+            <div className="rounded-[10px] border border-brown/10 bg-cream px-6 py-5 max-w-md">
+              <p className="font-heading text-brown-dark">{t("eventDetail.unverifiedTitle")}</p>
+              <p className="mt-2 text-sm text-brown-light">{t("eventDetail.unverifiedBody")}</p>
+              <LinkButton href="/vendor/dashboard" variant="secondary" size="md" className="mt-4">
+                {t("eventDetail.unverifiedCta")}
+              </LinkButton>
+            </div>
+          )}
+
+          {vendorState.authState === "verified" && !vendorState.application && (
+            <div>
+              {error && <p className="text-sm text-red-800 mb-3">{error}</p>}
+              <Button size="lg" onClick={applyNow} loading={applying}>
+                {applying ? t("eventDetail.applying") : t("eventDetail.applyCta")}
+              </Button>
+            </div>
+          )}
+
+          {vendorState.authState === "verified" && vendorState.application && (
+            <div className="flex items-center gap-3 flex-wrap">
+              <StatusBadge
+                label={t(`vendor.status.${vendorState.application.displayStatus}`)}
+                tone={statusTone[vendorState.application.displayStatus] ?? "neutral"}
+              />
+              <LinkButton href={`/vendor/applications/${vendorState.application.id}`} variant="secondary" size="md">
+                {t("eventDetail.viewApplicationCta")}
+              </LinkButton>
+            </div>
+          )}
         </div>
       </Reveal>
     </div>

@@ -122,17 +122,11 @@ async function main() {
     }
   }
 
-  const galleryCount = await prisma.galleryImage.count();
-  if (galleryCount === 0) {
-    await prisma.galleryImage.createMany({
-      data: [
-        { url: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&q=80", caption: "Market floor, golden hour", sortOrder: 0 },
-        { url: "https://images.unsplash.com/photo-1533619043865-1613310d3d5f?w=800&q=80", caption: "Fresh bakes from a vendor stall", sortOrder: 1 },
-        { url: "https://images.unsplash.com/photo-1528605248644-14dd04022da1?w=800&q=80", caption: "Coffee cart queue", sortOrder: 2 },
-        { url: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&q=80", caption: "Community browsing the stalls", sortOrder: 3 },
-      ],
-    });
-  }
+  // Deliberately no gallery seed data: stock photos captioned as if they
+  // were real DAH events would misrepresent the brand if this seed is ever
+  // run against production. The gallery starts empty until DAH's admin
+  // uploads real event photography — the public gallery page and the
+  // homepage preview both hide themselves cleanly when there are no images.
 
   const demoEmail = "demo.vendor@example.com";
   let vendor = await prisma.vendor.findUnique({ where: { email: demoEmail } });
