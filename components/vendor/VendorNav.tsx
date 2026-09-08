@@ -6,6 +6,7 @@ import { useLocale } from "@/lib/i18n/context";
 
 const links = [
   { href: "/vendor/dashboard", key: "vendorNav.overview" as const },
+  { href: "/vendor/agreements", key: "vendorNav.agreements" as const },
   { href: "/vendor/profile", key: "vendorNav.profile" as const },
 ];
 

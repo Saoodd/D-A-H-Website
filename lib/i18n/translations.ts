@@ -119,6 +119,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "vendor.cancelBooth": "Cancel my booth",
 
     "vendorNav.overview": "Overview",
+    "vendorNav.agreements": "Agreements",
     "vendorNav.profile": "Profile",
     "vendorNav.logout": "Log out",
 
@@ -310,6 +311,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "vendor.cancelBooth": "إلغاء الكشك",
 
     "vendorNav.overview": "نظرة عامة",
+    "vendorNav.agreements": "الاتفاقيات",
     "vendorNav.profile": "الملف الشخصي",
     "vendorNav.logout": "تسجيل الخروج",
 

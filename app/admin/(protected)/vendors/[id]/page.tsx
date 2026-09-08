@@ -17,7 +17,7 @@ export default async function AdminVendorDetailPage({ params }: { params: Promis
   const vendor = await prisma.vendor.findUnique({ where: { id } });
   if (!vendor) notFound();
 
-  const [applications, participation, notes, warnings] = await Promise.all([
+  const [applications, participation, notes, warnings, agreements] = await Promise.all([
     prisma.application.findMany({
       where: { vendorId: id },
       include: {
@@ -35,6 +35,7 @@ export default async function AdminVendorDetailPage({ params }: { params: Promis
       orderBy: { createdAt: "desc" },
       include: { event: { select: { name: true } } },
     }),
+    prisma.agreementAcceptance.findMany({ where: { vendorId: id }, orderBy: { acceptedAt: "desc" } }),
   ]);
 
   return (
@@ -89,6 +90,14 @@ export default async function AdminVendorDetailPage({ params }: { params: Promis
         createdAt: w.createdAt.toISOString(),
       }))}
       events={applications.map((a) => ({ id: a.event.id, name: a.event.name }))}
+      agreements={agreements.map((a) => ({
+        id: a.id,
+        title: a.snapshotTitle,
+        type: a.snapshotType,
+        eventName: a.snapshotEventName,
+        version: a.snapshotVersion,
+        acceptedAt: a.acceptedAt.toISOString(),
+      }))}
     />
   );
 }

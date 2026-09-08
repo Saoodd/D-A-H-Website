@@ -41,6 +41,15 @@ interface NoteRow {
   createdAt: string;
 }
 
+interface AgreementRow {
+  id: string;
+  title: string;
+  type: string;
+  eventName: string | null;
+  version: number;
+  acceptedAt: string;
+}
+
 interface WarningRow {
   id: string;
   title: string;
@@ -81,6 +90,7 @@ export function VendorDetailClient({
   notes,
   warnings,
   events,
+  agreements,
 }: {
   vendor: VendorFull;
   stats: { eventsParticipated: number; upcomingConfirmedCount: number; applicationsCount: number; totalPaidAedFils: number };
@@ -88,6 +98,7 @@ export function VendorDetailClient({
   notes: NoteRow[];
   warnings: WarningRow[];
   events: { id: string; name: string }[];
+  agreements: AgreementRow[];
 }) {
   const router = useRouter();
   const [verifyBusy, setVerifyBusy] = useState(false);
@@ -309,6 +320,33 @@ export function VendorDetailClient({
                       </p>
                     </div>
                     <StatusBadge label={a.displayStatus} tone={displayStatusTone[a.displayStatus]} />
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section>
+            <p className="label-caps mb-3">Agreements</p>
+            {agreements.length === 0 ? (
+              <EmptyState title="Nothing accepted yet" />
+            ) : (
+              <div className="space-y-2">
+                {agreements.map((a) => (
+                  <Link
+                    key={a.id}
+                    href={`/admin/agreements/records/${a.id}`}
+                    className="flex items-center justify-between flex-wrap gap-3 rounded-[10px] border border-brown/10 bg-cream hover:border-brown/25 p-4 transition-colors"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-brown-dark">
+                        {a.eventName ? `${a.title} — ${a.eventName}` : a.title}
+                      </p>
+                      <p className="text-xs text-brown-light">
+                        Accepted · {new Date(a.acceptedAt).toLocaleDateString()} · v{a.version}
+                      </p>
+                    </div>
+                    <StatusBadge label={a.type === "VENDOR_TERMS" ? "Account" : "Event"} tone="neutral" />
                   </Link>
                 ))}
               </div>
