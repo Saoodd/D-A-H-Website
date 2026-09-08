@@ -5,6 +5,7 @@ import { runExpiryPass } from "@/lib/expiry";
 import { getBoothPrice } from "@/lib/pricing";
 import { getGateway } from "@/payments/gateway";
 import { BOOTH_PAYMENT_HOLD_MINUTES } from "@/lib/constants";
+import { hasAcceptedCurrentEventTerms } from "@/lib/agreements";
 
 // Moves a booth from its 5-minute review hold into a fresh 5-minute payment
 // hold, and opens a charge with the (sandbox) payment gateway.
@@ -30,6 +31,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
   });
   if (!booth) {
     return NextResponse.json({ error: "No active booth hold — please select a booth first." }, { status: 409 });
+  }
+
+  // The one rule that must never have a bypass: no route to payment exists
+  // without accepting THIS event's current Terms & Conditions, even if the
+  // client skips the UI and calls this endpoint directly.
+  const acceptedCurrentTerms = await hasAcceptedCurrentEventTerms(session.vendorId, applicationId, application.eventId);
+  if (!acceptedCurrentTerms) {
+    return NextResponse.json(
+      { error: "You must review and accept this event's Terms & Conditions before continuing to payment." },
+      { status: 403 }
+    );
   }
 
   const price = await getBoothPrice(booth, application.eventId);

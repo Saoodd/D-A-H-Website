@@ -4,6 +4,7 @@ import { runExpiryPass } from "./expiry";
 import { getDisplayStatus } from "./status";
 import { getSettings } from "./settings";
 import { DisplayStatus } from "./constants";
+import { eventHasPublishedTerms, hasAcceptedCurrentEventTerms } from "./agreements";
 
 export interface ApplicationView {
   id: string;
@@ -41,6 +42,12 @@ export interface ApplicationView {
   } | null;
   cancellationRequested: boolean;
   communityLink: string | null;
+  // Every event carries its own independent Terms & Conditions (never a
+  // shared global template) — these reflect THIS event's currently
+  // published agreement, if any, and whether this vendor has accepted
+  // that exact version for this application.
+  eventTermsRequired: boolean;
+  eventTermsAccepted: boolean;
 }
 
 /** Loads an application for the owning vendor, running the expiry pass first
@@ -80,6 +87,11 @@ export async function getApplicationView(
   const soldBooth = fresh.assignedBooths.find((b) => b.status === "SOLD") || null;
   const latest = fresh.payments[0] || null;
 
+  const eventTermsRequired = await eventHasPublishedTerms(fresh.eventId);
+  const eventTermsAccepted = eventTermsRequired
+    ? await hasAcceptedCurrentEventTerms(vendorId, applicationId, fresh.eventId)
+    : true;
+
   return {
     id: fresh.id,
     event: {
@@ -117,5 +129,7 @@ export async function getApplicationView(
       : null,
     cancellationRequested: fresh.cancellationRequests.length > 0,
     communityLink: settings.mainCommunityWhatsappLink,
+    eventTermsRequired,
+    eventTermsAccepted,
   };
 }

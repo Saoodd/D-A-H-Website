@@ -23,7 +23,39 @@ interface EventDetail {
 
 interface VendorState {
   authState: "logged_out" | "unverified" | "verified";
-  application: { id: string; displayStatus: string } | null;
+  application: {
+    id: string;
+    displayStatus: string;
+    holdStage: string | null;
+    eventTermsRequired: boolean;
+    eventTermsAccepted: boolean;
+  } | null;
+}
+
+/** One of the platform's distinct logged-in event CTA states — each has its
+ *  own exact copy and destination, never a generic "View your application"
+ *  once a vendor has moved past simply applying. */
+function resolveApplicationCta(app: NonNullable<VendorState["application"]>, locale: "en" | "ar") {
+  if (app.displayStatus === "PAID") {
+    return { label: locale === "ar" ? "عرض الحجز" : "View Booking", href: `/vendor/applications/${app.id}` };
+  }
+  if (app.displayStatus === "ACCEPTED_UNPAID") {
+    if (!app.holdStage) {
+      return { label: locale === "ar" ? "اختيار الكشك" : "Select Booth", href: `/vendor/applications/${app.id}` };
+    }
+    if (app.holdStage === "REVIEW") {
+      if (app.eventTermsRequired && !app.eventTermsAccepted) {
+        return {
+          label: locale === "ar" ? "مراجعة وقبول شروط الفعالية" : "Review & Accept Event Terms",
+          href: `/vendor/applications/${app.id}/terms`,
+        };
+      }
+      return { label: locale === "ar" ? "مراجعة الحجز" : "Review Booking", href: `/vendor/applications/${app.id}` };
+    }
+    // holdStage === "PAYMENT"
+    return { label: locale === "ar" ? "المتابعة للدفع" : "Continue to Payment", href: `/vendor/applications/${app.id}` };
+  }
+  return null; // PENDING / REJECTED / EXPIRED fall back to the generic "View your application" below
 }
 
 const statusTone: Record<string, "neutral" | "positive" | "attention" | "negative"> = {
@@ -145,9 +177,14 @@ export function EventDetailClient({ event, vendorState }: { event: EventDetail; 
                 label={t(`vendor.status.${vendorState.application.displayStatus}`)}
                 tone={statusTone[vendorState.application.displayStatus] ?? "neutral"}
               />
-              <LinkButton href={`/vendor/applications/${vendorState.application.id}`} variant="secondary" size="md">
-                {t("eventDetail.viewApplicationCta")}
-              </LinkButton>
+              {(() => {
+                const cta = resolveApplicationCta(vendorState.application, locale);
+                return (
+                  <LinkButton href={cta ? cta.href : `/vendor/applications/${vendorState.application.id}`} variant="secondary" size="md">
+                    {cta ? cta.label : t("eventDetail.viewApplicationCta")}
+                  </LinkButton>
+                );
+              })()}
             </div>
           )}
         </div>

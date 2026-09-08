@@ -248,13 +248,22 @@ export function ApplicationDetailClient({
                 </p>
               )}
               <div className="mt-5 flex gap-3">
-                <button
-                  onClick={proceedToPayment}
-                  disabled={busy}
-                  className="px-6 py-2.5 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark disabled:opacity-50"
-                >
-                  {locale === "ar" ? "المتابعة للدفع" : "Proceed to payment"}
-                </button>
+                {view.eventTermsRequired && !view.eventTermsAccepted ? (
+                  <Link
+                    href={`/vendor/applications/${applicationId}/terms`}
+                    className="px-6 py-2.5 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark"
+                  >
+                    {locale === "ar" ? "مراجعة وقبول شروط الفعالية" : "Review & Accept Event Terms"}
+                  </Link>
+                ) : (
+                  <button
+                    onClick={proceedToPayment}
+                    disabled={busy}
+                    className="px-6 py-2.5 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark disabled:opacity-50"
+                  >
+                    {locale === "ar" ? "المتابعة للدفع" : "Continue to Payment"}
+                  </button>
+                )}
                 <button onClick={changeBooth} disabled={busy} className="px-6 py-2.5 rounded-full border border-brown/30 text-sm disabled:opacity-50">
                   {locale === "ar" ? "اختيار كشك آخر" : "Choose a different booth"}
                 </button>
