@@ -32,6 +32,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       gridY: b.gridY,
       gridW: b.gridW,
       gridH: b.gridH,
+      colorHex: b.colorHex,
+      priceAedFils: b.priceAedFils,
       holdStage: b.holdStage,
       holdExpiresAt: b.holdExpiresAt ? b.holdExpiresAt.toISOString() : null,
       heldBy: b.heldByApplication?.businessName || null,

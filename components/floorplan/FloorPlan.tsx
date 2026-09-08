@@ -3,6 +3,18 @@
 import { useRef, useState, useCallback } from "react";
 import { FloorFeature, FloorBooth, SizeStyle } from "./types";
 
+function shadeColor(hex: string, amount: number): string {
+  const m = hex.replace("#", "");
+  const full = m.length === 3 ? m.split("").map((c) => c + c).join("") : m;
+  const num = parseInt(full, 16);
+  if (Number.isNaN(num)) return hex;
+  const clamp = (v: number) => Math.min(255, Math.max(0, v));
+  const r = clamp(((num >> 16) & 0xff) + amount);
+  const g = clamp(((num >> 8) & 0xff) + amount);
+  const b = clamp((num & 0xff) + amount);
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+}
+
 // The floor plan canvas is always a 0-100 x 0-100 percentage space, whether
 // or not there's a background image — booths/features store gridX/Y/W/H as
 // percentages of this canvas. That keeps a single coordinate system for
@@ -55,6 +67,7 @@ export function FloorPlan({
 }) {
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
+  const [hoveredBoothId, setHoveredBoothId] = useState<string | null>(null);
   const dragState = useRef<{ x: number; y: number; startTranslate: { x: number; y: number }; moved: boolean } | null>(null);
   const pinchState = useRef<{ dist: number; scale: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -163,7 +176,7 @@ export function FloorPlan({
       </div>
 
       <div
-        className={`relative w-full h-[460px] overflow-hidden touch-none ${
+        className={`relative w-full aspect-square max-h-[70vh] overflow-hidden touch-none ${
           placementMode ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"
         } ${!backgroundImageUrl ? "bg-[repeating-linear-gradient(45deg,rgba(107,68,41,0.03),rgba(107,68,41,0.03)_10px,transparent_10px,transparent_20px)]" : ""}`}
         onPointerDown={onPointerDown}
@@ -180,7 +193,7 @@ export function FloorPlan({
           width="100%"
           height="100%"
           viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`}
-          preserveAspectRatio="none"
+          preserveAspectRatio="xMidYMid meet"
           style={{
             transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
             transformOrigin: "0 0",
@@ -219,8 +232,10 @@ export function FloorPlan({
 
           {booths.map((b) => {
             const style = sizeStyles[b.size] || { color: "#B58A63", label: b.size };
+            const baseColor = b.colorHex || style.color;
             const isSelected = selectedBoothId === b.id;
-            const fill = b.status === "AVAILABLE" ? style.color : statusFill[b.status] || style.color;
+            const isHovered = hoveredBoothId === b.id;
+            const fill = b.status === "AVAILABLE" ? baseColor : statusFill[b.status] || baseColor;
             const clickable = interactive && !placementMode && (allowAnyStatusClick || b.status === "AVAILABLE" || b.isMine);
             return (
               <g
@@ -230,6 +245,8 @@ export function FloorPlan({
                   e.stopPropagation();
                   onSelectBooth?.(b);
                 }}
+                onPointerEnter={() => clickable && setHoveredBoothId(b.id)}
+                onPointerLeave={() => setHoveredBoothId((cur) => (cur === b.id ? null : cur))}
                 style={{ cursor: clickable ? "pointer" : "default" }}
               >
                 <rect
@@ -237,10 +254,13 @@ export function FloorPlan({
                   y={b.gridY}
                   width={b.gridW}
                   height={b.gridH}
-                  fill={fill}
+                  rx={0.5}
+                  ry={0.5}
+                  fill={clickable && isHovered ? shadeColor(fill, -30) : fill}
                   opacity={b.status === "SOLD" ? 0.6 : backgroundImageUrl ? 0.85 : 1}
-                  stroke={isSelected || b.isMine ? "#2E7D32" : "#3A2417"}
-                  strokeWidth={isSelected || b.isMine ? 0.6 : 0.15}
+                  stroke={isSelected || b.isMine ? "#2E7D32" : clickable && isHovered ? "#FBF8F3" : "#3A2417"}
+                  strokeWidth={isSelected || b.isMine ? 0.6 : clickable && isHovered ? 0.45 : 0.15}
+                  style={{ transition: "fill 0.15s ease, stroke 0.15s ease, stroke-width 0.15s ease" }}
                 />
                 <text
                   x={b.gridX + b.gridW / 2}
@@ -250,6 +270,7 @@ export function FloorPlan({
                   fontSize={2.4}
                   fontWeight={600}
                   fill="#FBF8F3"
+                  style={{ pointerEvents: "none" }}
                 >
                   {b.code}
                 </text>

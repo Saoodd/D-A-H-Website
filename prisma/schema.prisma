@@ -115,7 +115,14 @@ model Booth {
   event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   code String // unique WITHIN the event, e.g. "A5", "B29"
-  size String // references PricingTier.sizeKey, e.g. "2x2" / "3x2"
+  size String @default("custom") // references PricingTier.sizeKey when set; "custom" when price/color are set directly per booth
+
+  // Per-booth overrides — set directly when adding a booth (name/price/color
+  // flow). When priceAedFils is null, price falls back to the event-level
+  // then global PricingTier lookup by `size`. When colorHex is null, the
+  // floor plan renders the size-tier palette color instead.
+  priceAedFils Int?
+  colorHex     String?
 
   // Position/size as a percentage (0-100) of the floor plan canvas/image —
   // lets the admin click-to-place a booth instead of typing coordinates.

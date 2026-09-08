@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FloorPlan } from "@/components/floorplan/FloorPlan";
 import { Legend } from "@/components/floorplan/Legend";
 import type { FloorBooth, FloorFeature, SizeStyle } from "@/components/floorplan/types";
@@ -39,8 +39,9 @@ export function FloorPlanBuilder({
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [placementOn, setPlacementOn] = useState(false);
-  const [placeSize, setPlaceSize] = useState(tiers[0]?.sizeKey || "");
-  const [placePrefix, setPlacePrefix] = useState("A");
+  const [placeName, setPlaceName] = useState("");
+  const [placePrice, setPlacePrice] = useState("");
+  const [placeColor, setPlaceColor] = useState("#C97C4B");
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/admin/events/${eventId}/floorplan`);
@@ -62,21 +63,11 @@ export function FloorPlanBuilder({
     sizeStyles[t.sizeKey] = { color: SIZE_PALETTE[i % SIZE_PALETTE.length], label: `${t.label} — ${formatAed(t.priceAedFils)}` };
   });
 
-  const nextCode = useMemo(() => {
-    const prefix = placePrefix.trim() || "A";
-    const usedNumbers = booths
-      .map((b) => b.code)
-      .filter((c) => c.startsWith(prefix))
-      .map((c) => parseInt(c.slice(prefix.length), 10))
-      .filter((n) => !Number.isNaN(n));
-    const next = usedNumbers.length > 0 ? Math.max(...usedNumbers) + 1 : 1;
-    return `${prefix}${next}`;
-  }, [booths, placePrefix]);
-
   const handleCanvasClick = useCallback(
     async (xPercent: number, yPercent: number) => {
-      if (!placeSize) {
-        setNotice("Add a pricing tier first (Admin → Pricing) before placing booths.");
+      const name = placeName.trim();
+      if (!name) {
+        setNotice("Type a booth name first.");
         return;
       }
       const w = DEFAULT_BOOTH_W;
@@ -86,13 +77,25 @@ export function FloorPlanBuilder({
       const res = await fetch(`/api/admin/events/${eventId}/booths`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: nextCode, size: placeSize, gridX, gridY, gridW: w, gridH: h }),
+        body: JSON.stringify({
+          code: name,
+          size: "custom",
+          priceAedFils: placePrice ? Math.round(Number(placePrice) * 100) : null,
+          colorHex: placeColor || null,
+          gridX,
+          gridY,
+          gridW: w,
+          gridH: h,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) setNotice(data.error || "Could not add booth");
-      else await load();
+      else {
+        setPlaceName("");
+        await load();
+      }
     },
-    [eventId, nextCode, placeSize, load]
+    [eventId, placeName, placePrice, placeColor, load]
   );
 
   async function addFeature(e: React.FormEvent<HTMLFormElement>) {
@@ -183,35 +186,48 @@ export function FloorPlanBuilder({
 
       <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-brown/10 bg-cream p-4">
         <label className="flex flex-col gap-1 text-xs text-brown-light">
-          Booth size
-          <select
-            value={placeSize}
-            onChange={(e) => setPlaceSize(e.target.value)}
-            className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-sm"
-          >
-            {tiers.map((t) => (
-              <option key={t.sizeKey} value={t.sizeKey}>
-                {t.sizeKey} — {t.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-brown-light">
-          Code prefix
+          Name of booth <span className="text-brown-light/60">(ex: B25)</span>
           <input
-            value={placePrefix}
-            onChange={(e) => setPlacePrefix(e.target.value.toUpperCase())}
-            maxLength={3}
-            className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-sm w-16"
+            value={placeName}
+            onChange={(e) => setPlaceName(e.target.value)}
+            placeholder="B25"
+            className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-sm w-28"
           />
         </label>
-        <span className="text-xs text-brown-light">
-          Next code: <strong className="text-brown">{nextCode}</strong>
-        </span>
+        <label className="flex flex-col gap-1 text-xs text-brown-light">
+          Price of booth (AED) <span className="text-brown-light/60">(ex: 1837.5)</span>
+          <input
+            value={placePrice}
+            onChange={(e) => setPlacePrice(e.target.value)}
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="1837.5"
+            className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-sm w-28"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-brown-light">
+          Color
+          <div className="flex items-center gap-1.5">
+            <input
+              type="color"
+              value={/^#[0-9a-fA-F]{6}$/.test(placeColor) ? placeColor : "#C97C4B"}
+              onChange={(e) => setPlaceColor(e.target.value)}
+              className="w-8 h-8 rounded border border-brown/20 bg-cream-soft cursor-pointer p-0.5"
+            />
+            <input
+              value={placeColor}
+              onChange={(e) => setPlaceColor(e.target.value)}
+              placeholder="#C97C4B"
+              maxLength={7}
+              className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-sm w-24 font-mono"
+            />
+          </div>
+        </label>
         <button
           type="button"
           onClick={() => setPlacementOn((v) => !v)}
-          disabled={!placeSize}
+          disabled={!placementOn && !placeName.trim()}
           className={`ml-auto px-5 py-2 rounded-full text-sm disabled:opacity-50 ${
             placementOn ? "bg-green-700 text-white" : "bg-brown text-cream-soft"
           }`}
@@ -251,14 +267,40 @@ export function FloorPlanBuilder({
               <input id="booth-code" defaultValue={selected.code} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft" />
             </label>
             <label className="flex flex-col gap-1">
-              Size
-              <select id="booth-size" defaultValue={selected.size} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft">
-                {tiers.map((t) => (
-                  <option key={t.sizeKey} value={t.sizeKey}>
-                    {t.sizeKey}
-                  </option>
-                ))}
-              </select>
+              Price (AED) <span className="text-brown-light/60 text-xs">(blank = use pricing tier)</span>
+              <input
+                id="booth-price"
+                type="number"
+                step="0.01"
+                min="0"
+                defaultValue={selected.priceAedFils != null ? selected.priceAedFils / 100 : ""}
+                placeholder="e.g. 1837.5"
+                className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              Color
+              <div className="flex items-center gap-1.5">
+                <input
+                  id="booth-color-picker"
+                  type="color"
+                  defaultValue={
+                    selected.colorHex && /^#[0-9a-fA-F]{6}$/.test(selected.colorHex) ? selected.colorHex : "#C97C4B"
+                  }
+                  onChange={(e) => {
+                    const textInput = document.getElementById("booth-color") as HTMLInputElement | null;
+                    if (textInput) textInput.value = e.target.value;
+                  }}
+                  className="w-9 h-9 rounded border border-brown/20 bg-cream-soft cursor-pointer p-0.5"
+                />
+                <input
+                  id="booth-color"
+                  defaultValue={selected.colorHex || ""}
+                  placeholder="blank = use size color"
+                  maxLength={7}
+                  className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft flex-1 font-mono"
+                />
+              </div>
             </label>
             <label className="flex flex-col gap-1">
               Status
@@ -306,7 +348,8 @@ export function FloorPlanBuilder({
                 const assignedApplicationId = (document.getElementById("booth-assign-select") as HTMLSelectElement).value;
                 const manualAssigneeName = (document.getElementById("booth-manual-name") as HTMLInputElement).value;
                 const code = (document.getElementById("booth-code") as HTMLInputElement).value;
-                const size = (document.getElementById("booth-size") as HTMLSelectElement).value;
+                const price = (document.getElementById("booth-price") as HTMLInputElement).value;
+                const color = (document.getElementById("booth-color") as HTMLInputElement).value.trim();
                 const x = (document.getElementById("booth-x") as HTMLInputElement).value;
                 const y = (document.getElementById("booth-y") as HTMLInputElement).value;
                 const w = (document.getElementById("booth-w") as HTMLInputElement).value;
@@ -314,7 +357,8 @@ export function FloorPlanBuilder({
                 saveSelected({
                   status,
                   code,
-                  size,
+                  priceAedFils: price ? Math.round(Number(price) * 100) : null,
+                  colorHex: color || null,
                   gridX: Number(x),
                   gridY: Number(y),
                   gridW: Number(w),

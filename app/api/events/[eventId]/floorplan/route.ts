@@ -48,6 +48,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ even
       gridY: b.gridY,
       gridW: b.gridW,
       gridH: b.gridH,
+      colorHex: b.colorHex,
+      priceAedFils: b.priceAedFils,
       isMine: b.heldByApplicationId === applicationId || b.assignedApplicationId === applicationId,
       holdExpiresAt:
         b.heldByApplicationId === applicationId && b.holdExpiresAt ? b.holdExpiresAt.toISOString() : null,

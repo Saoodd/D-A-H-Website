@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Jost, Inter, Cairo } from "next/font/google";
 import "./globals.css";
 import { LocaleProvider } from "@/lib/i18n/context";
+import { ThemeProvider } from "@/lib/theme/context";
 
 const heading = Jost({
   variable: "--font-heading",
@@ -47,7 +48,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${heading.variable} ${body.variable} ${arabic.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-cream-soft text-ink">
-        <LocaleProvider>{children}</LocaleProvider>
+        <ThemeProvider>
+          <LocaleProvider>{children}</LocaleProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

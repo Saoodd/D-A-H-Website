@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
-import { getPriceForSizeAtEvent } from "@/lib/pricing";
+import { getBoothPrice } from "@/lib/pricing";
 import { BOOTH_STATUS } from "@/lib/constants";
 
 // Admin booth management: manual status changes, assign/reassign to a
@@ -37,6 +37,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (typeof body.size === "string" && body.size.trim()) {
     data.size = body.size.trim();
   }
+  if ("priceAedFils" in body) {
+    data.priceAedFils = body.priceAedFils == null ? null : Math.round(Number(body.priceAedFils));
+  }
+  if ("colorHex" in body) {
+    data.colorHex = body.colorHex || null;
+  }
   for (const key of ["gridX", "gridY", "gridW", "gridH"] as const) {
     if (body[key] !== undefined) {
       const n = Number(body[key]);
@@ -62,7 +68,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (data.status === "SOLD") {
     if (!booth.priceAedFilsAtSale) {
-      data.priceAedFilsAtSale = await getPriceForSizeAtEvent(booth.eventId, (data.size as string) || booth.size);
+      data.priceAedFilsAtSale = await getBoothPrice(
+        {
+          priceAedFils: "priceAedFils" in data ? (data.priceAedFils as number | null) : booth.priceAedFils,
+          size: (data.size as string) || booth.size,
+        },
+        booth.eventId
+      );
     }
     data.soldAt = booth.soldAt || new Date();
   } else if (data.status === "AVAILABLE") {

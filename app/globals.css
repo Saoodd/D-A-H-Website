@@ -13,6 +13,21 @@
   --foreground: var(--color-ink);
 }
 
+/* Dark mode — see lib/theme/context.tsx (sets data-theme on <html>). Surfaces
+   (cream-soft/cream/cream-deep) invert to dark warm tones; brown-dark and ink
+   invert to light tones so heading text and body text stay readable, while
+   brown itself brightens so it still reads as an accent (and any text placed
+   on top of a brown button, e.g. text-cream-soft, keeps good contrast). */
+:root[data-theme="dark"] {
+  --color-cream-soft: #1e1611;
+  --color-cream: #271d16;
+  --color-cream-deep: #3d2e21;
+  --color-brown-light: #b89a80;
+  --color-brown: #c98a52;
+  --color-brown-dark: #f2e2cc;
+  --color-ink: #f3ece2;
+}
+
 @theme inline {
   --color-cream-soft: var(--color-cream-soft);
   --color-cream: var(--color-cream);
@@ -32,6 +47,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-body), Arial, Helvetica, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 html[dir="rtl"] body {

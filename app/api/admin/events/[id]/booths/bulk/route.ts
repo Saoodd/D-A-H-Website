@@ -4,11 +4,13 @@ import { requireAdmin } from "@/lib/adminGuard";
 
 interface BulkBooth {
   code: string;
-  size: string;
+  size?: string;
   gridX: number;
   gridY: number;
   gridW: number;
   gridH: number;
+  priceAedFils?: number | null;
+  colorHex?: string | null;
 }
 
 // Bulk-paste the full booth list for an event (e.g. every A#/B# kiosk from
@@ -31,21 +33,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   for (const b of booths) {
     const code = String(b.code || "").trim();
-    const size = String(b.size || "").trim();
+    const size = String(b.size || "custom").trim() || "custom";
     const gridX = Number(b.gridX);
     const gridY = Number(b.gridY);
     const gridW = Number(b.gridW);
     const gridH = Number(b.gridH);
-    if (!code || !size || [gridX, gridY, gridW, gridH].some((n) => Number.isNaN(n))) {
+    const priceAedFils = b.priceAedFils == null ? null : Math.round(Number(b.priceAedFils));
+    const colorHex = b.colorHex ? String(b.colorHex).trim() : null;
+    if (!code || [gridX, gridY, gridW, gridH].some((n) => Number.isNaN(n)) || (priceAedFils != null && Number.isNaN(priceAedFils))) {
       errors.push(`Skipped invalid row: ${JSON.stringify(b)}`);
       continue;
     }
     const existing = await prisma.booth.findUnique({ where: { eventId_code: { eventId: id, code } } });
     if (existing) {
-      await prisma.booth.update({ where: { id: existing.id }, data: { size, gridX, gridY, gridW, gridH } });
+      await prisma.booth.update({ where: { id: existing.id }, data: { size, gridX, gridY, gridW, gridH, priceAedFils, colorHex } });
       updated += 1;
     } else {
-      await prisma.booth.create({ data: { eventId: id, code, size, gridX, gridY, gridW, gridH, status: "AVAILABLE" } });
+      await prisma.booth.create({ data: { eventId: id, code, size, gridX, gridY, gridW, gridH, priceAedFils, colorHex, status: "AVAILABLE" } });
       created += 1;
     }
   }

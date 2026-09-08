@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getAdminSession } from "@/lib/auth";
 import { AdminLogoutButton } from "./AdminLogoutButton";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const links = [
   { href: "/admin", label: "Dashboard" },
@@ -36,8 +37,9 @@ export default async function AdminProtectedLayout({ children }: { children: Rea
             </Link>
           ))}
         </nav>
-        <div className="p-3 hidden md:block">
+        <div className="p-3 hidden md:flex md:items-center md:justify-between gap-2">
           <AdminLogoutButton />
+          <ThemeToggle />
         </div>
       </aside>
       <main className="flex-1 p-5 md:p-8">{children}</main>

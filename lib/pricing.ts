@@ -23,6 +23,18 @@ export async function getPriceForSizeAtEvent(eventId: string, sizeKey: string): 
   return getPriceForSize(sizeKey);
 }
 
+/** Resolves the price for one specific booth: a direct per-booth
+ *  `priceAedFils` (set when the booth was added via the Name/Price/Color
+ *  flow) always wins; otherwise falls back to the event/global tier lookup
+ *  by `size`. */
+export async function getBoothPrice(
+  booth: { priceAedFils: number | null; size: string },
+  eventId: string
+): Promise<number | null> {
+  if (booth.priceAedFils != null) return booth.priceAedFils;
+  return getPriceForSizeAtEvent(eventId, booth.size);
+}
+
 /** Active tiers with this event's price overrides applied, for displaying
  *  the right per-event prices in a floor plan legend or checkout summary. */
 export async function getEventPricingTiers(eventId: string) {

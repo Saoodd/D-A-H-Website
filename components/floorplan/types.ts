@@ -19,6 +19,8 @@ export interface FloorBooth {
   gridW: number;
   gridH: number;
   isMine?: boolean;
+  colorHex?: string | null;
+  priceAedFils?: number | null;
 }
 
 export interface SizeStyle {

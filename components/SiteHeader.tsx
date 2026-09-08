@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Logo } from "./Logo";
 import { LanguageToggle } from "./LanguageToggle";
+import { ThemeToggle } from "./ThemeToggle";
 import { useLocale } from "@/lib/i18n/context";
 
 export function SiteHeader({ vendorLoggedIn }: { vendorLoggedIn: boolean }) {
@@ -40,6 +41,7 @@ export function SiteHeader({ vendorLoggedIn }: { vendorLoggedIn: boolean }) {
           >
             {vendorLoggedIn ? t("nav.vendorDashboard") : t("nav.vendorLogin")}
           </Link>
+          <ThemeToggle />
           <LanguageToggle />
         </div>
 
@@ -65,7 +67,10 @@ export function SiteHeader({ vendorLoggedIn }: { vendorLoggedIn: boolean }) {
             <Link href={vendorLoggedIn ? "/vendor/dashboard" : "/vendor/login"} onClick={() => setOpen(false)}>
               {vendorLoggedIn ? t("nav.vendorDashboard") : t("nav.vendorLogin")}
             </Link>
-            <LanguageToggle className="self-start" />
+            <div className="flex items-center gap-3">
+              <ThemeToggle />
+              <LanguageToggle />
+            </div>
           </div>
         </div>
       )}
