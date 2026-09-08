@@ -90,6 +90,7 @@ model Event {
   features       FloorPlanFeature[]
   applications   Application[]
   pricingOverrides EventPricing[]
+  vendorWarnings VendorWarning[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -193,10 +194,66 @@ model Vendor {
   instagram    String?
   verified     Boolean @default(false)
 
+  // Business profile — vendor-editable via /vendor/profile. All optional:
+  // trade license fields stay optional even when Settings.tradeLicenseRequired
+  // is on (that setting gates applying to events, not account creation).
+  logoUrl             String?
+  website             String?
+  tradeLicenseNumber  String?
+  tradeLicenseFileUrl String? // uploaded via the existing Vercel Blob setup, same as floor plan images
+  tradeLicenseExpiry  DateTime?
+
   applications Application[]
+  notes        VendorNote[]
+  warnings     VendorWarning[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Private DAH-internal notes about a vendor — never returned by any
+// vendor-facing API. Timestamped history rather than one editable text
+// field, so nothing is ever silently overwritten.
+model VendorNote {
+  id       String @id @default(cuid())
+  vendorId String
+  vendor   Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  note     String
+
+  createdAt DateTime @default(now())
+
+  @@index([vendorId])
+}
+
+// An official notice/warning DAH issues to a vendor's business — distinct
+// from VendorNote (private/internal): the vendor CAN see their own
+// warnings (minus adminNote), can acknowledge having seen one, and admin
+// can track view/ack/resolution over time. Warnings are a communication
+// and history tool only — they never auto-reject or auto-ban a vendor
+// unless that logic is explicitly added later.
+model VendorWarning {
+  id       String  @id @default(cuid())
+  vendorId String
+  vendor   Vendor  @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  eventId  String?
+  event    Event?  @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  title       String
+  description String
+  severity    String @default("NOTICE") // NOTICE | WARNING | FINAL_WARNING
+  status      String @default("ACTIVE") // ACTIVE | RESOLVED | WITHDRAWN
+
+  adminNote String? // private — never returned by vendor-facing APIs
+
+  viewedAt       DateTime?
+  acknowledgedAt DateTime?
+  resolvedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([vendorId])
+  @@index([eventId])
 }
 
 // A verified vendor's one-click application to a specific event, applied
