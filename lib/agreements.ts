@@ -123,7 +123,7 @@ export async function recordAcceptance(params: {
   if (!agreement || agreement.status !== "PUBLISHED") {
     throw new Error("This agreement is not currently published.");
   }
-  return prisma.agreementAcceptance.create({
+  const acceptance = await prisma.agreementAcceptance.create({
     data: {
       agreementId: agreement.id,
       vendorId: params.vendorId,
@@ -139,6 +139,39 @@ export async function recordAcceptance(params: {
       ipAddress: params.ipAddress ?? null,
       userAgent: params.userAgent ?? null,
     },
+  });
+
+  syncAcceptanceToSheet(acceptance, agreement);
+
+  return acceptance;
+}
+
+/** Optional, best-effort mirror of a new acceptance to an external
+ *  spreadsheet (e.g. a Google Sheets Apps Script webhook). The database
+ *  row created above is always the source of truth — this never blocks,
+ *  retries, or throws; if AGREEMENTS_SHEETS_WEBHOOK_URL isn't set, or the
+ *  request fails, the acceptance is simply not mirrored. */
+function syncAcceptanceToSheet(
+  acceptance: { id: string; representativeName: string | null; snapshotBusinessName: string; snapshotEventName: string | null; snapshotTitle: string; snapshotVersion: number; acceptedAt: Date; applicationId: string | null },
+  agreement: { type: string }
+): void {
+  const url = process.env.AGREEMENTS_SHEETS_WEBHOOK_URL;
+  if (!url) return;
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      business: acceptance.snapshotBusinessName,
+      event: acceptance.snapshotEventName ?? "",
+      agreement: acceptance.snapshotTitle,
+      agreementType: agreement.type,
+      version: acceptance.snapshotVersion,
+      signedBy: acceptance.representativeName ?? "",
+      acceptedAt: acceptance.acceptedAt.toISOString(),
+      applicationId: acceptance.applicationId ?? "",
+    }),
+  }).catch(() => {
+    // Best-effort only — the database row is already the source of truth.
   });
 }
 

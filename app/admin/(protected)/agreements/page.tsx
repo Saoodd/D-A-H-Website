@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/Card";
 import { AgreementEditor } from "@/components/admin/AgreementEditor";
+import { AgreementRecordsTable } from "@/components/admin/AgreementRecordsTable";
 
 export const metadata: Metadata = { title: "Agreements — Admin" };
 
 export default function AdminAgreementsPage() {
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-5xl">
       <PageHeader
         title="Agreements"
         description="Vendor Account Agreements are accepted once, at signup. Event Agreements are separate per event — write and publish each one from that event's own Terms & Conditions tab."
@@ -23,8 +24,15 @@ export default function AdminAgreementsPage() {
         </Link>
       </div>
 
-      <p className="label-caps mb-4">Vendor Account Agreements</p>
-      <AgreementEditor type="VENDOR_TERMS" scopeLabel="Vendor Terms & Conditions" />
+      <div className="max-w-3xl">
+        <p className="label-caps mb-4">Vendor Account Agreements</p>
+        <AgreementEditor type="VENDOR_TERMS" scopeLabel="Vendor Terms & Conditions" />
+      </div>
+
+      <div className="mt-14">
+        <p className="label-caps mb-4">All Signed Agreements</p>
+        <AgreementRecordsTable />
+      </div>
     </div>
   );
 }
