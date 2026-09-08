@@ -35,6 +35,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
+
+  // Payment records are financial history and must never be silently
+  // destroyed as a side effect of deleting an event — Booth.payments has no
+  // cascade from Booth, so a raw delete would otherwise fail with an opaque
+  // foreign-key error (or worse, succeed and lose payment records) once an
+  // event has any bookings. Block it with a clear reason instead.
+  const paymentCount = await prisma.payment.count({ where: { eventId: id } });
+  if (paymentCount > 0) {
+    return NextResponse.json(
+      { error: "This event has payment records on file and can't be deleted. Set it to Closed instead to keep the history intact." },
+      { status: 409 }
+    );
+  }
+
   await prisma.event.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

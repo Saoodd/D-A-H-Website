@@ -18,11 +18,12 @@ export default async function VendorDashboardPage() {
   const vendor = await prisma.vendor.findUnique({ where: { id: session.vendorId } });
   if (!vendor) redirect("/vendor/login");
 
-  // Unverified vendors see nothing but a "pending verification" notice —
-  // no community link, no events, no applications — until DAH verifies
-  // their business (Admin → Vendors).
+  // Unverified vendors can't apply to events yet, but they're still a
+  // registered account: they can see/edit their profile and the main DAH
+  // community is open to every registered vendor, not just verified ones.
   if (!vendor.verified) {
-    return <PendingVerificationClient businessName={vendor.businessName} />;
+    const settings = await getSettings();
+    return <PendingVerificationClient businessName={vendor.businessName} communityLink={settings.mainCommunityWhatsappLink} />;
   }
 
   const applications = await prisma.application.findMany({
