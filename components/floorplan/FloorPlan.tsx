@@ -74,6 +74,7 @@ export function FloorPlan({
   onCanvasClick,
   editable = false,
   onBoothCommit,
+  multiSelectedIds,
 }: {
   features: FloorFeature[];
   booths: FloorBooth[];
@@ -92,6 +93,9 @@ export function FloorPlan({
    *  object on a slide. */
   editable?: boolean;
   onBoothCommit?: (id: string, patch: BoothPatch) => void;
+  /** When set, booths whose id is in this set render with a distinct
+   *  checked/highlighted look — used for the bulk multi-select price tool. */
+  multiSelectedIds?: Set<string>;
 }) {
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
@@ -289,6 +293,8 @@ export function FloorPlan({
         <span>
           {placementMode
             ? "Click the map to place a booth"
+            : multiSelectedIds
+            ? "Click booths to select them for a bulk price update"
             : editable
             ? "Drag a booth to move it, corners to resize, top handle to rotate"
             : interactive
@@ -383,6 +389,7 @@ export function FloorPlan({
             const style = sizeStyles[b.size] || { color: "#B58A63", label: b.size };
             const baseColor = b.colorHex || style.color;
             const isSelected = selectedBoothId === b.id;
+            const isMultiSelected = multiSelectedIds?.has(b.id) ?? false;
             const isHovered = hoveredBoothId === b.id;
             const fill = b.status === "AVAILABLE" ? baseColor : statusFill[b.status] || baseColor;
             const clickable = interactive && !placementMode && (allowAnyStatusClick || b.status === "AVAILABLE" || b.isMine);
@@ -417,10 +424,10 @@ export function FloorPlan({
                     height={b.gridH}
                     rx={0.5}
                     ry={0.5}
-                    fill={clickable && isHovered ? shadeColor(fill, -30) : fill}
+                    fill={isMultiSelected ? shadeColor(fill, -20) : clickable && isHovered ? shadeColor(fill, -30) : fill}
                     opacity={b.status === "SOLD" ? 0.6 : backgroundImageUrl ? 0.85 : 1}
-                    stroke={isSelected || b.isMine ? "#2E7D32" : clickable && isHovered ? "#FBF8F3" : "#3A2417"}
-                    strokeWidth={isSelected || b.isMine ? 0.6 : clickable && isHovered ? 0.45 : 0.15}
+                    stroke={isMultiSelected ? "#2563EB" : isSelected || b.isMine ? "#2E7D32" : clickable && isHovered ? "#FBF8F3" : "#3A2417"}
+                    strokeWidth={isMultiSelected ? 0.7 : isSelected || b.isMine ? 0.6 : clickable && isHovered ? 0.45 : 0.15}
                     style={{ transition: isBeingManipulated ? "none" : "fill 0.15s ease, stroke 0.15s ease, stroke-width 0.15s ease" }}
                   />
                   <text
@@ -436,6 +443,23 @@ export function FloorPlan({
                     {b.code}
                   </text>
                 </g>
+
+                {isMultiSelected && (
+                  <g style={{ pointerEvents: "none" }}>
+                    <circle cx={b.gridX + 1.6} cy={b.gridY + 1.6} r={1.3} fill="#2563EB" stroke="#FBF8F3" strokeWidth={0.25} />
+                    <text
+                      x={b.gridX + 1.6}
+                      y={b.gridY + 1.6}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize={1.8}
+                      fontWeight={700}
+                      fill="#FBF8F3"
+                    >
+                      ✓
+                    </text>
+                  </g>
+                )}
 
                 {editable && isSelected && (
                   <>

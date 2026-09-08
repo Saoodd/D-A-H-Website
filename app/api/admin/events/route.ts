@@ -56,6 +56,9 @@ export async function POST(req: NextRequest) {
           gridY: b.gridY,
           gridW: b.gridW,
           gridH: b.gridH,
+          rotation: b.rotation,
+          priceAedFils: b.priceAedFils,
+          colorHex: b.colorHex,
           status: "AVAILABLE",
         })),
       });

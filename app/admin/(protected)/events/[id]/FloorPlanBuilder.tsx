@@ -45,6 +45,11 @@ export function FloorPlanBuilder({
   const [placePrice, setPlacePrice] = useState("");
   const [placeColor, setPlaceColor] = useState("#C97C4B");
 
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkPrice, setBulkPrice] = useState("");
+  const [applyingBulk, setApplyingBulk] = useState(false);
+
   const load = useCallback(async () => {
     const res = await fetch(`/api/admin/events/${eventId}/floorplan`);
     if (res.ok) {
@@ -146,6 +151,45 @@ export function FloorPlanBuilder({
     },
     [load]
   );
+
+  function toggleBulkSelected(id: string) {
+    setBulkSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function exitBulkMode() {
+    setBulkMode(false);
+    setBulkSelectedIds(new Set());
+    setBulkPrice("");
+  }
+
+  async function applyBulkPrice() {
+    if (bulkSelectedIds.size === 0 || !bulkPrice.trim()) return;
+    setApplyingBulk(true);
+    try {
+      const priceAedFils = Math.round(Number(bulkPrice) * 100);
+      const res = await fetch(`/api/admin/events/${eventId}/booths/bulk-price`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ boothIds: Array.from(bulkSelectedIds), priceAedFils }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNotice(data.error || "Could not update those booths");
+        return;
+      }
+      setNotice(`Updated the price on ${data.updated} booth${data.updated === 1 ? "" : "s"}.`);
+      setBulkSelectedIds(new Set());
+      setBulkPrice("");
+      await load();
+    } finally {
+      setApplyingBulk(false);
+    }
+  }
 
   async function addFeature(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -311,7 +355,7 @@ export function FloorPlanBuilder({
         <button
           type="button"
           onClick={() => setPlacementOn((v) => !v)}
-          disabled={!placementOn && (!placeName.trim() || !placePrice.trim())}
+          disabled={bulkMode || (!placementOn && (!placeName.trim() || !placePrice.trim()))}
           className={`ml-auto px-5 py-2 rounded-full text-sm disabled:opacity-50 ${
             placementOn ? "bg-green-700 text-white" : "bg-brown text-cream-soft"
           }`}
@@ -319,6 +363,71 @@ export function FloorPlanBuilder({
           {placementOn ? "Placing — click the map (click again to stop)" : "Click to add booths"}
         </button>
       </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-brown/10 bg-cream p-4">
+        <div className="flex-1 min-w-[220px]">
+          <p className="text-sm font-medium text-brown-dark">Change price for several booths at once</p>
+          <p className="text-xs text-brown-light">
+            {bulkMode
+              ? "Click each booth on the map to select it, then enter one price and apply it to all of them."
+              : "Useful after duplicating a floor plan into a new event, or repricing a whole row/section."}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (bulkMode) {
+              exitBulkMode();
+            } else {
+              setPlacementOn(false);
+              setSelected(null);
+              setBulkMode(true);
+            }
+          }}
+          className={`px-4 py-2 rounded-full text-sm ${bulkMode ? "bg-blue-700 text-white" : "border border-brown/30 hover:bg-brown hover:text-cream-soft"}`}
+        >
+          {bulkMode ? `Done selecting (${bulkSelectedIds.size} selected)` : "Select multiple booths"}
+        </button>
+      </div>
+
+      {bulkMode && (
+        <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-blue-300 bg-blue-50 p-4 sticky top-2 z-10">
+          <span className="text-sm text-blue-900">
+            {bulkSelectedIds.size} booth{bulkSelectedIds.size === 1 ? "" : "s"} selected
+          </span>
+          <label className="flex flex-col gap-1 text-xs text-blue-900">
+            New price (AED) for all selected
+            <input
+              value={bulkPrice}
+              onChange={(e) => setBulkPrice(e.target.value)}
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="1837.5"
+              className="border border-blue-300 rounded-lg px-2 py-1.5 bg-white text-sm w-32"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={applyBulkPrice}
+            disabled={applyingBulk || bulkSelectedIds.size === 0 || !bulkPrice.trim()}
+            className="px-4 py-2 rounded-full bg-blue-700 text-white text-sm disabled:opacity-50"
+          >
+            {applyingBulk ? "Applying…" : "Apply price to selected"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setBulkSelectedIds(new Set())}
+            disabled={bulkSelectedIds.size === 0}
+            className="text-xs text-blue-900 underline disabled:opacity-50"
+          >
+            Clear selection
+          </button>
+          <button type="button" onClick={exitBulkMode} className="ml-auto text-xs text-blue-900 underline">
+            Exit
+          </button>
+        </div>
+      )}
 
       <FloorPlan
         features={features}
@@ -329,9 +438,10 @@ export function FloorPlanBuilder({
         backgroundImageUrl={floorPlanImageUrl}
         placementMode={placementOn}
         onCanvasClick={handleCanvasClick}
-        onSelectBooth={(b) => setSelected(b as AdminBooth)}
-        editable={!placementOn}
+        onSelectBooth={(b) => (bulkMode ? toggleBulkSelected(b.id) : setSelected(b as AdminBooth))}
+        editable={!placementOn && !bulkMode}
         onBoothCommit={onBoothCommit}
+        multiSelectedIds={bulkMode ? bulkSelectedIds : undefined}
       />
       <Legend sizeStyles={sizeStyles} />
 
