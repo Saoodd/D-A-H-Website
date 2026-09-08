@@ -22,6 +22,23 @@ export const vendorRegisterSchema = honeypotSchema.extend({
   password: z.string().min(8).max(200),
 });
 
+// Vendor editing their own business profile (see /vendor/profile). Every
+// field optional so a partial save works; the route only ever updates the
+// session's own vendorId, never a client-supplied id.
+export const vendorProfileUpdateSchema = z.object({
+  businessName: z.string().trim().min(2).max(150).optional(),
+  contactName: z.string().trim().min(2).max(150).optional(),
+  phone: z.string().trim().min(5).max(30).optional(),
+  category: z.string().trim().min(2).max(100).optional(),
+  instagram: z.string().trim().max(150).optional().or(z.literal("")),
+  website: z.string().trim().max(200).optional().or(z.literal("")),
+  description: z.string().trim().max(500).optional().or(z.literal("")),
+  logoUrl: z.string().trim().max(500).optional().or(z.literal("")),
+  tradeLicenseNumber: z.string().trim().max(100).optional().or(z.literal("")),
+  tradeLicenseFileUrl: z.string().trim().max(500).optional().or(z.literal("")),
+  tradeLicenseExpiry: z.string().trim().max(30).optional().or(z.literal("")),
+});
+
 export const applyToEventSchema = z.object({
   eventId: z.string().min(1),
 });
