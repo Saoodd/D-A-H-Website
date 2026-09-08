@@ -24,7 +24,7 @@ interface Tier {
 export function FloorPlanBuilder({
   eventId,
   tiers,
-  floorPlanImageUrl,
+  floorPlanImageUrl: initialFloorPlanImageUrl,
 }: {
   eventId: string;
   tiers: Tier[];
@@ -37,6 +37,8 @@ export function FloorPlanBuilder({
   const [notice, setNotice] = useState<string | null>(null);
   const [bulkText, setBulkText] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [floorPlanImageUrl, setFloorPlanImageUrl] = useState(initialFloorPlanImageUrl);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const [placementOn, setPlacementOn] = useState(false);
   const [placeName, setPlaceName] = useState("");
@@ -70,6 +72,10 @@ export function FloorPlanBuilder({
         setNotice("Type a booth name first.");
         return;
       }
+      if (!placePrice.trim()) {
+        setNotice("Enter a price for the booth first.");
+        return;
+      }
       const w = DEFAULT_BOOTH_W;
       const h = DEFAULT_BOOTH_H;
       const gridX = Math.min(100 - w, Math.max(0, xPercent - w / 2));
@@ -96,6 +102,49 @@ export function FloorPlanBuilder({
       }
     },
     [eventId, placeName, placePrice, placeColor, load]
+  );
+
+  async function uploadFloorPlanImage(file: File) {
+    setUploadingImage(true);
+    setNotice(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const uploadRes = await fetch("/api/admin/upload", { method: "POST", body: form });
+      const uploadData = await uploadRes.json().catch(() => ({}));
+      if (!uploadRes.ok) {
+        setNotice(uploadData.error || "Upload failed");
+        return;
+      }
+      const patchRes = await fetch(`/api/admin/events/${eventId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ floorPlanImageUrl: uploadData.url }),
+      });
+      if (!patchRes.ok) {
+        setNotice("Image uploaded, but saving it to the event failed. Try again.");
+        return;
+      }
+      setFloorPlanImageUrl(uploadData.url);
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
+  const onBoothCommit = useCallback(
+    async (id: string, patch: Record<string, number>) => {
+      setBooths((prev) => prev.map((b) => (b.id === id ? { ...b, ...patch } : b)));
+      const res = await fetch(`/api/admin/booths/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) {
+        setNotice("Could not save that change — reloading.");
+        await load();
+      }
+    },
+    [load]
   );
 
   async function addFeature(e: React.FormEvent<HTMLFormElement>) {
@@ -177,12 +226,46 @@ export function FloorPlanBuilder({
         </div>
       )}
 
-      {!floorPlanImageUrl && (
-        <p className="mb-3 text-xs text-brown-light">
-          Tip: add a floor plan image URL in the event details above (a photo or scan of the real venue layout) — booths
-          you place below will click-to-place directly onto it.
-        </p>
-      )}
+      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-brown/10 bg-cream p-4">
+        <div className="flex-1 min-w-[220px]">
+          <p className="text-sm font-medium text-brown-dark">Floor plan image</p>
+          <p className="text-xs text-brown-light">
+            {floorPlanImageUrl
+              ? "Upload a different photo/scan to replace it."
+              : "Upload a photo or scan of the real venue layout — booths you place will click-to-place directly onto it."}
+          </p>
+        </div>
+        <label className="px-4 py-2 rounded-full border border-brown/30 text-sm cursor-pointer hover:bg-brown hover:text-cream-soft transition-colors">
+          {uploadingImage ? "Uploading…" : floorPlanImageUrl ? "Replace image" : "Upload image"}
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            className="hidden"
+            disabled={uploadingImage}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) uploadFloorPlanImage(file);
+            }}
+          />
+        </label>
+        {floorPlanImageUrl && (
+          <button
+            type="button"
+            onClick={async () => {
+              await fetch(`/api/admin/events/${eventId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ floorPlanImageUrl: null }),
+              });
+              setFloorPlanImageUrl(null);
+            }}
+            className="text-xs text-red-700 underline"
+          >
+            Remove image
+          </button>
+        )}
+      </div>
 
       <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-brown/10 bg-cream p-4">
         <label className="flex flex-col gap-1 text-xs text-brown-light">
@@ -202,6 +285,7 @@ export function FloorPlanBuilder({
             type="number"
             step="0.01"
             min="0"
+            required
             placeholder="1837.5"
             className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-sm w-28"
           />
@@ -227,7 +311,7 @@ export function FloorPlanBuilder({
         <button
           type="button"
           onClick={() => setPlacementOn((v) => !v)}
-          disabled={!placementOn && !placeName.trim()}
+          disabled={!placementOn && (!placeName.trim() || !placePrice.trim())}
           className={`ml-auto px-5 py-2 rounded-full text-sm disabled:opacity-50 ${
             placementOn ? "bg-green-700 text-white" : "bg-brown text-cream-soft"
           }`}
@@ -240,11 +324,14 @@ export function FloorPlanBuilder({
         features={features}
         booths={booths}
         sizeStyles={sizeStyles}
+        selectedBoothId={selected?.id ?? null}
         allowAnyStatusClick
         backgroundImageUrl={floorPlanImageUrl}
         placementMode={placementOn}
         onCanvasClick={handleCanvasClick}
         onSelectBooth={(b) => setSelected(b as AdminBooth)}
+        editable={!placementOn}
+        onBoothCommit={onBoothCommit}
       />
       <Legend sizeStyles={sizeStyles} />
 
@@ -330,13 +417,17 @@ export function FloorPlanBuilder({
               <input id="booth-manual-name" defaultValue={selected.occupant?.applicationId ? "" : selected.occupant?.name || ""} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft" />
             </label>
 
+            <p className="sm:col-span-2 text-xs text-brown-light -mb-1">
+              Tip: drag the booth to move it, its corner handles to resize, and the handle above it to rotate — or fine-tune exact numbers below.
+            </p>
             <details className="sm:col-span-2">
-              <summary className="text-xs text-brown-light cursor-pointer">Fine-tune position &amp; size (%)</summary>
-              <div className="mt-2 grid grid-cols-4 gap-2">
-                <input id="booth-x" type="number" step="0.5" defaultValue={selected.gridX} placeholder="X" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
-                <input id="booth-y" type="number" step="0.5" defaultValue={selected.gridY} placeholder="Y" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
-                <input id="booth-w" type="number" step="0.5" defaultValue={selected.gridW} placeholder="W" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
-                <input id="booth-h" type="number" step="0.5" defaultValue={selected.gridH} placeholder="H" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
+              <summary className="text-xs text-brown-light cursor-pointer">Fine-tune position, size &amp; rotation</summary>
+              <div className="mt-2 grid grid-cols-5 gap-2">
+                <input id="booth-x" type="number" step="0.5" defaultValue={selected.gridX} placeholder="X %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
+                <input id="booth-y" type="number" step="0.5" defaultValue={selected.gridY} placeholder="Y %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
+                <input id="booth-w" type="number" step="0.5" defaultValue={selected.gridW} placeholder="W %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
+                <input id="booth-h" type="number" step="0.5" defaultValue={selected.gridH} placeholder="H %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
+                <input id="booth-rotation" type="number" step="1" defaultValue={selected.rotation ?? 0} placeholder="Rotate °" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
               </div>
             </details>
           </div>
@@ -354,6 +445,7 @@ export function FloorPlanBuilder({
                 const y = (document.getElementById("booth-y") as HTMLInputElement).value;
                 const w = (document.getElementById("booth-w") as HTMLInputElement).value;
                 const h = (document.getElementById("booth-h") as HTMLInputElement).value;
+                const rotation = (document.getElementById("booth-rotation") as HTMLInputElement).value;
                 saveSelected({
                   status,
                   code,
@@ -363,6 +455,7 @@ export function FloorPlanBuilder({
                   gridY: Number(y),
                   gridW: Number(w),
                   gridH: Number(h),
+                  rotation: rotation ? Number(rotation) : 0,
                   assignedApplicationId: assignedApplicationId || null,
                   manualAssigneeName: assignedApplicationId ? null : manualAssigneeName || null,
                 });

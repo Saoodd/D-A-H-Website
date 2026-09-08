@@ -130,6 +130,7 @@ model Booth {
   gridY Float
   gridW Float
   gridH Float
+  rotation Int @default(0) // degrees, set by dragging the rotate handle in the floor plan builder
 
   status String @default("AVAILABLE") // AVAILABLE | HELD | RESERVED | SOLD
 

@@ -44,7 +44,11 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
         }}
       />
 
-      <h2 className="font-heading text-xl text-brown-dark mt-12 mb-4">Pricing for this event</h2>
+      <h2 className="font-heading text-xl text-brown-dark mt-12 mb-1">Default pricing by booth size</h2>
+      <p className="text-xs text-brown-light mb-4">
+        This is the fallback price for booths placed with a size (e.g. from a bulk import). A booth given its own
+        price in the floor plan below always uses that instead.
+      </p>
       <EventPricingClient
         eventId={event.id}
         tiers={tiers.map((t) => ({

@@ -18,6 +18,7 @@ export interface FloorBooth {
   gridY: number;
   gridW: number;
   gridH: number;
+  rotation?: number;
   isMine?: boolean;
   colorHex?: string | null;
   priceAedFils?: number | null;

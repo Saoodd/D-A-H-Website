@@ -48,6 +48,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ even
       gridY: b.gridY,
       gridW: b.gridW,
       gridH: b.gridH,
+      rotation: b.rotation,
       colorHex: b.colorHex,
       priceAedFils: b.priceAedFils,
       isMine: b.heldByApplicationId === applicationId || b.assignedApplicationId === applicationId,

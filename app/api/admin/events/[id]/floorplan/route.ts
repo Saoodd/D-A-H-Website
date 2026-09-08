@@ -32,6 +32,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       gridY: b.gridY,
       gridW: b.gridW,
       gridH: b.gridH,
+      rotation: b.rotation,
       colorHex: b.colorHex,
       priceAedFils: b.priceAedFils,
       holdStage: b.holdStage,

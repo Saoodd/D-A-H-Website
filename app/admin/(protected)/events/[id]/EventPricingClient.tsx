@@ -54,7 +54,8 @@ export function EventPricingClient({ eventId, tiers: initial }: { eventId: strin
   return (
     <div className="rounded-xl border border-brown/10 bg-cream p-5">
       <p className="text-sm text-brown-light mb-4">
-        Charge a different price at this event without changing the site-wide default (Admin → Pricing).
+        Charge a different price at this event without changing the site-wide default (Admin → Pricing). Only
+        applies to booths that don&apos;t have their own price set directly in the floor plan below.
       </p>
       <div className="space-y-3">
         {rows.map((r, i) => (

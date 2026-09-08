@@ -49,6 +49,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (!Number.isNaN(n)) data[key] = n;
     }
   }
+  if (body.rotation !== undefined) {
+    const n = Math.round(Number(body.rotation));
+    if (!Number.isNaN(n)) data.rotation = ((n % 360) + 360) % 360;
+  }
   if ("assignedApplicationId" in body) {
     if (body.assignedApplicationId) {
       const app = await prisma.application.findUnique({ where: { id: body.assignedApplicationId } });
