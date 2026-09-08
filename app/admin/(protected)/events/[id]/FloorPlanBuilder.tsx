@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FloorPlan } from "@/components/floorplan/FloorPlan";
 import { Legend } from "@/components/floorplan/Legend";
 import type { FloorBooth, FloorFeature, SizeStyle } from "@/components/floorplan/types";
@@ -21,8 +21,20 @@ interface Tier {
   priceAedFils: number;
 }
 
+interface UndoEntry {
+  label: string;
+  undo: () => Promise<void>;
+  redo: () => Promise<void>;
+}
+
 const SMART_GUIDES_KEY = "dah_floorplan_smart_guides";
 const GRID_SNAP_KEY = "dah_floorplan_grid_snap";
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
+}
 
 export function FloorPlanBuilder({
   eventId,
@@ -38,7 +50,7 @@ export function FloorPlanBuilder({
   const [features, setFeatures] = useState<FloorFeature[]>([]);
   const [booths, setBooths] = useState<AdminBooth[]>([]);
   const [acceptedApplications, setAcceptedApplications] = useState<{ id: string; businessName: string }[]>([]);
-  const [selected, setSelected] = useState<AdminBooth | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState<string | null>(null);
   const [bulkText, setBulkText] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -50,13 +62,21 @@ export function FloorPlanBuilder({
   const [placePrice, setPlacePrice] = useState("");
   const [placeColor, setPlaceColor] = useState("#C97C4B");
 
-  const [bulkMode, setBulkMode] = useState(false);
-  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkPrice, setBulkPrice] = useState("");
-  const [applyingBulk, setApplyingBulk] = useState(false);
+  const [selectionPrice, setSelectionPrice] = useState("");
+  const [applyingSelectionPrice, setApplyingSelectionPrice] = useState(false);
+  const [busyAction, setBusyAction] = useState(false);
 
   const [smartGuidesEnabled, setSmartGuidesEnabled] = useState(true);
   const [gridSnapEnabled, setGridSnapEnabled] = useState(false);
+
+  const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
+  const [redoStack, setRedoStack] = useState<UndoEntry[]>([]);
+  const undoRef = useRef(undoStack);
+  const redoRef = useRef(redoStack);
+  useEffect(() => {
+    undoRef.current = undoStack;
+    redoRef.current = redoStack;
+  }, [undoStack, redoStack]);
 
   useEffect(() => {
     try {
@@ -113,6 +133,47 @@ export function FloorPlanBuilder({
   tiers.forEach((t, i) => {
     sizeStyles[t.sizeKey] = { color: SIZE_PALETTE[i % SIZE_PALETTE.length], label: `${t.label} — ${formatAed(t.priceAedFils)}` };
   });
+
+  function pushUndo(entry: UndoEntry) {
+    setUndoStack((prev) => [...prev, entry]);
+    setRedoStack([]);
+  }
+
+  async function handleUndo() {
+    const entry = undoRef.current[undoRef.current.length - 1];
+    if (!entry) return;
+    setUndoStack((prev) => prev.slice(0, -1));
+    await entry.undo();
+    setRedoStack((prev) => [...prev, entry]);
+    await load();
+  }
+
+  async function handleRedo() {
+    const entry = redoRef.current[redoRef.current.length - 1];
+    if (!entry) return;
+    setRedoStack((prev) => prev.slice(0, -1));
+    await entry.redo();
+    setUndoStack((prev) => [...prev, entry]);
+    await load();
+  }
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (isTypingTarget(e.target)) return;
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) handleRedo();
+        else handleUndo();
+      } else if (mod && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        handleRedo();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleUndo/handleRedo read live state via refs
+  }, []);
 
   const handleCanvasClick = useCallback(
     async (xPercent: number, yPercent: number) => {
@@ -180,46 +241,246 @@ export function FloorPlanBuilder({
     }
   }
 
+  // Optimistic local update + PATCH for one booth, with no undo bookkeeping
+  // of its own — callers that want undo wrap this and record before/after.
+  const patchBoothRaw = useCallback(async (id: string, patch: Record<string, unknown>) => {
+    setBooths((prev) => prev.map((b) => (b.id === id ? { ...b, ...patch } : b)));
+    await fetch(`/api/admin/booths/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+  }, []);
+
+  // Single-booth move/resize/rotate, from dragging the solo-selected booth's
+  // body or its corner/rotate handles.
   const onBoothCommit = useCallback(
     async (id: string, patch: Record<string, number>) => {
-      setBooths((prev) => prev.map((b) => (b.id === id ? { ...b, ...patch } : b)));
-      const res = await fetch(`/api/admin/booths/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
+      const before = booths.find((b) => b.id === id);
+      if (!before) return;
+      const beforePatch: Record<string, number> = {};
+      (Object.keys(patch) as (keyof AdminBooth)[]).forEach((k) => {
+        beforePatch[k] = (before[k] as number) ?? 0;
       });
-      if (!res.ok) {
-        setNotice("Could not save that change — reloading.");
-        await load();
-      }
+      await patchBoothRaw(id, patch);
+      pushUndo({ label: "Move booth", undo: () => patchBoothRaw(id, beforePatch), redo: () => patchBoothRaw(id, patch) });
     },
-    [load]
+    [booths, patchBoothRaw]
   );
 
-  function toggleBulkSelected(id: string) {
-    setBulkSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+  // Group move (drag or arrow-key nudge) and, since they build patches the
+  // same shape, also used directly by Align/Distribute below.
+  const onGroupCommit = useCallback(
+    async (patches: { id: string; gridX: number; gridY: number }[]) => {
+      if (patches.length === 0) return;
+      const before = patches.map((p) => {
+        const b = booths.find((bb) => bb.id === p.id);
+        return { id: p.id, gridX: b?.gridX ?? 0, gridY: b?.gridY ?? 0 };
+      });
+      await Promise.all(patches.map((p) => patchBoothRaw(p.id, { gridX: p.gridX, gridY: p.gridY })));
+      pushUndo({
+        label: "Move selection",
+        undo: async () => {
+          await Promise.all(before.map((p) => patchBoothRaw(p.id, { gridX: p.gridX, gridY: p.gridY })));
+        },
+        redo: async () => {
+          await Promise.all(patches.map((p) => patchBoothRaw(p.id, { gridX: p.gridX, gridY: p.gridY })));
+        },
+      });
+    },
+    [booths, patchBoothRaw]
+  );
+
+  function selectionMembers(): AdminBooth[] {
+    return booths.filter((b) => selectedIds.has(b.id));
+  }
+
+  function alignSelection(kind: "left" | "right" | "top" | "bottom" | "centerH" | "centerV") {
+    const members = selectionMembers();
+    if (members.length < 2) return;
+    const minX = Math.min(...members.map((b) => b.gridX));
+    const maxX = Math.max(...members.map((b) => b.gridX + b.gridW));
+    const minY = Math.min(...members.map((b) => b.gridY));
+    const maxY = Math.max(...members.map((b) => b.gridY + b.gridH));
+    const midX = (minX + maxX) / 2;
+    const midY = (minY + maxY) / 2;
+    const patches = members.map((b) => {
+      let gridX = b.gridX;
+      let gridY = b.gridY;
+      if (kind === "left") gridX = minX;
+      else if (kind === "right") gridX = maxX - b.gridW;
+      else if (kind === "top") gridY = minY;
+      else if (kind === "bottom") gridY = maxY - b.gridH;
+      else if (kind === "centerH") gridY = midY - b.gridH / 2;
+      else if (kind === "centerV") gridX = midX - b.gridW / 2;
+      return { id: b.id, gridX, gridY };
+    });
+    onGroupCommit(patches);
+  }
+
+  function distributeSelection(axis: "horizontal" | "vertical") {
+    const members = selectionMembers();
+    if (members.length < 3) return;
+    if (axis === "horizontal") {
+      const sorted = [...members].sort((a, b) => a.gridX - b.gridX);
+      const first = sorted[0];
+      const last = sorted[sorted.length - 1];
+      const span = last.gridX + last.gridW - first.gridX;
+      const sumW = sorted.reduce((s, b) => s + b.gridW, 0);
+      const gap = (span - sumW) / (sorted.length - 1);
+      let cursor = first.gridX;
+      const patches = sorted.map((b, i) => {
+        if (i === 0) {
+          cursor = b.gridX + b.gridW + gap;
+          return { id: b.id, gridX: b.gridX, gridY: b.gridY };
+        }
+        const gridX = cursor;
+        cursor = gridX + b.gridW + gap;
+        return { id: b.id, gridX, gridY: b.gridY };
+      });
+      onGroupCommit(patches);
+    } else {
+      const sorted = [...members].sort((a, b) => a.gridY - b.gridY);
+      const first = sorted[0];
+      const last = sorted[sorted.length - 1];
+      const span = last.gridY + last.gridH - first.gridY;
+      const sumH = sorted.reduce((s, b) => s + b.gridH, 0);
+      const gap = (span - sumH) / (sorted.length - 1);
+      let cursor = first.gridY;
+      const patches = sorted.map((b, i) => {
+        if (i === 0) {
+          cursor = b.gridY + b.gridH + gap;
+          return { id: b.id, gridX: b.gridX, gridY: b.gridY };
+        }
+        const gridY = cursor;
+        cursor = gridY + b.gridH + gap;
+        return { id: b.id, gridX: b.gridX, gridY };
+      });
+      onGroupCommit(patches);
+    }
+  }
+
+  // Plain function (not useCallback) so its `redo` closure can call itself
+  // by name — a self-referencing useCallback trips up the hooks linter.
+  async function createDuplicates(snapshot: AdminBooth[]) {
+    const existingCodes = new Set(booths.map((b) => b.code));
+    function nextCode(base: string) {
+      let candidate = `${base}-copy`;
+      let n = 2;
+      while (existingCodes.has(candidate)) {
+        candidate = `${base}-copy${n}`;
+        n++;
+      }
+      existingCodes.add(candidate);
+      return candidate;
+    }
+    const codeMap = snapshot.map((b) => ({ source: b, newCode: nextCode(b.code) }));
+    await Promise.all(
+      codeMap.map(({ source, newCode }) =>
+        fetch(`/api/admin/events/${eventId}/booths`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            code: newCode,
+            size: source.size,
+            priceAedFils: source.priceAedFils,
+            colorHex: source.colorHex,
+            gridX: Math.min(100 - source.gridW, source.gridX + 3),
+            gridY: Math.min(100 - source.gridH, source.gridY + 3),
+            gridW: source.gridW,
+            gridH: source.gridH,
+            rotation: source.rotation ?? 0,
+          }),
+        })
+      )
+    );
+    const newCodes = codeMap.map((c) => c.newCode);
+    await load();
+    pushUndo({
+      label: "Duplicate",
+      undo: async () => {
+        const res = await fetch(`/api/admin/events/${eventId}/floorplan`);
+        const data = await res.json().catch(() => ({ booths: [] as AdminBooth[] }));
+        const toDelete = (data.booths as AdminBooth[]).filter((b) => newCodes.includes(b.code));
+        await Promise.all(toDelete.map((b) => fetch(`/api/admin/booths/${b.id}`, { method: "DELETE" })));
+        await load();
+      },
+      redo: async () => {
+        await createDuplicates(snapshot);
+      },
     });
   }
 
-  function exitBulkMode() {
-    setBulkMode(false);
-    setBulkSelectedIds(new Set());
-    setBulkPrice("");
+  async function duplicateSelection() {
+    const members = selectionMembers();
+    if (members.length === 0) return;
+    setBusyAction(true);
+    try {
+      await createDuplicates(members.map((b) => ({ ...b })));
+      setSelectedIds(new Set());
+    } finally {
+      setBusyAction(false);
+    }
   }
 
-  async function applyBulkPrice() {
-    if (bulkSelectedIds.size === 0 || !bulkPrice.trim()) return;
-    setApplyingBulk(true);
+  async function deleteSelection() {
+    const members = selectionMembers();
+    if (members.length === 0) return;
+    if (!confirm(`Delete ${members.length} booth${members.length === 1 ? "" : "s"}?`)) return;
+    setBusyAction(true);
     try {
-      const priceAedFils = Math.round(Number(bulkPrice) * 100);
+      const snapshot = members.map((b) => ({ ...b }));
+      await Promise.all(members.map((b) => fetch(`/api/admin/booths/${b.id}`, { method: "DELETE" })));
+      setSelectedIds(new Set());
+      await load();
+      pushUndo({
+        label: "Delete",
+        undo: async () => {
+          await Promise.all(
+            snapshot.map((b) =>
+              fetch(`/api/admin/events/${eventId}/booths`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  code: b.code,
+                  size: b.size,
+                  priceAedFils: b.priceAedFils,
+                  colorHex: b.colorHex,
+                  gridX: b.gridX,
+                  gridY: b.gridY,
+                  gridW: b.gridW,
+                  gridH: b.gridH,
+                  rotation: b.rotation ?? 0,
+                }),
+              })
+            )
+          );
+          await load();
+        },
+        redo: async () => {
+          const res = await fetch(`/api/admin/events/${eventId}/floorplan`);
+          const data = await res.json().catch(() => ({ booths: [] as AdminBooth[] }));
+          const toDelete = (data.booths as AdminBooth[]).filter((b) => snapshot.some((s) => s.code === b.code));
+          await Promise.all(toDelete.map((b) => fetch(`/api/admin/booths/${b.id}`, { method: "DELETE" })));
+          await load();
+        },
+      });
+    } finally {
+      setBusyAction(false);
+    }
+  }
+
+  async function applySelectionPrice() {
+    if (selectedIds.size === 0 || !selectionPrice.trim()) return;
+    const members = selectionMembers();
+    const before = members.map((b) => ({ id: b.id, priceAedFils: b.priceAedFils }));
+    setApplyingSelectionPrice(true);
+    try {
+      const priceAedFils = Math.round(Number(selectionPrice) * 100);
       const res = await fetch(`/api/admin/events/${eventId}/booths/bulk-price`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ boothIds: Array.from(bulkSelectedIds), priceAedFils }),
+        body: JSON.stringify({ boothIds: Array.from(selectedIds), priceAedFils }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -227,11 +488,19 @@ export function FloorPlanBuilder({
         return;
       }
       setNotice(`Updated the price on ${data.updated} booth${data.updated === 1 ? "" : "s"}.`);
-      setBulkSelectedIds(new Set());
-      setBulkPrice("");
+      setSelectionPrice("");
       await load();
+      pushUndo({
+        label: "Bulk price",
+        undo: async () => {
+          await Promise.all(before.map((b) => patchBoothRaw(b.id, { priceAedFils: b.priceAedFils })));
+        },
+        redo: async () => {
+          await Promise.all(Array.from(selectedIds).map((id) => patchBoothRaw(id, { priceAedFils })));
+        },
+      });
     } finally {
-      setApplyingBulk(false);
+      setApplyingSelectionPrice(false);
     }
   }
 
@@ -280,6 +549,7 @@ export function FloorPlanBuilder({
   }
 
   async function saveSelected(patch: Record<string, unknown>) {
+    const selected = selectedIds.size === 1 ? booths.find((b) => selectedIds.has(b.id)) : null;
     if (!selected) return;
     const res = await fetch(`/api/admin/booths/${selected.id}`, {
       method: "PATCH",
@@ -291,17 +561,21 @@ export function FloorPlanBuilder({
       setNotice(data.error || "Could not save booth");
       return;
     }
-    setSelected(null);
+    setSelectedIds(new Set());
     await load();
   }
 
   async function deleteSelected() {
+    const selected = selectedIds.size === 1 ? booths.find((b) => selectedIds.has(b.id)) : null;
     if (!selected) return;
     if (!confirm(`Delete booth ${selected.code}?`)) return;
     await fetch(`/api/admin/booths/${selected.id}`, { method: "DELETE" });
-    setSelected(null);
+    setSelectedIds(new Set());
     await load();
   }
+
+  const selected = selectedIds.size === 1 ? booths.find((b) => selectedIds.has(b.id)) ?? null : null;
+  const selectionCount = selectedIds.size;
 
   return (
     <div>
@@ -399,7 +673,7 @@ export function FloorPlanBuilder({
         <button
           type="button"
           onClick={() => setPlacementOn((v) => !v)}
-          disabled={bulkMode || (!placementOn && (!placeName.trim() || !placePrice.trim()))}
+          disabled={!placementOn && (!placeName.trim() || !placePrice.trim())}
           className={`ml-auto px-5 py-2 rounded-full text-sm disabled:opacity-50 ${
             placementOn ? "bg-green-700 text-white" : "bg-brown text-cream-soft"
           }`}
@@ -407,71 +681,6 @@ export function FloorPlanBuilder({
           {placementOn ? "Placing — click the map (click again to stop)" : "Click to add booths"}
         </button>
       </div>
-
-      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-brown/10 bg-cream p-4">
-        <div className="flex-1 min-w-[220px]">
-          <p className="text-sm font-medium text-brown-dark">Change price for several booths at once</p>
-          <p className="text-xs text-brown-light">
-            {bulkMode
-              ? "Click each booth on the map to select it, then enter one price and apply it to all of them."
-              : "Useful after duplicating a floor plan into a new event, or repricing a whole row/section."}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            if (bulkMode) {
-              exitBulkMode();
-            } else {
-              setPlacementOn(false);
-              setSelected(null);
-              setBulkMode(true);
-            }
-          }}
-          className={`px-4 py-2 rounded-full text-sm ${bulkMode ? "bg-blue-700 text-white" : "border border-brown/30 hover:bg-brown hover:text-cream-soft"}`}
-        >
-          {bulkMode ? `Done selecting (${bulkSelectedIds.size} selected)` : "Select multiple booths"}
-        </button>
-      </div>
-
-      {bulkMode && (
-        <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-blue-300 bg-blue-50 p-4 sticky top-2 z-10">
-          <span className="text-sm text-blue-900">
-            {bulkSelectedIds.size} booth{bulkSelectedIds.size === 1 ? "" : "s"} selected
-          </span>
-          <label className="flex flex-col gap-1 text-xs text-blue-900">
-            New price (AED) for all selected
-            <input
-              value={bulkPrice}
-              onChange={(e) => setBulkPrice(e.target.value)}
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="1837.5"
-              className="border border-blue-300 rounded-lg px-2 py-1.5 bg-white text-sm w-32"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={applyBulkPrice}
-            disabled={applyingBulk || bulkSelectedIds.size === 0 || !bulkPrice.trim()}
-            className="px-4 py-2 rounded-full bg-blue-700 text-white text-sm disabled:opacity-50"
-          >
-            {applyingBulk ? "Applying…" : "Apply price to selected"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setBulkSelectedIds(new Set())}
-            disabled={bulkSelectedIds.size === 0}
-            className="text-xs text-blue-900 underline disabled:opacity-50"
-          >
-            Clear selection
-          </button>
-          <button type="button" onClick={exitBulkMode} className="ml-auto text-xs text-blue-900 underline">
-            Exit
-          </button>
-        </div>
-      )}
 
       <div className="mb-2 flex flex-wrap items-center gap-4 text-xs text-brown-light">
         <label className="flex items-center gap-1.5 cursor-pointer">
@@ -482,27 +691,142 @@ export function FloorPlanBuilder({
           <input type="checkbox" checked={gridSnapEnabled} onChange={toggleGridSnap} />
           Snap to grid
         </label>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleUndo}
+            disabled={undoStack.length === 0}
+            title="Undo (Cmd/Ctrl+Z)"
+            className="w-7 h-7 rounded-full border border-brown/30 hover:bg-brown/10 disabled:opacity-30"
+          >
+            ↶
+          </button>
+          <button
+            type="button"
+            onClick={handleRedo}
+            disabled={redoStack.length === 0}
+            title="Redo (Cmd/Ctrl+Shift+Z)"
+            className="w-7 h-7 rounded-full border border-brown/30 hover:bg-brown/10 disabled:opacity-30"
+          >
+            ↷
+          </button>
+        </div>
         {!venueWidthM && (
-          <span className="text-brown-light/70">
+          <span className="text-brown-light/70 basis-full">
             Tip: set a real venue width (meters) in the event details above to show real distances while dragging.
           </span>
         )}
       </div>
 
+      {selectionCount > 1 && (
+        <div className="mb-4 rounded-xl border border-blue-300 bg-blue-50 p-4 sticky top-2 z-10 space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm font-medium text-blue-900">{selectionCount} booths selected</span>
+            <button type="button" onClick={() => setSelectedIds(new Set())} className="text-xs text-blue-900 underline">
+              Clear selection
+            </button>
+            <span className="text-xs text-blue-800/70 ml-auto">
+              Drag any selected booth to move the group · arrow keys nudge · Cmd/Ctrl+D duplicates · Delete removes
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-blue-900">Align:</span>
+            {(
+              [
+                ["left", "Left"],
+                ["right", "Right"],
+                ["top", "Top"],
+                ["bottom", "Bottom"],
+                ["centerH", "Center H"],
+                ["centerV", "Center V"],
+              ] as const
+            ).map(([kind, label]) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => alignSelection(kind)}
+                className="px-3 py-1.5 rounded-full border border-blue-300 bg-white text-xs text-blue-900 hover:bg-blue-100"
+              >
+                {label}
+              </button>
+            ))}
+            <span className="text-xs text-blue-900 ml-2">Distribute:</span>
+            <button
+              type="button"
+              onClick={() => distributeSelection("horizontal")}
+              disabled={selectionCount < 3}
+              className="px-3 py-1.5 rounded-full border border-blue-300 bg-white text-xs text-blue-900 hover:bg-blue-100 disabled:opacity-40"
+            >
+              Horizontally
+            </button>
+            <button
+              type="button"
+              onClick={() => distributeSelection("vertical")}
+              disabled={selectionCount < 3}
+              className="px-3 py-1.5 rounded-full border border-blue-300 bg-white text-xs text-blue-900 hover:bg-blue-100 disabled:opacity-40"
+            >
+              Vertically
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-xs text-blue-900">
+              New price (AED) for all selected
+              <input
+                value={selectionPrice}
+                onChange={(e) => setSelectionPrice(e.target.value)}
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="1837.5"
+                className="border border-blue-300 rounded-lg px-2 py-1.5 bg-white text-sm w-32"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={applySelectionPrice}
+              disabled={applyingSelectionPrice || !selectionPrice.trim()}
+              className="px-4 py-2 rounded-full bg-blue-700 text-white text-sm disabled:opacity-50"
+            >
+              {applyingSelectionPrice ? "Applying…" : "Apply price"}
+            </button>
+            <button
+              type="button"
+              onClick={duplicateSelection}
+              disabled={busyAction}
+              className="px-4 py-2 rounded-full border border-blue-300 bg-white text-sm text-blue-900 disabled:opacity-50"
+            >
+              Duplicate
+            </button>
+            <button
+              type="button"
+              onClick={deleteSelection}
+              disabled={busyAction}
+              className="px-4 py-2 rounded-full border border-red-300 text-red-700 text-sm disabled:opacity-50"
+            >
+              Delete selected
+            </button>
+          </div>
+        </div>
+      )}
+
       <FloorPlan
         features={features}
         booths={booths}
         sizeStyles={sizeStyles}
-        selectedBoothId={selected?.id ?? null}
         allowAnyStatusClick
         backgroundImageUrl={floorPlanImageUrl}
         placementMode={placementOn}
         onCanvasClick={handleCanvasClick}
-        onSelectBooth={(b) => (bulkMode ? toggleBulkSelected(b.id) : setSelected(b as AdminBooth))}
-        onDeselect={() => setSelected(null)}
-        editable={!placementOn && !bulkMode}
+        onDeselect={() => setSelectedIds(new Set())}
+        editable={!placementOn}
         onBoothCommit={onBoothCommit}
-        multiSelectedIds={bulkMode ? bulkSelectedIds : undefined}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
+        onGroupCommit={onGroupCommit}
+        onDeleteSelected={deleteSelection}
+        onDuplicateSelected={duplicateSelection}
         smartGuidesEnabled={smartGuidesEnabled}
         gridSnapEnabled={gridSnapEnabled}
         venueWidthM={venueWidthM}
@@ -513,7 +837,7 @@ export function FloorPlanBuilder({
         <div className="mt-4 rounded-xl border border-brown/20 bg-cream p-5">
           <div className="flex items-center justify-between mb-3">
             <p className="font-heading text-lg text-brown-dark">Booth {selected.code}</p>
-            <button onClick={() => setSelected(null)} className="text-xs text-brown-light underline">
+            <button onClick={() => setSelectedIds(new Set())} className="text-xs text-brown-light underline">
               Close
             </button>
           </div>

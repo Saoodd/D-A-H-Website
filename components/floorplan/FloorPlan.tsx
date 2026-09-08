@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { FloorFeature, FloorBooth, SizeStyle } from "./types";
 
 function shadeColor(hex: string, amount: number): string {
@@ -36,6 +36,8 @@ const ROTATE_HANDLE_OFFSET = 6;
 const ALIGN_THRESHOLD = 1; // percent — how close an edge/center has to be to another booth's to snap
 const SPACING_TOLERANCE = 1.2; // percent — how close a gap has to be to a reference gap to snap-equalize
 const GRID_SIZE = 1; // percent — snap-to-grid cell size
+const NUDGE_AMOUNT = 0.5; // percent — arrow-key nudge
+const NUDGE_AMOUNT_BIG = 2; // percent — shift+arrow-key nudge
 
 interface GuideLine {
   orientation: "v" | "h";
@@ -65,6 +67,15 @@ function formatDistance(gapPercent: number, venueWidthM?: number | null): string
     return `${meters.toFixed(meters < 10 ? 1 : 0)}m`;
   }
   return `${gapPercent.toFixed(1)}%`;
+}
+
+/** Is the given DOM event target a text-entry element? Used to keep the
+ *  canvas's keyboard shortcuts (select-all, arrows, delete) from hijacking
+ *  normal typing in the surrounding form fields. */
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
 }
 
 /** Best single edge/center alignment match on each axis, independently. */
@@ -116,7 +127,7 @@ function computeAlignmentSnap(dragged: Rect, others: FloorBooth[]) {
   return { gridX, gridY, vLines, hLines };
 }
 
-/** Snap the dragged booth's gap to a neighbor so it equals an existing,
+/** Snap the dragged rect's gap to a neighbor so it equals an existing,
  *  already-consistent gap elsewhere in the same row — or centers evenly
  *  between two flanking booths. */
 function computeRowSpacingSnap(dragged: Rect, others: FloorBooth[]) {
@@ -204,6 +215,113 @@ function computeColumnSpacingSnap(dragged: Rect, others: FloorBooth[]) {
   return {} as { gridY?: number };
 }
 
+/** Snaps a candidate rect (a single booth, or a whole selection's bounding
+ *  box) against `others`, applying alignment guides, equal-spacing guides,
+ *  and/or grid snap per the given toggles — shared by single- and
+ *  group-move so a group snaps as one rigid shape, not booth-by-booth. */
+function computeSnappedPosition(
+  raw: Rect,
+  others: FloorBooth[],
+  smartGuidesEnabled: boolean,
+  gridSnapEnabled: boolean,
+  venueWidthM: number | null | undefined
+): { gridX: number; gridY: number; guides: Guides | null } {
+  let gridX = raw.gridX;
+  let gridY = raw.gridY;
+  const vLines: GuideLine[] = [];
+  const hLines: GuideLine[] = [];
+  const labels: GuideLabel[] = [];
+  let snappedX = false;
+  let snappedY = false;
+
+  if (smartGuidesEnabled) {
+    const align = computeAlignmentSnap({ gridX, gridY, gridW: raw.gridW, gridH: raw.gridH }, others);
+    if (align.gridX != null) {
+      gridX = align.gridX;
+      snappedX = true;
+      vLines.push(...align.vLines);
+    }
+    if (align.gridY != null) {
+      gridY = align.gridY;
+      snappedY = true;
+      hLines.push(...align.hLines);
+    }
+    if (!snappedX) {
+      const rowSnap = computeRowSpacingSnap({ gridX, gridY, gridW: raw.gridW, gridH: raw.gridH }, others);
+      if (rowSnap.gridX != null) {
+        gridX = rowSnap.gridX;
+        snappedX = true;
+      }
+    }
+    if (!snappedY) {
+      const colSnap = computeColumnSpacingSnap({ gridX, gridY, gridW: raw.gridW, gridH: raw.gridH }, others);
+      if (colSnap.gridY != null) {
+        gridY = colSnap.gridY;
+        snappedY = true;
+      }
+    }
+  }
+
+  if (gridSnapEnabled) {
+    if (!snappedX) gridX = Math.round(gridX / GRID_SIZE) * GRID_SIZE;
+    if (!snappedY) gridY = Math.round(gridY / GRID_SIZE) * GRID_SIZE;
+  }
+
+  gridX = Math.min(100 - raw.gridW, Math.max(0, gridX));
+  gridY = Math.min(100 - raw.gridH, Math.max(0, gridY));
+
+  if (smartGuidesEnabled) {
+    const midY = gridY + raw.gridH / 2;
+    const row = others
+      .filter((o) => rangesOverlap(gridY, gridY + raw.gridH, o.gridY, o.gridY + o.gridH))
+      .sort((a, c) => a.gridX - c.gridX);
+    let leftIdx = -1;
+    for (let i = 0; i < row.length; i++) {
+      if (row[i].gridX + row[i].gridW <= gridX + raw.gridW / 2) leftIdx = i;
+    }
+    const leftN = leftIdx >= 0 ? row[leftIdx] : null;
+    const rightN = leftIdx + 1 < row.length ? row[leftIdx + 1] : null;
+    if (leftN) {
+      const gap = gridX - (leftN.gridX + leftN.gridW);
+      if (gap > 0.1) labels.push({ x: leftN.gridX + leftN.gridW + gap / 2, y: midY, text: formatDistance(gap, venueWidthM) });
+    }
+    if (rightN) {
+      const gap = rightN.gridX - (gridX + raw.gridW);
+      if (gap > 0.1) labels.push({ x: gridX + raw.gridW + gap / 2, y: midY, text: formatDistance(gap, venueWidthM) });
+    }
+
+    const midX = gridX + raw.gridW / 2;
+    const col = others
+      .filter((o) => rangesOverlap(gridX, gridX + raw.gridW, o.gridX, o.gridX + o.gridW))
+      .sort((a, c) => a.gridY - c.gridY);
+    let topIdx = -1;
+    for (let i = 0; i < col.length; i++) {
+      if (col[i].gridY + col[i].gridH <= gridY + raw.gridH / 2) topIdx = i;
+    }
+    const topN = topIdx >= 0 ? col[topIdx] : null;
+    const botN = topIdx + 1 < col.length ? col[topIdx + 1] : null;
+    if (topN) {
+      const gap = gridY - (topN.gridY + topN.gridH);
+      if (gap > 0.1) labels.push({ x: midX, y: topN.gridY + topN.gridH + gap / 2, text: formatDistance(gap, venueWidthM) });
+    }
+    if (botN) {
+      const gap = botN.gridY - (gridY + raw.gridH);
+      if (gap > 0.1) labels.push({ x: midX, y: gridY + raw.gridH + gap / 2, text: formatDistance(gap, venueWidthM) });
+    }
+  }
+
+  const guides = smartGuidesEnabled && (vLines.length || hLines.length || labels.length) ? { vLines, hLines, labels } : null;
+  return { gridX, gridY, guides };
+}
+
+function boundingBoxOf(members: { startGridX: number; startGridY: number; gridW: number; gridH: number }[]): Rect {
+  const minX = Math.min(...members.map((m) => m.startGridX));
+  const minY = Math.min(...members.map((m) => m.startGridY));
+  const maxX = Math.max(...members.map((m) => m.startGridX + m.gridW));
+  const maxY = Math.max(...members.map((m) => m.startGridY + m.gridH));
+  return { gridX: minX, gridY: minY, gridW: maxX - minX, gridH: maxY - minY };
+}
+
 const featureLabel: Record<string, string> = {
   ENTRANCE_MAIN: "Main entrance",
   ENTRANCE_SIDE: "Side entrance",
@@ -226,8 +344,10 @@ type BoothPatch = Partial<{ gridX: number; gridY: number; gridW: number; gridH: 
 
 type ResizeHandle = "nw" | "ne" | "sw" | "se";
 
+type MoveMember = { id: string; startGridX: number; startGridY: number; gridW: number; gridH: number };
+
 type Manip =
-  | { kind: "move"; id: string; startPointer: { x: number; y: number }; startGrid: { gridX: number; gridY: number }; moved: boolean }
+  | { kind: "move"; originId: string; members: MoveMember[]; groupRect: Rect; startPointer: { x: number; y: number }; moved: boolean }
   | { kind: "resize"; id: string; handle: ResizeHandle; anchorWorld: { x: number; y: number }; rotation: number; moved: boolean }
   | { kind: "rotate"; id: string; center: { x: number; y: number }; moved: boolean };
 
@@ -245,7 +365,11 @@ export function FloorPlan({
   onCanvasClick,
   editable = false,
   onBoothCommit,
-  multiSelectedIds,
+  selectedIds,
+  onSelectionChange,
+  onGroupCommit,
+  onDeleteSelected,
+  onDuplicateSelected,
   smartGuidesEnabled = false,
   gridSnapEnabled = false,
   venueWidthM,
@@ -265,18 +389,31 @@ export function FloorPlan({
   /** When true, clicking empty canvas calls onCanvasClick instead of panning. */
   placementMode?: boolean;
   onCanvasClick?: (xPercent: number, yPercent: number) => void;
-  /** Admin floor-plan-builder mode: the selected booth gets drag-to-move,
-   *  corner resize handles, and a rotate handle — like moving/resizing an
-   *  object on a slide. */
+  /** Admin floor-plan-builder mode: the selection gets drag-to-move, corner
+   *  resize handles (solo only) and a rotate handle (solo only) — like
+   *  moving/resizing objects on a slide. */
   editable?: boolean;
   onBoothCommit?: (id: string, patch: BoothPatch) => void;
-  /** When set, booths whose id is in this set render with a distinct
-   *  checked/highlighted look — used for the bulk multi-select price tool. */
-  multiSelectedIds?: Set<string>;
-  /** While moving a booth, snap to other booths' edges/centers and equal
-   *  spacing, showing Figma/Canva-style guide lines and gap distances. */
+  /** Multi-select mode (admin only): current selection. Passing this (even
+   *  an empty Set) switches the canvas from the plain single-pick API
+   *  (selectedBoothId/onSelectBooth) to full Figma-style multi-select:
+   *  click/shift-click, rubber-band drag-select, group move, keyboard
+   *  shortcuts (Cmd/Ctrl+A, arrows, Escape, Delete, Cmd/Ctrl+D). */
+  selectedIds?: Set<string>;
+  onSelectionChange?: (ids: Set<string>) => void;
+  /** Called once a group-move (drag or arrow-key nudge) finishes, with each
+   *  moved booth's final position. */
+  onGroupCommit?: (patches: { id: string; gridX: number; gridY: number }[]) => void;
+  /** Delete/Backspace with a selection active. */
+  onDeleteSelected?: () => void;
+  /** Cmd/Ctrl+D with a selection active. */
+  onDuplicateSelected?: () => void;
+  /** While moving, snap to other booths' edges/centers and equal spacing,
+   *  showing Figma/Canva-style guide lines and gap distances. Applies to
+   *  the whole selection's bounding box when moving a group, so relative
+   *  spacing within the group never changes. */
   smartGuidesEnabled?: boolean;
-  /** While moving a booth, snap its position to a fixed percentage grid. */
+  /** While moving, snap position to a fixed percentage grid. */
   gridSnapEnabled?: boolean;
   /** Real venue width in meters — when set, distance labels while dragging
    *  show real meters instead of a raw canvas percentage. */
@@ -285,12 +422,16 @@ export function FloorPlan({
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const [hoveredBoothId, setHoveredBoothId] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ id: string; data: BoothPatch } | null>(null);
+  const [preview, setPreview] = useState<Record<string, BoothPatch>>({});
   const [guides, setGuides] = useState<Guides | null>(null);
+  const [rubberBand, setRubberBand] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
   const dragState = useRef<{ x: number; y: number; startTranslate: { x: number; y: number }; moved: boolean } | null>(null);
+  const rubberBandRef = useRef<{ start: { x: number; y: number }; additive: boolean } | null>(null);
   const pinchState = useRef<{ dist: number; scale: number } | null>(null);
   const manipRef = useRef<Manip | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+
+  const multiSelectMode = selectedIds !== undefined;
 
   const clampScale = (s: number) => Math.min(4, Math.max(0.5, s));
 
@@ -306,21 +447,60 @@ export function FloorPlan({
     return { x: Math.min(100, Math.max(0, loc.x)), y: Math.min(100, Math.max(0, loc.y)) };
   }, []);
 
-  const onPointerDown = useCallback((e: React.PointerEvent) => {
-    (e.target as Element).setPointerCapture?.(e.pointerId);
-    dragState.current = { x: e.clientX, y: e.clientY, startTranslate: translate, moved: false };
-  }, [translate]);
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+      if (multiSelectMode && editable && !placementMode) {
+        const pct = pointToPercent(e.clientX, e.clientY);
+        if (pct) {
+          rubberBandRef.current = { start: pct, additive: e.shiftKey || e.metaKey || e.ctrlKey };
+          setRubberBand({ x1: pct.x, y1: pct.y, x2: pct.x, y2: pct.y });
+          return;
+        }
+      }
+      dragState.current = { x: e.clientX, y: e.clientY, startTranslate: translate, moved: false };
+    },
+    [translate, multiSelectMode, editable, placementMode, pointToPercent]
+  );
 
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!dragState.current) return;
-    const dx = e.clientX - dragState.current.x;
-    const dy = e.clientY - dragState.current.y;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragState.current.moved = true;
-    setTranslate({ x: dragState.current.startTranslate.x + dx, y: dragState.current.startTranslate.y + dy });
-  }, []);
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (rubberBandRef.current) {
+        const pct = pointToPercent(e.clientX, e.clientY);
+        if (pct) setRubberBand({ x1: rubberBandRef.current.start.x, y1: rubberBandRef.current.start.y, x2: pct.x, y2: pct.y });
+        return;
+      }
+      if (!dragState.current) return;
+      const dx = e.clientX - dragState.current.x;
+      const dy = e.clientY - dragState.current.y;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragState.current.moved = true;
+      setTranslate({ x: dragState.current.startTranslate.x + dx, y: dragState.current.startTranslate.y + dy });
+    },
+    [pointToPercent]
+  );
 
   const onPointerUp = useCallback(
     (e: React.PointerEvent) => {
+      if (rubberBandRef.current) {
+        const band = rubberBandRef.current;
+        rubberBandRef.current = null;
+        setRubberBand(null);
+        const pct = pointToPercent(e.clientX, e.clientY);
+        const x1 = Math.min(band.start.x, pct?.x ?? band.start.x);
+        const x2 = Math.max(band.start.x, pct?.x ?? band.start.x);
+        const y1 = Math.min(band.start.y, pct?.y ?? band.start.y);
+        const y2 = Math.max(band.start.y, pct?.y ?? band.start.y);
+        if (x2 - x1 < 0.5 && y2 - y1 < 0.5) {
+          // Negligible drag — treat as an empty-canvas click, not a selection box.
+          if (!band.additive) onDeselect?.();
+          return;
+        }
+        const touched = booths.filter((b) => rangesOverlap(x1, x2, b.gridX, b.gridX + b.gridW) && rangesOverlap(y1, y2, b.gridY, b.gridY + b.gridH));
+        const next = band.additive ? new Set(selectedIds) : new Set<string>();
+        touched.forEach((b) => next.add(b.id));
+        onSelectionChange?.(next);
+        return;
+      }
       const wasClick = dragState.current && !dragState.current.moved;
       dragState.current = null;
       if (wasClick && placementMode && onCanvasClick) {
@@ -332,7 +512,7 @@ export function FloorPlan({
         onDeselect();
       }
     },
-    [placementMode, onCanvasClick, pointToPercent, onDeselect]
+    [placementMode, onCanvasClick, pointToPercent, onDeselect, booths, selectedIds, onSelectionChange]
   );
 
   const onWheel = useCallback((e: React.WheelEvent) => {
@@ -361,113 +541,48 @@ export function FloorPlan({
     if (e.touches.length < 2) pinchState.current = null;
   }, []);
 
-  // ---- booth manipulation (editable mode): drag-to-move, corner resize
-  // handles, and a rotate handle, all operating in the same 0-100 percent
-  // world space that pointToPercent already resolves to (which stays
-  // correct even for a booth rendered inside a rotated <g>, since
-  // getScreenCTM is read from the SVG root). ----
+  // ---- booth manipulation (editable mode): drag-to-move (solo or as a
+  // group), corner resize handles, and a rotate handle, all operating in
+  // the same 0-100 percent world space that pointToPercent already resolves
+  // to (which stays correct even for a booth rendered inside a rotated <g>,
+  // since getScreenCTM is read from the SVG root). ----
 
   const getEffective = useCallback(
-    (b: FloorBooth): FloorBooth => (preview && preview.id === b.id ? { ...b, ...preview.data } : b),
+    (b: FloorBooth): FloorBooth => (preview[b.id] ? { ...b, ...preview[b.id] } : b),
     [preview]
   );
 
-  const computeMovePatch = useCallback((
-    m: Extract<Manip, { kind: "move" }>,
-    pct: { x: number; y: number },
-    b: FloorBooth
-  ): { patch: BoothPatch; guides: Guides | null } => {
-    const dx = pct.x - m.startPointer.x;
-    const dy = pct.y - m.startPointer.y;
-    let gridX = Math.min(100 - b.gridW, Math.max(0, m.startGrid.gridX + dx));
-    let gridY = Math.min(100 - b.gridH, Math.max(0, m.startGrid.gridY + dy));
+  const computeGroupMovePatch = useCallback(
+    (m: Extract<Manip, { kind: "move" }>, pct: { x: number; y: number }): { patches: Record<string, BoothPatch>; guides: Guides | null } => {
+      const dx = pct.x - m.startPointer.x;
+      const dy = pct.y - m.startPointer.y;
+      let groupX = Math.min(100 - m.groupRect.gridW, Math.max(0, m.groupRect.gridX + dx));
+      let groupY = Math.min(100 - m.groupRect.gridH, Math.max(0, m.groupRect.gridY + dy));
 
-    const others = booths.filter((o) => o.id !== b.id);
-    const vLines: GuideLine[] = [];
-    const hLines: GuideLine[] = [];
-    const labels: GuideLabel[] = [];
-    let snappedX = false;
-    let snappedY = false;
+      const memberIds = new Set(m.members.map((mm) => mm.id));
+      const others = booths.filter((o) => !memberIds.has(o.id));
 
-    if (smartGuidesEnabled) {
-      const align = computeAlignmentSnap({ gridX, gridY, gridW: b.gridW, gridH: b.gridH }, others);
-      if (align.gridX != null) {
-        gridX = align.gridX;
-        snappedX = true;
-        vLines.push(...align.vLines);
-      }
-      if (align.gridY != null) {
-        gridY = align.gridY;
-        snappedY = true;
-        hLines.push(...align.hLines);
-      }
-      if (!snappedX) {
-        const rowSnap = computeRowSpacingSnap({ gridX, gridY, gridW: b.gridW, gridH: b.gridH }, others);
-        if (rowSnap.gridX != null) {
-          gridX = rowSnap.gridX;
-          snappedX = true;
-        }
-      }
-      if (!snappedY) {
-        const colSnap = computeColumnSpacingSnap({ gridX, gridY, gridW: b.gridW, gridH: b.gridH }, others);
-        if (colSnap.gridY != null) {
-          gridY = colSnap.gridY;
-          snappedY = true;
-        }
-      }
-    }
+      const snapped = computeSnappedPosition(
+        { gridX: groupX, gridY: groupY, gridW: m.groupRect.gridW, gridH: m.groupRect.gridH },
+        others,
+        smartGuidesEnabled,
+        gridSnapEnabled,
+        venueWidthM
+      );
+      groupX = snapped.gridX;
+      groupY = snapped.gridY;
 
-    if (gridSnapEnabled) {
-      if (!snappedX) gridX = Math.round(gridX / GRID_SIZE) * GRID_SIZE;
-      if (!snappedY) gridY = Math.round(gridY / GRID_SIZE) * GRID_SIZE;
-    }
+      const finalDX = groupX - m.groupRect.gridX;
+      const finalDY = groupY - m.groupRect.gridY;
 
-    gridX = Math.min(100 - b.gridW, Math.max(0, gridX));
-    gridY = Math.min(100 - b.gridH, Math.max(0, gridY));
-
-    if (smartGuidesEnabled) {
-      const midY = gridY + b.gridH / 2;
-      const row = others
-        .filter((o) => rangesOverlap(gridY, gridY + b.gridH, o.gridY, o.gridY + o.gridH))
-        .sort((a, c) => a.gridX - c.gridX);
-      let leftIdx = -1;
-      for (let i = 0; i < row.length; i++) {
-        if (row[i].gridX + row[i].gridW <= gridX + b.gridW / 2) leftIdx = i;
+      const patches: Record<string, BoothPatch> = {};
+      for (const mem of m.members) {
+        patches[mem.id] = { gridX: mem.startGridX + finalDX, gridY: mem.startGridY + finalDY };
       }
-      const leftN = leftIdx >= 0 ? row[leftIdx] : null;
-      const rightN = leftIdx + 1 < row.length ? row[leftIdx + 1] : null;
-      if (leftN) {
-        const gap = gridX - (leftN.gridX + leftN.gridW);
-        if (gap > 0.1) labels.push({ x: leftN.gridX + leftN.gridW + gap / 2, y: midY, text: formatDistance(gap, venueWidthM) });
-      }
-      if (rightN) {
-        const gap = rightN.gridX - (gridX + b.gridW);
-        if (gap > 0.1) labels.push({ x: gridX + b.gridW + gap / 2, y: midY, text: formatDistance(gap, venueWidthM) });
-      }
-
-      const midX = gridX + b.gridW / 2;
-      const col = others
-        .filter((o) => rangesOverlap(gridX, gridX + b.gridW, o.gridX, o.gridX + o.gridW))
-        .sort((a, c) => a.gridY - c.gridY);
-      let topIdx = -1;
-      for (let i = 0; i < col.length; i++) {
-        if (col[i].gridY + col[i].gridH <= gridY + b.gridH / 2) topIdx = i;
-      }
-      const topN = topIdx >= 0 ? col[topIdx] : null;
-      const botN = topIdx + 1 < col.length ? col[topIdx + 1] : null;
-      if (topN) {
-        const gap = gridY - (topN.gridY + topN.gridH);
-        if (gap > 0.1) labels.push({ x: midX, y: topN.gridY + topN.gridH + gap / 2, text: formatDistance(gap, venueWidthM) });
-      }
-      if (botN) {
-        const gap = botN.gridY - (gridY + b.gridH);
-        if (gap > 0.1) labels.push({ x: midX, y: gridY + b.gridH + gap / 2, text: formatDistance(gap, venueWidthM) });
-      }
-    }
-
-    const nextGuides = smartGuidesEnabled && (vLines.length || hLines.length || labels.length) ? { vLines, hLines, labels } : null;
-    return { patch: { gridX, gridY }, guides: nextGuides };
-  }, [booths, smartGuidesEnabled, gridSnapEnabled, venueWidthM]);
+      return { patches, guides: snapped.guides };
+    },
+    [booths, smartGuidesEnabled, gridSnapEnabled, venueWidthM]
+  );
 
   const computeResizePatch = (m: Extract<Manip, { kind: "resize" }>, pct: { x: number; y: number }): BoothPatch => {
     const vx = pct.x - m.anchorWorld.x;
@@ -494,13 +609,31 @@ export function FloorPlan({
     return { rotation: Math.round(((deg % 360) + 360) % 360) };
   };
 
-  const beginMove = useCallback((e: React.PointerEvent, b: FloorBooth) => {
-    e.stopPropagation();
-    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
-    const pct = pointToPercent(e.clientX, e.clientY);
-    if (!pct) return;
-    manipRef.current = { kind: "move", id: b.id, startPointer: pct, startGrid: { gridX: b.gridX, gridY: b.gridY }, moved: false };
-  }, [pointToPercent]);
+  const beginGroupMove = useCallback(
+    (e: React.PointerEvent, raw: FloorBooth) => {
+      e.stopPropagation();
+      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+      const pct = pointToPercent(e.clientX, e.clientY);
+      if (!pct) return;
+      let memberBooths: FloorBooth[];
+      if (multiSelectMode && selectedIds!.has(raw.id) && selectedIds!.size > 1) {
+        memberBooths = booths.filter((b) => selectedIds!.has(b.id));
+      } else {
+        memberBooths = [raw];
+        if (multiSelectMode) onSelectionChange?.(new Set([raw.id]));
+      }
+      const members: MoveMember[] = memberBooths.map((b) => ({ id: b.id, startGridX: b.gridX, startGridY: b.gridY, gridW: b.gridW, gridH: b.gridH }));
+      manipRef.current = {
+        kind: "move",
+        originId: raw.id,
+        members,
+        groupRect: boundingBoxOf(members),
+        startPointer: pct,
+        moved: false,
+      };
+    },
+    [pointToPercent, multiSelectMode, selectedIds, booths, onSelectionChange]
+  );
 
   const beginResize = useCallback((e: React.PointerEvent, b: FloorBooth, handle: ResizeHandle) => {
     e.stopPropagation();
@@ -539,40 +672,94 @@ export function FloorPlan({
   const onManipPointerMove = useCallback(
     (e: React.PointerEvent, b: FloorBooth) => {
       const m = manipRef.current;
-      if (!m || m.id !== b.id) return;
+      if (!m) return;
+      if (m.kind === "move" ? m.originId !== b.id : m.id !== b.id) return;
       e.stopPropagation();
       const pct = pointToPercent(e.clientX, e.clientY);
       if (!pct) return;
       m.moved = true;
       if (m.kind === "move") {
-        const { patch, guides: nextGuides } = computeMovePatch(m, pct, b);
-        setPreview({ id: b.id, data: patch });
+        const { patches, guides: nextGuides } = computeGroupMovePatch(m, pct);
+        setPreview(patches);
         setGuides(nextGuides);
       } else {
         const patch = m.kind === "resize" ? computeResizePatch(m, pct) : computeRotatePatch(m, pct);
-        setPreview({ id: b.id, data: patch });
+        setPreview({ [b.id]: patch });
       }
     },
-    [pointToPercent, computeMovePatch]
+    [pointToPercent, computeGroupMovePatch]
   );
 
   const onManipPointerUp = useCallback(
     (e: React.PointerEvent, b: FloorBooth) => {
       const m = manipRef.current;
-      if (!m || m.id !== b.id) return;
+      if (!m) return;
+      if (m.kind === "move" ? m.originId !== b.id : m.id !== b.id) return;
       e.stopPropagation();
       manipRef.current = null;
-      setPreview(null);
+      setPreview({});
       setGuides(null);
       if (!m.moved) return;
       const pct = pointToPercent(e.clientX, e.clientY);
       if (!pct) return;
-      const patch =
-        m.kind === "move" ? computeMovePatch(m, pct, b).patch : m.kind === "resize" ? computeResizePatch(m, pct) : computeRotatePatch(m, pct);
-      onBoothCommit?.(b.id, patch);
+      if (m.kind === "move") {
+        const { patches } = computeGroupMovePatch(m, pct);
+        onGroupCommit?.(Object.entries(patches).map(([id, patch]) => ({ id, gridX: patch.gridX!, gridY: patch.gridY! })));
+      } else {
+        const patch = m.kind === "resize" ? computeResizePatch(m, pct) : computeRotatePatch(m, pct);
+        onBoothCommit?.(b.id, patch);
+      }
     },
-    [pointToPercent, onBoothCommit, computeMovePatch]
+    [pointToPercent, onBoothCommit, onGroupCommit, computeGroupMovePatch]
   );
+
+  // ---- keyboard shortcuts (multi-select mode only): Cmd/Ctrl+A select
+  // all, arrows nudge the selection, Escape clears it, Delete/Backspace and
+  // Cmd/Ctrl+D delegate to the builder's delete/duplicate. ----
+  useEffect(() => {
+    if (!multiSelectMode || !editable) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (isTypingTarget(e.target)) return;
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        onSelectionChange?.(new Set(booths.map((b) => b.id)));
+        return;
+      }
+      if (mod && e.key.toLowerCase() === "d") {
+        if (selectedIds && selectedIds.size > 0) {
+          e.preventDefault();
+          onDuplicateSelected?.();
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        onSelectionChange?.(new Set());
+        return;
+      }
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedIds && selectedIds.size > 0) {
+        e.preventDefault();
+        onDeleteSelected?.();
+        return;
+      }
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && selectedIds && selectedIds.size > 0) {
+        e.preventDefault();
+        const amount = e.shiftKey ? NUDGE_AMOUNT_BIG : NUDGE_AMOUNT;
+        const dx = e.key === "ArrowLeft" ? -amount : e.key === "ArrowRight" ? amount : 0;
+        const dy = e.key === "ArrowUp" ? -amount : e.key === "ArrowDown" ? amount : 0;
+        const members = booths.filter((b) => selectedIds.has(b.id));
+        if (members.length === 0) return;
+        const box = boundingBoxOf(members.map((b) => ({ startGridX: b.gridX, startGridY: b.gridY, gridW: b.gridW, gridH: b.gridH })));
+        const clampedX = Math.min(100 - box.gridW, Math.max(0, box.gridX + dx));
+        const clampedY = Math.min(100 - box.gridH, Math.max(0, box.gridY + dy));
+        const finalDX = clampedX - box.gridX;
+        const finalDY = clampedY - box.gridY;
+        onGroupCommit?.(members.map((b) => ({ id: b.id, gridX: b.gridX + finalDX, gridY: b.gridY + finalDY })));
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [multiSelectMode, editable, booths, selectedIds, onSelectionChange, onGroupCommit, onDeleteSelected, onDuplicateSelected]);
 
   return (
     <div className="rounded-xl border border-brown/15 bg-cream-soft overflow-hidden">
@@ -580,8 +767,8 @@ export function FloorPlan({
         <span>
           {placementMode
             ? "Click the map to place a booth"
-            : multiSelectedIds
-            ? "Click booths to select them for a bulk price update"
+            : multiSelectMode
+            ? "Click, shift-click or drag a selection box to pick booths — drag one to move the group"
             : editable
             ? "Drag a booth to move it, corners to resize, top handle to rotate"
             : interactive
@@ -618,7 +805,7 @@ export function FloorPlan({
 
       <div
         className={`relative w-full aspect-square max-h-[70vh] overflow-hidden touch-none ${
-          placementMode ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"
+          placementMode ? "cursor-crosshair" : multiSelectMode ? "cursor-default" : "cursor-grab active:cursor-grabbing"
         } ${!backgroundImageUrl ? "bg-[repeating-linear-gradient(45deg,rgba(107,68,41,0.03),rgba(107,68,41,0.03)_10px,transparent_10px,transparent_20px)]" : ""}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -675,8 +862,9 @@ export function FloorPlan({
             const b = getEffective(raw);
             const style = sizeStyles[b.size] || { color: "#B58A63", label: b.size };
             const baseColor = b.colorHex || style.color;
-            const isSelected = selectedBoothId === b.id;
-            const isMultiSelected = multiSelectedIds?.has(b.id) ?? false;
+            const isSelected = multiSelectMode ? (selectedIds?.has(b.id) ?? false) : selectedBoothId === b.id;
+            const isSoleSelected = multiSelectMode ? selectedIds?.size === 1 && selectedIds.has(b.id) : isSelected;
+            const isGroupSelected = multiSelectMode && isSelected && (selectedIds?.size ?? 0) > 1;
             const isHovered = hoveredBoothId === b.id;
             const fill = b.status === "AVAILABLE" ? baseColor : statusFill[b.status] || baseColor;
             const clickable = interactive && !placementMode && (allowAnyStatusClick || b.status === "AVAILABLE" || b.isMine);
@@ -684,7 +872,7 @@ export function FloorPlan({
             const rotation = b.rotation || 0;
             const cx = b.gridX + b.gridW / 2;
             const cy = b.gridY + b.gridH / 2;
-            const isBeingManipulated = preview?.id === b.id;
+            const isBeingManipulated = preview[b.id] != null;
 
             return (
               <g key={b.id} transform={rotation ? `rotate(${rotation} ${cx} ${cy})` : undefined}>
@@ -692,9 +880,24 @@ export function FloorPlan({
                   onClick={(e) => {
                     if (!clickable) return;
                     e.stopPropagation();
-                    onSelectBooth?.(raw);
+                    if (multiSelectMode) {
+                      if (e.shiftKey || e.metaKey || e.ctrlKey) {
+                        const next = new Set(selectedIds);
+                        if (next.has(raw.id)) next.delete(raw.id);
+                        else next.add(raw.id);
+                        onSelectionChange?.(next);
+                      } else {
+                        onSelectionChange?.(new Set([raw.id]));
+                      }
+                    } else {
+                      onSelectBooth?.(raw);
+                    }
                   }}
-                  onPointerDown={(e) => canManipulate && beginMove(e, raw)}
+                  onPointerDown={(e) => {
+                    if (!canManipulate) return;
+                    if (e.shiftKey || e.metaKey || e.ctrlKey) return;
+                    beginGroupMove(e, raw);
+                  }}
                   onPointerMove={(e) => canManipulate && onManipPointerMove(e, raw)}
                   onPointerUp={(e) => canManipulate && onManipPointerUp(e, raw)}
                   onPointerEnter={() => clickable && setHoveredBoothId(b.id)}
@@ -711,10 +914,10 @@ export function FloorPlan({
                     height={b.gridH}
                     rx={0.5}
                     ry={0.5}
-                    fill={isMultiSelected ? shadeColor(fill, -20) : clickable && isHovered ? shadeColor(fill, -30) : fill}
+                    fill={isGroupSelected ? shadeColor(fill, -20) : clickable && isHovered ? shadeColor(fill, -30) : fill}
                     opacity={b.status === "SOLD" ? 0.6 : backgroundImageUrl ? 0.85 : 1}
-                    stroke={isMultiSelected ? "#2563EB" : isSelected || b.isMine ? "#2E7D32" : clickable && isHovered ? "#FBF8F3" : "#3A2417"}
-                    strokeWidth={isMultiSelected ? 0.7 : isSelected || b.isMine ? 0.6 : clickable && isHovered ? 0.45 : 0.15}
+                    stroke={isGroupSelected ? "#2563EB" : isSelected || b.isMine ? "#2E7D32" : clickable && isHovered ? "#FBF8F3" : "#3A2417"}
+                    strokeWidth={isSelected || b.isMine ? 0.6 : clickable && isHovered ? 0.45 : 0.15}
                     style={{ transition: isBeingManipulated ? "none" : "fill 0.15s ease, stroke 0.15s ease, stroke-width 0.15s ease" }}
                   />
                   <text
@@ -731,24 +934,7 @@ export function FloorPlan({
                   </text>
                 </g>
 
-                {isMultiSelected && (
-                  <g style={{ pointerEvents: "none" }}>
-                    <circle cx={b.gridX + 1.6} cy={b.gridY + 1.6} r={1.3} fill="#2563EB" stroke="#FBF8F3" strokeWidth={0.25} />
-                    <text
-                      x={b.gridX + 1.6}
-                      y={b.gridY + 1.6}
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      fontSize={1.8}
-                      fontWeight={700}
-                      fill="#FBF8F3"
-                    >
-                      ✓
-                    </text>
-                  </g>
-                )}
-
-                {editable && isSelected && (
+                {editable && isSoleSelected && (
                   <>
                     {(["nw", "ne", "sw", "se"] as const).map((h) => {
                       const hx = h.includes("w") ? b.gridX : b.gridX + b.gridW;
@@ -817,6 +1003,20 @@ export function FloorPlan({
                 );
               })}
             </g>
+          )}
+
+          {rubberBand && (
+            <rect
+              x={Math.min(rubberBand.x1, rubberBand.x2)}
+              y={Math.min(rubberBand.y1, rubberBand.y2)}
+              width={Math.abs(rubberBand.x2 - rubberBand.x1)}
+              height={Math.abs(rubberBand.y2 - rubberBand.y1)}
+              fill="rgba(37,99,235,0.12)"
+              stroke="#2563EB"
+              strokeWidth={0.25}
+              strokeDasharray="1 0.6"
+              style={{ pointerEvents: "none" }}
+            />
           )}
         </svg>
       </div>
