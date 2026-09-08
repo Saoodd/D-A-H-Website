@@ -21,6 +21,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (Array.isArray(body.categories)) data.categories = body.categories.map(String).filter(Boolean);
   if ("floorPlanImageUrl" in body) data.floorPlanImageUrl = body.floorPlanImageUrl || null;
   if ("venueWidthM" in body) data.venueWidthM = body.venueWidthM ? Number(body.venueWidthM) : null;
+  if ("showPublicPricing" in body) data.showPublicPricing = Boolean(body.showPublicPricing);
   if (["DRAFT", "PUBLISHED", "CLOSED"].includes(body.status)) data.status = body.status;
   if ("whatsappVendorGroupLink" in body) data.whatsappVendorGroupLink = body.whatsappVendorGroupLink || null;
   if ("acceptanceDeadlineHours" in body) {

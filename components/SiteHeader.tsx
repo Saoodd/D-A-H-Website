@@ -13,7 +13,7 @@ export function SiteHeader({ vendorLoggedIn }: { vendorLoggedIn: boolean }) {
 
   const links = [
     { href: "/", label: t("nav.home") },
-    { href: "/markets", label: t("nav.markets") },
+    { href: "/events", label: t("nav.events") },
     { href: "/vendors", label: t("nav.vendors") },
     { href: "/gallery", label: t("nav.gallery") },
     { href: "/contact", label: t("nav.contact") },

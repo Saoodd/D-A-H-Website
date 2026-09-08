@@ -15,6 +15,7 @@ interface EventData {
   categories: string[];
   floorPlanImageUrl: string | null;
   venueWidthM: number | null;
+  showPublicPricing: boolean;
   status: string;
   whatsappVendorGroupLink: string | null;
   acceptanceDeadlineHours: number | null;
@@ -38,6 +39,7 @@ export function EventForm({
   const [duplicateFrom, setDuplicateFrom] = useState("");
   const [categories, setCategories] = useState<string[]>(initial?.categories || []);
   const [categoryDraft, setCategoryDraft] = useState("");
+  const [showPublicPricing, setShowPublicPricing] = useState(initial?.showPublicPricing ?? true);
 
   function addCategory() {
     const v = categoryDraft.trim();
@@ -65,6 +67,7 @@ export function EventForm({
       categories,
       floorPlanImageUrl: form.get("floorPlanImageUrl") || null,
       venueWidthM: form.get("venueWidthM") || null,
+      showPublicPricing,
       status: form.get("status"),
       whatsappVendorGroupLink: form.get("whatsappVendorGroupLink") || null,
       acceptanceDeadlineHours: form.get("acceptanceDeadlineHours") || null,
@@ -104,7 +107,7 @@ export function EventForm({
       </label>
 
       <div className="flex flex-col gap-1 text-sm sm:col-span-2">
-        <span>Vendor categories for this market</span>
+        <span>Vendor categories for this event</span>
         <div className="flex flex-wrap gap-2 mb-1">
           {categories.map((c) => (
             <span key={c} className="inline-flex items-center gap-1.5 text-xs bg-cream-deep text-brown-dark rounded-full px-3 py-1">
@@ -160,6 +163,10 @@ export function EventForm({
         label="Real venue width in meters (optional — shows real distances while dragging booths)"
         defaultValue={initial?.venueWidthM != null ? String(initial.venueWidthM) : undefined}
       />
+      <label className="flex items-center gap-2 text-sm sm:col-span-2">
+        <input type="checkbox" checked={showPublicPricing} onChange={(e) => setShowPublicPricing(e.target.checked)} />
+        Show public pricing (&ldquo;Booths from AED X&rdquo;) on this event&rsquo;s public page
+      </label>
 
       {!initial && existingEvents.length > 0 && (
         <label className="flex flex-col gap-1 text-sm sm:col-span-2">

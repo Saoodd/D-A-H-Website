@@ -114,12 +114,12 @@ export function DashboardClient({
       )}
 
       <h2 className="font-heading text-xl text-brown-dark mb-4">
-        {locale === "ar" ? "الأسواق القادمة" : "Upcoming markets"}
+        {locale === "ar" ? "الفعاليات القادمة" : "Upcoming events"}
       </h2>
 
       {availableEvents.length === 0 ? (
         <p className="text-brown-light text-sm mb-10">
-          {locale === "ar" ? "لا توجد أسواق جديدة للتقديم إليها حالياً." : "No new markets to apply to right now."}
+          {locale === "ar" ? "لا توجد فعاليات جديدة للتقديم إليها حالياً." : "No new events to apply to right now."}
         </p>
       ) : (
         <div className="space-y-3 mb-10">
@@ -161,7 +161,7 @@ export function DashboardClient({
 
       {applications.length === 0 ? (
         <p className="text-brown-light text-sm">
-          {locale === "ar" ? "لا توجد طلبات بعد — قدّم لأحد الأسواق أعلاه." : "No applications yet — apply to a market above."}
+          {locale === "ar" ? "لا توجد طلبات بعد — قدّم لإحدى الفعاليات أعلاه." : "No applications yet — apply to an event above."}
         </p>
       ) : (
         <div className="space-y-4">

@@ -339,7 +339,26 @@ export function ApplicationDetailClient({
 
           {!view.cancellationRequested ? (
             <div className="rounded-xl border border-brown/10 p-6">
-              <p className="text-sm text-brown-light mb-3">{locale === "ar" ? "بحاجة للإلغاء؟" : "Need to cancel?"}</p>
+              <p className="text-sm text-brown-light mb-1">{locale === "ar" ? "بحاجة للإلغاء؟" : "Need to cancel?"}</p>
+              <p className="text-xs text-brown-light mb-3">
+                {locale === "ar" ? (
+                  <>
+                    الحجوزات غير قابلة للاسترداد بعد الدفع، إلا في حالات استثنائية توافق عليها دار الحي. راجع{" "}
+                    <a href="/legal/refunds" className="underline">
+                      سياسة الاسترداد والإلغاء
+                    </a>
+                    .
+                  </>
+                ) : (
+                  <>
+                    Bookings are non-refundable once paid, except where DAH specifically approves an exception. See our{" "}
+                    <a href="/legal/refunds" className="underline">
+                      Refund &amp; Cancellation Policy
+                    </a>
+                    .
+                  </>
+                )}
+              </p>
               <textarea
                 value={cancelReason}
                 onChange={(e) => setCancelReason(e.target.value)}

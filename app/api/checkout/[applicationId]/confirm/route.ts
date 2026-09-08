@@ -58,21 +58,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
 
   if (outcome === "SUCCEEDED") {
     const soldAt = new Date();
-    await prisma.$transaction([
-      prisma.booth.update({
-        where: { id: booth.id },
-        data: {
-          status: "SOLD",
-          assignedApplicationId: applicationId,
-          heldByApplicationId: null,
-          holdStage: null,
-          holdExpiresAt: null,
-          priceAedFilsAtSale: payment.amountAedFils,
-          soldAt,
-        },
-      }),
-      prisma.payment.update({ where: { id: paymentId }, data: { status: "SUCCEEDED", paidAt: soldAt } }),
-    ]);
+    // Same TOCTOU concern as the booth-hold route: guard the actual write
+    // with the condition just re-checked above (still held by this
+    // application, in the PAYMENT stage) so a double-submit or a race with
+    // an expiry sweep can't sell the booth twice or out from under the hold.
+    const sale = await prisma.booth.updateMany({
+      where: { id: booth.id, heldByApplicationId: applicationId, holdStage: "PAYMENT" },
+      data: {
+        status: "SOLD",
+        assignedApplicationId: applicationId,
+        heldByApplicationId: null,
+        holdStage: null,
+        holdExpiresAt: null,
+        priceAedFilsAtSale: payment.amountAedFils,
+        soldAt,
+      },
+    });
+    if (sale.count === 0) {
+      await prisma.payment.update({ where: { id: paymentId }, data: { status: "FAILED" } });
+      return NextResponse.json(
+        { error: "Your payment session expired. Please select a booth again." },
+        { status: 409 }
+      );
+    }
+    await prisma.payment.update({ where: { id: paymentId }, data: { status: "SUCCEEDED", paidAt: soldAt } });
 
     await sendPaymentSuccessEmail({
       vendorEmail: application.email,

@@ -15,6 +15,11 @@ export async function PATCH(req: NextRequest) {
     const hours = Number(body.defaultAcceptanceDeadlineHours);
     if (hours > 0) data.defaultAcceptanceDeadlineHours = hours;
   }
+  if ("contactEmail" in body) data.contactEmail = body.contactEmail || null;
+  if ("contactInstagramHandle" in body) {
+    data.contactInstagramHandle = body.contactInstagramHandle ? String(body.contactInstagramHandle).replace(/^@/, "") : null;
+  }
+  if ("tradeLicenseRequired" in body) data.tradeLicenseRequired = Boolean(body.tradeLicenseRequired);
 
   const settings = await prisma.settings.update({ where: { id: "singleton" }, data });
   return NextResponse.json({ ok: true, settings });

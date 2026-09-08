@@ -33,7 +33,7 @@ export function HomeClient({ nextEvent }: { nextEvent: NextEvent | null }) {
           <Reveal delayMs={300}>
             <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
-                href="/markets"
+                href="/events"
                 className="px-7 py-3 rounded-full bg-brown text-cream-soft text-sm tracking-wide hover:bg-brown-dark transition-colors"
               >
                 {t("home.ctaMarkets")}
@@ -63,7 +63,7 @@ export function HomeClient({ nextEvent }: { nextEvent: NextEvent | null }) {
                   {" · "}
                   {nextEvent.location}
                 </span>
-                <Link href={`/markets/${nextEvent.slug}`} className="text-sm underline text-brown">
+                <Link href={`/events/${nextEvent.slug}`} className="text-sm underline text-brown">
                   {t("markets.viewDetails")}
                 </Link>
               </div>

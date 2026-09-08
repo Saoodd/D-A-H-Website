@@ -10,20 +10,22 @@ export default function RefundsPage() {
         This policy covers booth bookings made through the Dar Al Hay (DAH) vendor dashboard.
       </p>
       <p>
-        <strong>Requesting a cancellation.</strong> A vendor with a confirmed, paid booth may
-        request a cancellation from their dashboard or booking confirmation page. This submits a
-        request to DAH — it does not automatically process a refund.
+        <strong>Bookings are non-refundable.</strong> Once a booth is confirmed and paid for, the
+        booking fee is non-refundable. This applies regardless of the reason for cancelling or how
+        close to the event date the cancellation is requested.
       </p>
       <p>
-        <strong>Review &amp; refunds.</strong> Our team reviews every cancellation request
-        individually and processes any applicable refund manually via the original payment
-        method. Refund amounts and eligibility depend on how close to the event date the request
-        is made — DAH will confirm the outcome directly with the vendor.
+        <strong>Exceptions are at DAH&rsquo;s discretion.</strong> A vendor with a confirmed, paid
+        booth may submit a cancellation request from their dashboard or booking confirmation page.
+        Submitting a request does not entitle the vendor to a refund — DAH reviews each request
+        individually and may, at its sole discretion, approve a full or partial refund or a credit
+        toward a future event. Any exception DAH approves will be confirmed directly with the
+        vendor before it is processed.
       </p>
       <p>
         <strong>Unpaid, expired acceptances.</strong> If a vendor is accepted but does not
         complete payment within their acceptance deadline, their acceptance and any booth hold
-        expire automatically — no charge is made and no refund is applicable.
+        expire automatically — no charge is made, so no refund question arises.
       </p>
       <p>
         <strong>Adjustments.</strong> Any manual charge or adjustment added to a booking by DAH

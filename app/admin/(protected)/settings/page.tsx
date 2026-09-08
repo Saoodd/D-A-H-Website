@@ -12,6 +12,9 @@ export default async function AdminSettingsPage() {
       <SettingsClient
         mainCommunityWhatsappLink={settings.mainCommunityWhatsappLink}
         defaultAcceptanceDeadlineHours={settings.defaultAcceptanceDeadlineHours}
+        contactEmail={settings.contactEmail}
+        contactInstagramHandle={settings.contactInstagramHandle}
+        tradeLicenseRequired={settings.tradeLicenseRequired}
       />
     </div>
   );

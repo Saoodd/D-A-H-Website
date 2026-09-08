@@ -4,7 +4,15 @@ import { useState } from "react";
 import { useLocale } from "@/lib/i18n/context";
 import { Reveal } from "@/components/Reveal";
 
-export function ContactClient({ communityLink }: { communityLink: string | null }) {
+export function ContactClient({
+  communityLink,
+  contactEmail,
+  contactInstagramHandle,
+}: {
+  communityLink: string | null;
+  contactEmail: string | null;
+  contactInstagramHandle: string | null;
+}) {
   const { t, locale } = useLocale();
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
@@ -42,17 +50,21 @@ export function ContactClient({ communityLink }: { communityLink: string | null 
         <p className="mt-3 text-brown-light">{t("contact.subtitle")}</p>
 
         <div className="mt-8 space-y-4 text-sm">
-          <a
-            href="https://instagram.com/daralhay"
-            target="_blank"
-            rel="noreferrer"
-            className="block text-brown hover:underline"
-          >
-            Instagram &rarr; @daralhay
-          </a>
-          <a href="mailto:hello@daralhay.ae" className="block text-brown hover:underline">
-            hello@daralhay.ae
-          </a>
+          {contactInstagramHandle && (
+            <a
+              href={`https://instagram.com/${contactInstagramHandle}`}
+              target="_blank"
+              rel="noreferrer"
+              className="block text-brown hover:underline"
+            >
+              Instagram &rarr; @{contactInstagramHandle}
+            </a>
+          )}
+          {contactEmail && (
+            <a href={`mailto:${contactEmail}`} className="block text-brown hover:underline">
+              {contactEmail}
+            </a>
+          )}
           {communityLink && (
             <a
               href={communityLink}

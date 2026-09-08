@@ -31,13 +31,13 @@ export const metadata: Metadata = {
     template: "%s — Dar Al Hay (DAH)",
   },
   description:
-    "Dar Al Hay (DAH) curates community pop-up markets in Dubai that give young and emerging entrepreneurs a real audience, real sales, and room to grow.",
+    "Dar Al Hay (DAH) curates events and pop-ups across Dubai that give ambitious businesses a real audience, real sales, and room to grow.",
   openGraph: {
     type: "website",
     siteName: "Dar Al Hay (DAH)",
     title: "Dar Al Hay (DAH) — A Stage for Dubai's Young Entrepreneurs",
     description:
-      "Dar Al Hay (DAH) curates community pop-up markets in Dubai that give young and emerging entrepreneurs a real audience, real sales, and room to grow.",
+      "Dar Al Hay (DAH) curates events and pop-ups across Dubai that give ambitious businesses a real audience, real sales, and room to grow.",
   },
   twitter: {
     card: "summary_large_image",

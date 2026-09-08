@@ -16,7 +16,7 @@ interface EventCard {
   minPriceAedFils: number | null;
 }
 
-export function MarketsClient({ events }: { events: EventCard[] }) {
+export function EventsClient({ events }: { events: EventCard[] }) {
   const { t, locale } = useLocale();
 
   return (
@@ -35,7 +35,7 @@ export function MarketsClient({ events }: { events: EventCard[] }) {
           {events.map((e, i) => (
             <Reveal key={e.slug} delayMs={(i % 3) * 100}>
               <Link
-                href={`/markets/${e.slug}`}
+                href={`/events/${e.slug}`}
                 className="group block rounded-2xl overflow-hidden border border-brown/10 bg-cream hover:shadow-lg transition-shadow"
               >
                 <div

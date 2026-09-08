@@ -41,23 +41,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ boo
 
   const holdExpiresAt = new Date(Date.now() + BOOTH_REVIEW_HOLD_MINUTES * 60 * 1000);
 
-  await prisma.$transaction([
-    // Release any other booth this application might already be holding —
-    // a vendor can only actively hold one booth at a time.
-    prisma.booth.updateMany({
-      where: { heldByApplicationId: applicationId, id: { not: boothId }, status: "HELD" },
-      data: { status: "AVAILABLE", holdStage: null, holdExpiresAt: null, heldByApplicationId: null },
-    }),
-    prisma.booth.update({
-      where: { id: boothId },
-      data: {
-        status: "HELD",
-        holdStage: "REVIEW",
-        holdExpiresAt,
-        heldByApplicationId: applicationId,
-      },
-    }),
-  ]);
+  // The read above only proves the booth LOOKED available a moment ago — if
+  // two vendors click the same booth at nearly the same instant, both reads
+  // can pass before either write lands. Guard the actual write with the same
+  // condition (status still AVAILABLE, or already held by this application)
+  // so the database — not this request's stale read — is what decides who
+  // wins: only one concurrent claim can match a row whose status just
+  // changed out from under it.
+  const claim = await prisma.booth.updateMany({
+    where: {
+      id: boothId,
+      OR: [{ status: "AVAILABLE" }, { heldByApplicationId: applicationId }],
+    },
+    data: {
+      status: "HELD",
+      holdStage: "REVIEW",
+      holdExpiresAt,
+      heldByApplicationId: applicationId,
+    },
+  });
+  if (claim.count === 0) {
+    return NextResponse.json({ error: "That booth is no longer available." }, { status: 409 });
+  }
+
+  // Release any other booth this application might already be holding — a
+  // vendor can only actively hold one booth at a time.
+  await prisma.booth.updateMany({
+    where: { heldByApplicationId: applicationId, id: { not: boothId }, status: "HELD" },
+    data: { status: "AVAILABLE", holdStage: null, holdExpiresAt: null, heldByApplicationId: null },
+  });
 
   return NextResponse.json({ ok: true, holdExpiresAt: holdExpiresAt.toISOString() });
 }

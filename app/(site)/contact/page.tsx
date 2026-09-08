@@ -9,5 +9,11 @@ export const metadata: Metadata = {
 
 export default async function ContactPage() {
   const settings = await getSettings();
-  return <ContactClient communityLink={settings.mainCommunityWhatsappLink} />;
+  return (
+    <ContactClient
+      communityLink={settings.mainCommunityWhatsappLink}
+      contactEmail={settings.contactEmail}
+      contactInstagramHandle={settings.contactInstagramHandle}
+    />
+  );
 }

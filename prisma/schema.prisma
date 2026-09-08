@@ -24,7 +24,18 @@ model Settings {
   id                             String   @id @default("singleton")
   mainCommunityWhatsappLink      String? // Main DAH Community Group — account-level, not tied to any event
   defaultAcceptanceDeadlineHours Int      @default(24)
-  updatedAt                      DateTime @updatedAt
+
+  // Single source of truth for contact details shown across the public site
+  // (Contact page, footer, emails) — never hardcode these in components.
+  contactEmail            String?
+  contactInstagramHandle  String? // without the leading @
+
+  // Single source of truth for the trade-license requirement so vendor
+  // registration copy and the Terms & Conditions page can never contradict
+  // each other. false = optional (default — matches current stated policy).
+  tradeLicenseRequired Boolean @default(false)
+
+  updatedAt DateTime @updatedAt
 }
 
 // ---------------------------------------------------------------------------
@@ -53,8 +64,12 @@ model Event {
   endDate     DateTime?
   location    String
   coverImage  String?
-  categories  String[]  @default([]) // vendor categories relevant to this market — shown publicly and offered as choices on the application form
+  categories  String[]  @default([]) // vendor categories relevant to this event — shown publicly and offered as choices on the application form
   status      String    @default("DRAFT") // DRAFT | PUBLISHED | CLOSED
+
+  // Whether the public event page shows a "Booths from AED X" starting
+  // price. Defaults on to match prior behavior; admin can hide it per event.
+  showPublicPricing Boolean @default(true)
 
   // Optional background image for the floor plan builder/viewer — when set,
   // booth/feature gridX/Y/W/H are read as percentages (0-100) of this

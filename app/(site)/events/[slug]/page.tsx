@@ -13,7 +13,7 @@ export async function generateMetadata({
   if (!event) return {};
   return {
     title: event.name,
-    description: event.description || `${event.name} — a Dar Al Hay community market in ${event.location}.`,
+    description: event.description || `${event.name} — a Dar Al Hay event in ${event.location}.`,
     openGraph: {
       title: event.name,
       description: event.description,
@@ -31,7 +31,7 @@ export default async function EventDetailPage({
   const event = await getEventBySlugPublic(slug);
   if (!event) notFound();
 
-  const minPrice = await getMinPriceForEvent(event.id);
+  const minPrice = event.showPublicPricing ? await getMinPriceForEvent(event.id) : null;
 
   return (
     <EventDetailClient

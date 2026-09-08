@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/LegalPage";
+import { getSettings } from "@/lib/settings";
 
 export const metadata: Metadata = { title: "Terms & Conditions" };
 
-export default function TermsPage() {
+export default async function TermsPage() {
+  const settings = await getSettings();
   return (
     <LegalPage title="Terms & Conditions">
       <p>
@@ -23,9 +25,12 @@ export default function TermsPage() {
         checkout and is not confirmed until payment succeeds.
       </p>
       <p>
-        <strong>3. Vendor obligations.</strong> Vendors must hold a valid trade license, arrive
-        and depart within the published event hours, keep their booth in good order, and comply
-        with venue and municipality rules.
+        <strong>3. Vendor obligations.</strong>{" "}
+        {settings.tradeLicenseRequired
+          ? "Vendors must hold a valid trade license, "
+          : "Vendors should hold a valid trade license where applicable to their business — DAH may ask for one before confirming a booking, "}
+        arrive and depart within the published event hours, keep their booth in good order, and
+        comply with venue and municipality rules.
       </p>
       <p>
         <strong>4. Fees.</strong> Booth fees are as displayed at checkout and are VAT-inclusive
@@ -33,7 +38,8 @@ export default function TermsPage() {
         (e.g. additional equipment, a late setup fee agreed in advance).
       </p>
       <p>
-        <strong>5. Cancellations.</strong> See our Refund &amp; Cancellation Policy.
+        <strong>5. Cancellations.</strong> Bookings are non-refundable once paid, except where DAH
+        specifically approves an exception. See our Refund &amp; Cancellation Policy.
       </p>
       <p>
         <strong>6. Liability.</strong> DAH is not liable for loss, damage or injury arising from a

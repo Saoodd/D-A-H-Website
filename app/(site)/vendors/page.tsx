@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
+import { getSettings } from "@/lib/settings";
 import { VendorsClient } from "./VendorsClient";
 
 export const metadata: Metadata = {
-  title: "Vendor Info & Application",
-  description: "Grow your business at a Dar Al Hay market — requirements, expectations, and how to create your DAH business account.",
+  title: "Become a DAH Vendor",
+  description: "Create your DAH business account, then apply to individual Dar Al Hay events once you're verified.",
 };
 
-export default function VendorsPage() {
-  return <VendorsClient />;
+export default async function VendorsPage() {
+  const settings = await getSettings();
+  return <VendorsClient tradeLicenseRequired={settings.tradeLicenseRequired} />;
 }

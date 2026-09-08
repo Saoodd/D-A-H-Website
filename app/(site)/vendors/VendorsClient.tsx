@@ -7,7 +7,7 @@ import { PhoneField } from "@/components/PhoneField";
 import { Reveal } from "@/components/Reveal";
 import { VENDOR_CATEGORIES } from "@/lib/constants";
 
-export function VendorsClient() {
+export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: boolean }) {
   const { t, locale } = useLocale();
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
@@ -75,9 +75,13 @@ export function VendorsClient() {
         </h2>
         <ul className="space-y-2 text-brown-light text-sm list-disc pl-4">
           <li>
-            {locale === "ar"
-              ? "رخصة تجارية (اختيارية — أخبرنا إن لم تكن لديك بعد) وتأمين مناسب"
-              : "Trade license (optional — let us know if you don't have one yet) and appropriate insurance"}
+            {tradeLicenseRequired
+              ? locale === "ar"
+                ? "رخصة تجارية سارية المفعول"
+                : "A valid trade license"
+              : locale === "ar"
+              ? "رخصة تجارية (اختيارية — أخبرنا إن لم تكن لديك بعد)"
+              : "Trade license (optional — let us know if you don't have one yet)"}
           </li>
           <li>{locale === "ar" ? "الالتزام بمواعيد الإعداد والتفكيك" : "On-time setup and breakdown per the event schedule"}</li>
           <li>{locale === "ar" ? "تقديم منتج/خدمة تتماشى مع هوية دار الحي" : "A product or service that fits the DAH brand and mix"}</li>
@@ -85,8 +89,14 @@ export function VendorsClient() {
         </ul>
         <p className="mt-4 text-xs text-brown-light">
           {locale === "ar"
-            ? "بعد إنشاء حسابك، سيقوم فريقنا بمراجعة عملك والتحقق منه. بمجرد التحقق، يمكنك التقديم لأي سوق قادم من لوحتك — عندها تُشارك رسوم الأكشاك."
-            : "After you create your account, our team reviews and verifies your business. Once verified, you can apply to any upcoming market from your dashboard — booth fees are shared with you at that point."}
+            ? "بعد إنشاء حسابك، سيقوم فريقنا بمراجعة عملك والتحقق منه. بمجرد التحقق، يمكنك التقديم لأي فعالية قادمة من لوحتك."
+            : "After you create your account, our team reviews and verifies your business. Once verified, you can apply to any upcoming event from your dashboard."}
+        </p>
+        <p className="mt-4 text-sm text-brown-light">
+          {t("vendorInfo.loginPrompt")}{" "}
+          <Link href="/vendor/login" className="underline text-brown">
+            {t("vendorInfo.loginLink")}
+          </Link>
         </p>
       </Reveal>
 

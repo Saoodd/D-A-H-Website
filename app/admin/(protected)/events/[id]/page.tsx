@@ -35,6 +35,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
           categories: event.categories,
           floorPlanImageUrl: event.floorPlanImageUrl,
           venueWidthM: event.venueWidthM,
+          showPublicPricing: event.showPublicPricing,
           status: event.status,
           whatsappVendorGroupLink: event.whatsappVendorGroupLink,
           acceptanceDeadlineHours: event.acceptanceDeadlineHours,

@@ -65,7 +65,7 @@ export async function sendVendorVerifiedEmail(opts: { vendorEmail: string; busin
     opts.vendorEmail,
     `You're verified — welcome to Dar Al Hay`,
     wrap(`<h2 style="margin-top:0;">You're verified, ${opts.businessName}!</h2>
-      <p>Your business account has been verified. You can now log into your <a href="${siteUrl()}/vendor/dashboard">dashboard</a> and apply to upcoming DAH markets.</p>`)
+      <p>Your business account has been verified. You can now log into your <a href="${siteUrl()}/vendor/dashboard">dashboard</a> and apply to upcoming DAH events.</p>`)
   );
 }
 
@@ -131,7 +131,7 @@ export async function sendApplicationRejectedEmail(opts: {
     `Update on your application — ${opts.eventName}`,
     wrap(`<h2 style="margin-top:0;">Hi ${opts.businessName},</h2>
       <p>Thank you for applying to <strong>${opts.eventName}</strong>. Unfortunately we're not able to offer you a spot this time.</p>
-      <p>We'd love to see an application from you for a future market — please keep an eye on our upcoming events.</p>`)
+      <p>We'd love to see an application from you for a future event — please keep an eye on our upcoming events.</p>`)
   );
 }
 

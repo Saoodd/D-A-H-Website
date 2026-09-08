@@ -6,13 +6,22 @@ import { useRouter } from "next/navigation";
 export function SettingsClient({
   mainCommunityWhatsappLink,
   defaultAcceptanceDeadlineHours,
+  contactEmail,
+  contactInstagramHandle,
+  tradeLicenseRequired,
 }: {
   mainCommunityWhatsappLink: string | null;
   defaultAcceptanceDeadlineHours: number;
+  contactEmail: string | null;
+  contactInstagramHandle: string | null;
+  tradeLicenseRequired: boolean;
 }) {
   const router = useRouter();
   const [link, setLink] = useState(mainCommunityWhatsappLink || "");
   const [hours, setHours] = useState(String(defaultAcceptanceDeadlineHours));
+  const [email, setEmail] = useState(contactEmail || "");
+  const [instagram, setInstagram] = useState(contactInstagramHandle || "");
+  const [licenseRequired, setLicenseRequired] = useState(tradeLicenseRequired);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -23,7 +32,13 @@ export function SettingsClient({
       await fetch("/api/admin/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mainCommunityWhatsappLink: link, defaultAcceptanceDeadlineHours: Number(hours) }),
+        body: JSON.stringify({
+          mainCommunityWhatsappLink: link,
+          defaultAcceptanceDeadlineHours: Number(hours),
+          contactEmail: email,
+          contactInstagramHandle: instagram,
+          tradeLicenseRequired: licenseRequired,
+        }),
       });
       setSaved(true);
       router.refresh();
@@ -38,8 +53,28 @@ export function SettingsClient({
         Main DAH Community Group (WhatsApp link)
         <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://chat.whatsapp.com/…" className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft" />
         <span className="text-xs text-brown-light">
-          Site-wide — visible to every registered vendor regardless of application status.
+          Shown as a button on the public Contact page, and visible to every registered vendor in their dashboard.
         </span>
+      </label>
+
+      <label className="flex flex-col gap-1 text-sm">
+        Contact email
+        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="hello@daralhay.ae" className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft" />
+        <span className="text-xs text-brown-light">Shown on the public Contact page.</span>
+      </label>
+
+      <label className="flex flex-col gap-1 text-sm">
+        Instagram handle
+        <div className="flex items-center border border-brown/20 rounded-lg bg-cream-soft overflow-hidden focus-within:ring-1 focus-within:ring-brown w-56">
+          <span className="pl-3 pr-1 text-brown-light select-none">@</span>
+          <input
+            value={instagram}
+            onChange={(e) => setInstagram(e.target.value.replace(/^@/, ""))}
+            placeholder="daralhay"
+            className="flex-1 min-w-0 px-1 py-2 pr-3 bg-transparent outline-none"
+          />
+        </div>
+        <span className="text-xs text-brown-light">Shown on the public Contact page.</span>
       </label>
 
       <label className="flex flex-col gap-1 text-sm">
@@ -49,6 +84,15 @@ export function SettingsClient({
           Applies to future approvals unless overridden per-event or at the moment of approval.
         </span>
       </label>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={licenseRequired} onChange={(e) => setLicenseRequired(e.target.checked)} />
+        Require a trade license to become a vendor
+      </label>
+      <p className="text-xs text-brown-light -mt-4">
+        Controls the wording on the vendor registration page and the Terms &amp; Conditions — one switch, so they can
+        never contradict each other. Off means optional (current default).
+      </p>
 
       {saved && <p className="text-sm text-green-700">Saved.</p>}
 

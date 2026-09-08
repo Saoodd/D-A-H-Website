@@ -19,7 +19,7 @@ export default function OpengraphImage() {
       >
         <div style={{ fontSize: 72, color: "#6B4429", letterSpacing: 12, fontWeight: 300 }}>D·A·H</div>
         <div style={{ fontSize: 24, color: "#96775C", letterSpacing: 6, marginTop: 16 }}>
-          COMMUNITY POP-UP MARKETS · DUBAI
+          EVENTS & POP-UPS · DUBAI
         </div>
       </div>
     ),

@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import { getPublishedUpcomingEvents, getMinPriceForEvent } from "@/lib/events";
-import { MarketsClient } from "./MarketsClient";
+import { EventsClient } from "./EventsClient";
 
 export const metadata: Metadata = {
-  title: "Upcoming Markets",
-  description: "DAH's upcoming community pop-up markets in Dubai — dates, locations and vendor categories.",
+  title: "Upcoming Events",
+  description: "Dar Al Hay's upcoming events and pop-ups in Dubai — dates, locations and vendor categories.",
 };
 
-export default async function MarketsPage() {
+export default async function EventsPage() {
   const events = await getPublishedUpcomingEvents();
   const withPricing = await Promise.all(
     events.map(async (e) => ({
@@ -18,9 +18,9 @@ export default async function MarketsPage() {
       startDate: e.startDate.toISOString(),
       coverImage: e.coverImage,
       categories: e.categories,
-      minPriceAedFils: await getMinPriceForEvent(e.id),
+      minPriceAedFils: e.showPublicPricing ? await getMinPriceForEvent(e.id) : null,
     }))
   );
 
-  return <MarketsClient events={withPricing} />;
+  return <EventsClient events={withPricing} />;
 }

@@ -21,8 +21,8 @@ export function PendingVerificationClient({ businessName }: { businessName: stri
       </h1>
       <p className="text-brown-light text-sm mb-8">
         {locale === "ar"
-          ? "شكراً لإنشائك حساب عملك. سيقوم فريق دار الحي بمراجعة عملك والتحقق منه — سنُعلمك عبر البريد الإلكتروني بمجرد اكتمال ذلك، وحينها ستتمكن من التقديم للأسواق القادمة من هنا."
-          : "Thanks for creating your DAH business account. Our team is reviewing and verifying your business — we'll email you once that's done, and you'll be able to apply to upcoming markets right from here."}
+          ? "شكراً لإنشائك حساب عملك. سيقوم فريق دار الحي بمراجعة عملك والتحقق منه — سنُعلمك عبر البريد الإلكتروني بمجرد اكتمال ذلك، وحينها ستتمكن من التقديم للفعاليات القادمة من هنا."
+          : "Thanks for creating your DAH business account. Our team is reviewing and verifying your business — we'll email you once that's done, and you'll be able to apply to upcoming events right from here."}
       </p>
       <button onClick={logout} className="text-sm text-brown-light underline">
         {locale === "ar" ? "تسجيل الخروج" : "Log out"}

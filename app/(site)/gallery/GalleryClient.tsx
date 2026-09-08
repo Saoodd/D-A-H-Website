@@ -21,17 +21,14 @@ export function GalleryClient({ images }: { images: Img[] }) {
       </Reveal>
 
       {images.length === 0 ? (
-        <p className="text-brown-light">
-          {/* eslint-disable-next-line react/no-unescaped-entities */}
-          No photos yet — add some from the admin panel's Gallery section.
-        </p>
+        <p className="text-brown-light">{t("gallery.empty")}</p>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {images.map((img, i) => (
             <Reveal key={img.id} delayMs={(i % 6) * 70}>
               <figure className="rounded-xl overflow-hidden bg-cream-deep">
                 {/* eslint-disable-next-line @next/next/no-img-element -- admin-managed external URLs, not local static assets */}
-                <img src={img.url} alt={img.caption || "Dar Al Hay market"} className="w-full h-48 object-cover" />
+                <img src={img.url} alt={img.caption || "Dar Al Hay event"} className="w-full h-48 object-cover" />
                 {img.caption && <figcaption className="text-xs text-brown-light p-2">{img.caption}</figcaption>}
               </figure>
             </Reveal>

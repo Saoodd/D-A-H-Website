@@ -15,9 +15,9 @@ export function SiteFooter() {
         </div>
         <div className="flex flex-col sm:flex-row gap-10 text-sm">
           <div>
-            <p className="font-heading text-brown mb-3">{t("nav.markets")}</p>
+            <p className="font-heading text-brown mb-3">{t("nav.events")}</p>
             <ul className="space-y-2 text-brown-light">
-              <li><Link href="/markets" className="hover:text-brown">{t("nav.markets")}</Link></li>
+              <li><Link href="/events" className="hover:text-brown">{t("nav.events")}</Link></li>
               <li><Link href="/vendors" className="hover:text-brown">{t("nav.vendors")}</Link></li>
               <li><Link href="/gallery" className="hover:text-brown">{t("nav.gallery")}</Link></li>
             </ul>
@@ -34,7 +34,6 @@ export function SiteFooter() {
             <p className="font-heading text-brown mb-3">{t("nav.contact")}</p>
             <ul className="space-y-2 text-brown-light">
               <li><Link href="/contact" className="hover:text-brown">{t("nav.contact")}</Link></li>
-              <li><Link href="/admin" className="hover:text-brown">{t("nav.admin")}</Link></li>
             </ul>
           </div>
         </div>
