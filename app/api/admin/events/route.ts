@@ -79,6 +79,28 @@ export async function POST(req: NextRequest) {
         })),
       });
     }
+
+    // Copy the source event's current Terms & Conditions as a starting
+    // point — a brand-new, independent v1 for this event. Never a
+    // reference back to the source: editing this event's terms must never
+    // touch the original event's agreement.
+    const sourceTerms = await prisma.agreement.findFirst({
+      where: { type: "EVENT_TERMS", eventId: duplicateFromEventId, status: "PUBLISHED" },
+      orderBy: { version: "desc" },
+    });
+    if (sourceTerms) {
+      await prisma.agreement.create({
+        data: {
+          type: "EVENT_TERMS",
+          eventId: event.id,
+          version: 1,
+          title: sourceTerms.title,
+          bodyHtml: sourceTerms.bodyHtml,
+          status: "PUBLISHED",
+          publishedAt: new Date(),
+        },
+      });
+    }
   }
 
   return NextResponse.json({ ok: true, event });

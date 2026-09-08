@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getDisplayStatus } from "@/lib/status";
+import { getPublishedAgreement } from "@/lib/agreements";
 import { EventWorkspaceClient } from "./EventWorkspaceClient";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -36,6 +37,21 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
   const uniqueVendors = Array.from(
     new Map(applications.map((a) => [a.vendor.id, { id: a.vendor.id, businessName: a.vendor.businessName, verified: a.vendor.verified }])).values()
   );
+
+  // Terms Status: for every application that reached acceptance (i.e. is
+  // actually required to go through Event Terms), has it accepted the
+  // CURRENTLY published version? Only meaningful once the event has a
+  // published Event Terms agreement at all.
+  const acceptedApplications = applications.filter((a) => a.status === "ACCEPTED");
+  const publishedEventTerms = await getPublishedAgreement("EVENT_TERMS", id);
+  let acceptedTermsApplicationIds = new Set<string>();
+  if (publishedEventTerms && acceptedApplications.length > 0) {
+    const accs = await prisma.agreementAcceptance.findMany({
+      where: { agreementId: publishedEventTerms.id, applicationId: { in: acceptedApplications.map((a) => a.id) } },
+      select: { applicationId: true },
+    });
+    acceptedTermsApplicationIds = new Set(accs.map((a) => a.applicationId as string));
+  }
 
   return (
     <EventWorkspaceClient
@@ -95,6 +111,15 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
         floorPlanImageUrl: event.floorPlanImageUrl,
         venueWidthM: event.venueWidthM,
         tiers: tiers.map((t) => ({ sizeKey: t.sizeKey, label: t.label, priceAedFils: t.priceAedFils })),
+      }}
+      termsStatus={{
+        hasPublishedTerms: !!publishedEventTerms,
+        rows: acceptedApplications.map((a) => ({
+          applicationId: a.id,
+          businessName: a.businessName,
+          displayStatus: getDisplayStatus(a, a.payments.length > 0),
+          acceptedTerms: acceptedTermsApplicationIds.has(a.id),
+        })),
       }}
     />
   );

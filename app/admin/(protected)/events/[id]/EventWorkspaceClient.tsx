@@ -8,8 +8,9 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EventForm } from "../EventForm";
 import { FloorPlanBuilder } from "./FloorPlanBuilder";
 import { EventDangerZone } from "./EventDangerZone";
+import { AgreementEditor } from "@/components/admin/AgreementEditor";
 
-type Tab = "overview" | "applications" | "floorplan" | "vendors" | "payments" | "settings";
+type Tab = "overview" | "applications" | "floorplan" | "vendors" | "payments" | "terms" | "settings";
 
 interface AppRow {
   id: string;
@@ -42,6 +43,13 @@ const displayStatusTone: Record<DisplayStatus, "neutral" | "positive" | "attenti
   EXPIRED: "neutral",
 };
 
+interface TermsStatusRow {
+  applicationId: string;
+  businessName: string;
+  displayStatus: DisplayStatus;
+  acceptedTerms: boolean;
+}
+
 export function EventWorkspaceClient({
   event,
   stats,
@@ -50,6 +58,7 @@ export function EventWorkspaceClient({
   payments,
   eventFormProps,
   floorPlanProps,
+  termsStatus,
 }: {
   event: { id: string; name: string; status: string };
   stats: {
@@ -67,8 +76,11 @@ export function EventWorkspaceClient({
   payments: PaymentRow[];
   eventFormProps: React.ComponentProps<typeof EventForm>;
   floorPlanProps: React.ComponentProps<typeof FloorPlanBuilder>;
+  termsStatus: { hasPublishedTerms: boolean; rows: TermsStatusRow[] };
 }) {
   const [tab, setTab] = useState<Tab>("overview");
+
+  const acceptedCount = termsStatus.rows.filter((r) => r.acceptedTerms).length;
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: "overview", label: "Overview" },
@@ -76,6 +88,7 @@ export function EventWorkspaceClient({
     { key: "floorplan", label: "Floor Plan & Booths" },
     { key: "vendors", label: "Vendors", count: stats.vendorsCount },
     { key: "payments", label: "Payments", count: payments.length },
+    { key: "terms", label: "Terms & Conditions" },
     { key: "settings", label: "Settings" },
   ];
 
@@ -209,6 +222,37 @@ export function EventWorkspaceClient({
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {tab === "terms" && (
+        <div className="max-w-3xl space-y-8">
+          {termsStatus.hasPublishedTerms && termsStatus.rows.length > 0 && (
+            <div>
+              <p className="label-caps mb-3">
+                Terms status — {acceptedCount} / {termsStatus.rows.length} accepted
+              </p>
+              <div className="space-y-2">
+                {termsStatus.rows.map((r) => (
+                  <Link
+                    key={r.applicationId}
+                    href={`/admin/applications/${r.applicationId}`}
+                    className="flex items-center justify-between gap-3 rounded-[8px] border border-brown/10 bg-cream hover:border-brown/25 px-4 py-3 transition-colors"
+                  >
+                    <span className="text-sm text-brown-dark">{r.businessName}</span>
+                    <div className="flex items-center gap-2">
+                      <StatusBadge label={r.displayStatus.replace("_", " ")} tone={displayStatusTone[r.displayStatus]} />
+                      <StatusBadge label={r.acceptedTerms ? "Accepted" : "Awaiting"} tone={r.acceptedTerms ? "positive" : "attention"} />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+          <div>
+            <p className="label-caps mb-4">This event&rsquo;s Terms &amp; Conditions</p>
+            <AgreementEditor type="EVENT_TERMS" eventId={event.id} scopeLabel="this event's Terms & Conditions" />
+          </div>
         </div>
       )}
 
