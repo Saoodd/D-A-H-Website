@@ -18,7 +18,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "nav.vendorLogin": "Vendor Login",
     "nav.vendorDashboard": "My Dashboard",
 
-    "footer.tagline": "A stage for Dubai's next generation of entrepreneurs.",
+    "footer.tagline": "A stage for Dubai's most ambitious independent businesses.",
     "footer.legal": "Legal",
     "footer.terms": "Terms & Conditions",
     "footer.privacy": "Privacy Policy",
@@ -26,7 +26,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "footer.rights": "All rights reserved.",
 
     "home.heroKicker": "Dar Al Hay Events",
-    "home.heroTitle": "A stage for Dubai's next generation of entrepreneurs.",
+    "home.heroTitle": "A stage for Dubai's most ambitious independent businesses.",
     "home.heroSubtitle":
       "Dar Al Hay (DAH) curates events and pop-ups across Dubai that give ambitious businesses a real audience, real sales, and room to grow.",
     "home.ctaMarkets": "See upcoming events",
@@ -197,7 +197,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "nav.vendorLogin": "دخول البائعين",
     "nav.vendorDashboard": "لوحتي",
 
-    "footer.tagline": "منصة للجيل القادم من رواد الأعمال في دبي.",
+    "footer.tagline": "منصة لأصحاب الأعمال المستقلة الأكثر طموحاً في دبي.",
     "footer.legal": "قانوني",
     "footer.terms": "الشروط والأحكام",
     "footer.privacy": "سياسة الخصوصية",
@@ -205,7 +205,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "footer.rights": "جميع الحقوق محفوظة.",
 
     "home.heroKicker": "دار الحي للفعاليات",
-    "home.heroTitle": "منصة للجيل القادم من رواد الأعمال في دبي.",
+    "home.heroTitle": "منصة لأصحاب الأعمال المستقلة الأكثر طموحاً في دبي.",
     "home.heroSubtitle":
       "دار الحي (DAH) تنسّق فعاليات وأسواقاً منبثقة في جميع أنحاء دبي تمنح المشاريع الطموحة جمهوراً حقيقياً، ومبيعات حقيقية، ومساحة للنمو.",
     "home.ctaMarkets": "شاهد الفعاليات القادمة",

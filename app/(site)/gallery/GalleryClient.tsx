@@ -2,6 +2,7 @@
 
 import { useLocale } from "@/lib/i18n/context";
 import { Reveal } from "@/components/Reveal";
+import { EmptyState, PageHeader } from "@/components/ui/Card";
 
 interface Img {
   id: string;
@@ -14,14 +15,11 @@ export function GalleryClient({ images }: { images: Img[] }) {
   return (
     <div className="container-page py-16">
       <Reveal>
-        <header className="max-w-2xl mb-12">
-          <h1 className="font-heading text-3xl md:text-4xl text-brown-dark">{t("gallery.title")}</h1>
-          <p className="mt-3 text-brown-light">{t("gallery.subtitle")}</p>
-        </header>
+        <PageHeader title={t("gallery.title")} description={t("gallery.subtitle")} />
       </Reveal>
 
       {images.length === 0 ? (
-        <p className="text-brown-light">{t("gallery.empty")}</p>
+        <EmptyState title={t("gallery.empty")} />
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {images.map((img, i) => (
