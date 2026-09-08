@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { DISPLAY_STATUS, DisplayStatus } from "@/lib/constants";
+import { PageHeader } from "@/components/ui/Card";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Button, LinkButton } from "@/components/ui/Button";
 
 interface Row {
   id: string;
@@ -15,12 +18,12 @@ interface Row {
   displayStatus: DisplayStatus;
 }
 
-const statusColor: Record<DisplayStatus, string> = {
-  PENDING: "bg-cream-deep text-brown-dark",
-  REJECTED: "bg-red-100 text-red-800",
-  ACCEPTED_UNPAID: "bg-amber-100 text-amber-800",
-  PAID: "bg-green-100 text-green-800",
-  EXPIRED: "bg-zinc-200 text-zinc-700",
+const statusTone: Record<DisplayStatus, "neutral" | "positive" | "attention" | "negative"> = {
+  PENDING: "neutral",
+  REJECTED: "negative",
+  ACCEPTED_UNPAID: "attention",
+  PAID: "positive",
+  EXPIRED: "neutral",
 };
 
 export function ApplicationsListClient({ applications, activeStatus }: { applications: Row[]; activeStatus: string }) {
@@ -39,15 +42,14 @@ export function ApplicationsListClient({ applications, activeStatus }: { applica
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <h1 className="font-heading text-2xl text-brown-dark">Applications</h1>
-        <a
-          href="/api/admin/export/applications"
-          className="text-sm px-4 py-2 rounded-full border border-brown/30 hover:bg-brown/10"
-        >
-          Export CSV
-        </a>
-      </div>
+      <PageHeader
+        title="Applications"
+        actions={
+          <LinkButton href="/api/admin/export/applications" variant="secondary" size="sm">
+            Export CSV
+          </LinkButton>
+        }
+      />
 
       <div className="flex flex-wrap gap-2 mb-6">
         <Link
@@ -67,9 +69,9 @@ export function ApplicationsListClient({ applications, activeStatus }: { applica
         ))}
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-brown/10">
-        <table className="min-w-full text-sm bg-cream-soft">
-          <thead className="bg-cream text-brown-light text-xs uppercase">
+      <div className="overflow-x-auto rounded-[10px] border border-brown/10">
+        <table className="min-w-full text-sm bg-cream">
+          <thead className="bg-cream-deep/40 text-brown-light text-xs uppercase">
             <tr>
               <th className="text-left px-4 py-3">Business</th>
               <th className="text-left px-4 py-3">Event</th>
@@ -90,27 +92,17 @@ export function ApplicationsListClient({ applications, activeStatus }: { applica
                 <td className="px-4 py-3">{a.eventName}</td>
                 <td className="px-4 py-3 text-xs">{new Date(a.createdAt).toLocaleDateString()}</td>
                 <td className="px-4 py-3">
-                  <span className={`text-xs px-2.5 py-1 rounded-full ${statusColor[a.displayStatus]}`}>
-                    {a.displayStatus.replace("_", " ")}
-                  </span>
+                  <StatusBadge label={a.displayStatus.replace("_", " ")} tone={statusTone[a.displayStatus]} />
                 </td>
                 <td className="px-4 py-3">
                   {a.displayStatus === "PENDING" && (
                     <div className="flex gap-2">
-                      <button
-                        disabled={busyId === a.id}
-                        onClick={() => quickAction(a.id, "approve")}
-                        className="text-xs px-3 py-1 rounded-full bg-green-700 text-white disabled:opacity-50"
-                      >
+                      <Button size="sm" onClick={() => quickAction(a.id, "approve")} loading={busyId === a.id}>
                         Approve
-                      </button>
-                      <button
-                        disabled={busyId === a.id}
-                        onClick={() => quickAction(a.id, "reject")}
-                        className="text-xs px-3 py-1 rounded-full bg-red-700 text-white disabled:opacity-50"
-                      >
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => quickAction(a.id, "reject")} loading={busyId === a.id}>
                         Reject
-                      </button>
+                      </Button>
                     </div>
                   )}
                   {a.displayStatus !== "PENDING" && (
