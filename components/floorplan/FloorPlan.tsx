@@ -237,6 +237,7 @@ export function FloorPlan({
   sizeStyles,
   selectedBoothId,
   onSelectBooth,
+  onDeselect,
   interactive = true,
   allowAnyStatusClick = false,
   backgroundImageUrl,
@@ -254,6 +255,9 @@ export function FloorPlan({
   sizeStyles: Record<string, SizeStyle>;
   selectedBoothId?: string | null;
   onSelectBooth?: (booth: FloorBooth) => void;
+  /** Called when the admin clicks empty canvas (not a booth) — clears the
+   *  current selection, same as clicking empty space in Figma/Slides. */
+  onDeselect?: () => void;
   interactive?: boolean;
   allowAnyStatusClick?: boolean;
   /** URL of a real venue photo/drawing to place behind the plan. */
@@ -322,9 +326,13 @@ export function FloorPlan({
       if (wasClick && placementMode && onCanvasClick) {
         const pct = pointToPercent(e.clientX, e.clientY);
         if (pct) onCanvasClick(pct.x, pct.y);
+      } else if (wasClick && !placementMode && onDeselect) {
+        // Clicked empty canvas (not a booth, which stops propagation before
+        // this fires) — deselect, same as clicking empty space in Figma/Slides.
+        onDeselect();
       }
     },
-    [placementMode, onCanvasClick, pointToPercent]
+    [placementMode, onCanvasClick, pointToPercent, onDeselect]
   );
 
   const onWheel = useCallback((e: React.WheelEvent) => {

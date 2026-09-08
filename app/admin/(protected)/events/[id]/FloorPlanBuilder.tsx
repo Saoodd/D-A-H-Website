@@ -499,6 +499,7 @@ export function FloorPlanBuilder({
         placementMode={placementOn}
         onCanvasClick={handleCanvasClick}
         onSelectBooth={(b) => (bulkMode ? toggleBulkSelected(b.id) : setSelected(b as AdminBooth))}
+        onDeselect={() => setSelected(null)}
         editable={!placementOn && !bulkMode}
         onBoothCommit={onBoothCommit}
         multiSelectedIds={bulkMode ? bulkSelectedIds : undefined}
