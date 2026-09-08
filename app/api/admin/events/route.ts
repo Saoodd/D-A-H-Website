@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
       coverImage: body.coverImage || null,
       categories: Array.isArray(body.categories) ? body.categories.map(String).filter(Boolean) : [],
       floorPlanImageUrl: body.floorPlanImageUrl || sourceEvent?.floorPlanImageUrl || null,
+      venueWidthM: body.venueWidthM ? Number(body.venueWidthM) : sourceEvent?.venueWidthM ?? null,
       status: ["DRAFT", "PUBLISHED", "CLOSED"].includes(body.status) ? body.status : "DRAFT",
       whatsappVendorGroupLink: body.whatsappVendorGroupLink || null,
       acceptanceDeadlineHours: body.acceptanceDeadlineHours ? Number(body.acceptanceDeadlineHours) : null,

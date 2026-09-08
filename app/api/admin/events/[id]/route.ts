@@ -8,18 +8,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
 
+  // Partial-PATCH semantics throughout: only fields actually present in the
+  // request body are touched, so callers that patch a single field (e.g. the
+  // floor plan image upload/remove buttons) don't wipe the rest of the event.
   const data: Record<string, unknown> = {};
   if (typeof body.name === "string") data.name = body.name;
   if (typeof body.description === "string") data.description = body.description;
   if (body.startDate) data.startDate = new Date(body.startDate);
-  data.endDate = body.endDate ? new Date(body.endDate) : null;
+  if ("endDate" in body) data.endDate = body.endDate ? new Date(body.endDate) : null;
   if (typeof body.location === "string") data.location = body.location;
-  data.coverImage = body.coverImage || null;
+  if ("coverImage" in body) data.coverImage = body.coverImage || null;
   if (Array.isArray(body.categories)) data.categories = body.categories.map(String).filter(Boolean);
-  data.floorPlanImageUrl = body.floorPlanImageUrl || null;
+  if ("floorPlanImageUrl" in body) data.floorPlanImageUrl = body.floorPlanImageUrl || null;
+  if ("venueWidthM" in body) data.venueWidthM = body.venueWidthM ? Number(body.venueWidthM) : null;
   if (["DRAFT", "PUBLISHED", "CLOSED"].includes(body.status)) data.status = body.status;
-  data.whatsappVendorGroupLink = body.whatsappVendorGroupLink || null;
-  data.acceptanceDeadlineHours = body.acceptanceDeadlineHours ? Number(body.acceptanceDeadlineHours) : null;
+  if ("whatsappVendorGroupLink" in body) data.whatsappVendorGroupLink = body.whatsappVendorGroupLink || null;
+  if ("acceptanceDeadlineHours" in body) {
+    data.acceptanceDeadlineHours = body.acceptanceDeadlineHours ? Number(body.acceptanceDeadlineHours) : null;
+  }
 
   const event = await prisma.event.update({ where: { id }, data });
   return NextResponse.json({ ok: true, event });

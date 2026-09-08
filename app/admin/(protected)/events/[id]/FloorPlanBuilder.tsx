@@ -21,14 +21,19 @@ interface Tier {
   priceAedFils: number;
 }
 
+const SMART_GUIDES_KEY = "dah_floorplan_smart_guides";
+const GRID_SNAP_KEY = "dah_floorplan_grid_snap";
+
 export function FloorPlanBuilder({
   eventId,
   tiers,
   floorPlanImageUrl: initialFloorPlanImageUrl,
+  venueWidthM,
 }: {
   eventId: string;
   tiers: Tier[];
   floorPlanImageUrl: string | null;
+  venueWidthM: number | null;
 }) {
   const [features, setFeatures] = useState<FloorFeature[]>([]);
   const [booths, setBooths] = useState<AdminBooth[]>([]);
@@ -49,6 +54,45 @@ export function FloorPlanBuilder({
   const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
   const [bulkPrice, setBulkPrice] = useState("");
   const [applyingBulk, setApplyingBulk] = useState(false);
+
+  const [smartGuidesEnabled, setSmartGuidesEnabled] = useState(true);
+  const [gridSnapEnabled, setGridSnapEnabled] = useState(false);
+
+  useEffect(() => {
+    try {
+      const g = window.localStorage.getItem(SMART_GUIDES_KEY);
+      const s = window.localStorage.getItem(GRID_SNAP_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time sync from localStorage after mount
+      if (g != null) setSmartGuidesEnabled(g === "1");
+      if (s != null) setGridSnapEnabled(s === "1");
+    } catch {
+      // localStorage unavailable — keep defaults
+    }
+  }, []);
+
+  function toggleSmartGuides() {
+    setSmartGuidesEnabled((v) => {
+      const next = !v;
+      try {
+        window.localStorage.setItem(SMART_GUIDES_KEY, next ? "1" : "0");
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }
+
+  function toggleGridSnap() {
+    setGridSnapEnabled((v) => {
+      const next = !v;
+      try {
+        window.localStorage.setItem(GRID_SNAP_KEY, next ? "1" : "0");
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/admin/events/${eventId}/floorplan`);
@@ -429,6 +473,22 @@ export function FloorPlanBuilder({
         </div>
       )}
 
+      <div className="mb-2 flex flex-wrap items-center gap-4 text-xs text-brown-light">
+        <label className="flex items-center gap-1.5 cursor-pointer">
+          <input type="checkbox" checked={smartGuidesEnabled} onChange={toggleSmartGuides} />
+          Smart guides (align &amp; equal spacing)
+        </label>
+        <label className="flex items-center gap-1.5 cursor-pointer">
+          <input type="checkbox" checked={gridSnapEnabled} onChange={toggleGridSnap} />
+          Snap to grid
+        </label>
+        {!venueWidthM && (
+          <span className="text-brown-light/70">
+            Tip: set a real venue width (meters) in the event details above to show real distances while dragging.
+          </span>
+        )}
+      </div>
+
       <FloorPlan
         features={features}
         booths={booths}
@@ -442,6 +502,9 @@ export function FloorPlanBuilder({
         editable={!placementOn && !bulkMode}
         onBoothCommit={onBoothCommit}
         multiSelectedIds={bulkMode ? bulkSelectedIds : undefined}
+        smartGuidesEnabled={smartGuidesEnabled}
+        gridSnapEnabled={gridSnapEnabled}
+        venueWidthM={venueWidthM}
       />
       <Legend sizeStyles={sizeStyles} />
 

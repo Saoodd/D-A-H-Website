@@ -61,6 +61,10 @@ model Event {
   // image's width/height, so admin can click directly on a real venue photo
   // or architectural drawing to place booths instead of guessing coordinates.
   floorPlanImageUrl String?
+  // Real width, in meters, that the floor plan canvas represents — optional.
+  // When set, the floor plan builder's drag distance/spacing guides show
+  // real meters (derived from this scale) instead of a raw canvas percentage.
+  venueWidthM Float?
 
   whatsappVendorGroupLink String? // event-specific, payment-gated
 

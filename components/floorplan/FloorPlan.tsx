@@ -33,6 +33,176 @@ function rotateVec(x: number, y: number, deg: number) {
 const VIEWBOX = 100;
 const MIN_BOOTH_SIZE = 2;
 const ROTATE_HANDLE_OFFSET = 6;
+const ALIGN_THRESHOLD = 1; // percent — how close an edge/center has to be to another booth's to snap
+const SPACING_TOLERANCE = 1.2; // percent — how close a gap has to be to a reference gap to snap-equalize
+const GRID_SIZE = 1; // percent — snap-to-grid cell size
+
+interface GuideLine {
+  orientation: "v" | "h";
+  pos: number;
+  from: number;
+  to: number;
+}
+interface GuideLabel {
+  x: number;
+  y: number;
+  text: string;
+}
+interface Guides {
+  vLines: GuideLine[];
+  hLines: GuideLine[];
+  labels: GuideLabel[];
+}
+type Rect = { gridX: number; gridY: number; gridW: number; gridH: number };
+
+function rangesOverlap(a1: number, a2: number, b1: number, b2: number) {
+  return a1 < b2 && b1 < a2;
+}
+
+function formatDistance(gapPercent: number, venueWidthM?: number | null): string {
+  if (venueWidthM && venueWidthM > 0) {
+    const meters = (gapPercent / 100) * venueWidthM;
+    return `${meters.toFixed(meters < 10 ? 1 : 0)}m`;
+  }
+  return `${gapPercent.toFixed(1)}%`;
+}
+
+/** Best single edge/center alignment match on each axis, independently. */
+function computeAlignmentSnap(dragged: Rect, others: FloorBooth[]) {
+  const xCands = [
+    { offset: 0, at: dragged.gridX },
+    { offset: dragged.gridW / 2, at: dragged.gridX + dragged.gridW / 2 },
+    { offset: dragged.gridW, at: dragged.gridX + dragged.gridW },
+  ];
+  const yCands = [
+    { offset: 0, at: dragged.gridY },
+    { offset: dragged.gridH / 2, at: dragged.gridY + dragged.gridH / 2 },
+    { offset: dragged.gridH, at: dragged.gridY + dragged.gridH },
+  ];
+  let bestX: { offset: number; value: number; delta: number; other: FloorBooth } | null = null;
+  let bestY: { offset: number; value: number; delta: number; other: FloorBooth } | null = null;
+  for (const o of others) {
+    const oxs = [o.gridX, o.gridX + o.gridW / 2, o.gridX + o.gridW];
+    const oys = [o.gridY, o.gridY + o.gridH / 2, o.gridY + o.gridH];
+    for (const c of xCands) {
+      for (const ov of oxs) {
+        const delta = Math.abs(c.at - ov);
+        if (delta <= ALIGN_THRESHOLD && (!bestX || delta < bestX.delta)) bestX = { offset: c.offset, value: ov, delta, other: o };
+      }
+    }
+    for (const c of yCands) {
+      for (const ov of oys) {
+        const delta = Math.abs(c.at - ov);
+        if (delta <= ALIGN_THRESHOLD && (!bestY || delta < bestY.delta)) bestY = { offset: c.offset, value: ov, delta, other: o };
+      }
+    }
+  }
+  const vLines: GuideLine[] = [];
+  const hLines: GuideLine[] = [];
+  let gridX: number | undefined;
+  let gridY: number | undefined;
+  if (bestX) {
+    gridX = bestX.value - bestX.offset;
+    const y1 = Math.min(dragged.gridY, bestX.other.gridY);
+    const y2 = Math.max(dragged.gridY + dragged.gridH, bestX.other.gridY + bestX.other.gridH);
+    vLines.push({ orientation: "v", pos: bestX.value, from: y1 - 2, to: y2 + 2 });
+  }
+  if (bestY) {
+    gridY = bestY.value - bestY.offset;
+    const x1 = Math.min(dragged.gridX, bestY.other.gridX);
+    const x2 = Math.max(dragged.gridX + dragged.gridW, bestY.other.gridX + bestY.other.gridW);
+    hLines.push({ orientation: "h", pos: bestY.value, from: x1 - 2, to: x2 + 2 });
+  }
+  return { gridX, gridY, vLines, hLines };
+}
+
+/** Snap the dragged booth's gap to a neighbor so it equals an existing,
+ *  already-consistent gap elsewhere in the same row — or centers evenly
+ *  between two flanking booths. */
+function computeRowSpacingSnap(dragged: Rect, others: FloorBooth[]) {
+  const row = others
+    .filter((o) => rangesOverlap(dragged.gridY, dragged.gridY + dragged.gridH, o.gridY, o.gridY + o.gridH))
+    .sort((a, b) => a.gridX - b.gridX);
+  if (row.length === 0) return {} as { gridX?: number };
+  let leftIdx = -1;
+  for (let i = 0; i < row.length; i++) {
+    if (row[i].gridX + row[i].gridW <= dragged.gridX + dragged.gridW / 2) leftIdx = i;
+  }
+  const left = leftIdx >= 0 ? row[leftIdx] : null;
+  const right = leftIdx + 1 < row.length ? row[leftIdx + 1] : null;
+  const leftOfLeft = leftIdx - 1 >= 0 ? row[leftIdx - 1] : null;
+  const rightOfRight = leftIdx + 2 < row.length ? row[leftIdx + 2] : null;
+
+  if (left && leftOfLeft) {
+    const refGap = left.gridX - (leftOfLeft.gridX + leftOfLeft.gridW);
+    const curGap = dragged.gridX - (left.gridX + left.gridW);
+    if (refGap > 0.1 && Math.abs(curGap - refGap) <= SPACING_TOLERANCE) {
+      return { gridX: left.gridX + left.gridW + refGap };
+    }
+  }
+  if (right && rightOfRight) {
+    const refGap = rightOfRight.gridX - (right.gridX + right.gridW);
+    const curGap = right.gridX - (dragged.gridX + dragged.gridW);
+    if (refGap > 0.1 && Math.abs(curGap - refGap) <= SPACING_TOLERANCE) {
+      return { gridX: right.gridX - dragged.gridW - refGap };
+    }
+  }
+  if (left && right) {
+    const avail = right.gridX - (left.gridX + left.gridW);
+    const gap = (avail - dragged.gridW) / 2;
+    if (gap > 0.1) {
+      const curGapLeft = dragged.gridX - (left.gridX + left.gridW);
+      const curGapRight = right.gridX - (dragged.gridX + dragged.gridW);
+      if (Math.abs(curGapLeft - gap) <= SPACING_TOLERANCE || Math.abs(curGapRight - gap) <= SPACING_TOLERANCE) {
+        return { gridX: left.gridX + left.gridW + gap };
+      }
+    }
+  }
+  return {} as { gridX?: number };
+}
+
+/** Same as computeRowSpacingSnap but along the vertical (column) axis. */
+function computeColumnSpacingSnap(dragged: Rect, others: FloorBooth[]) {
+  const col = others
+    .filter((o) => rangesOverlap(dragged.gridX, dragged.gridX + dragged.gridW, o.gridX, o.gridX + o.gridW))
+    .sort((a, b) => a.gridY - b.gridY);
+  if (col.length === 0) return {} as { gridY?: number };
+  let topIdx = -1;
+  for (let i = 0; i < col.length; i++) {
+    if (col[i].gridY + col[i].gridH <= dragged.gridY + dragged.gridH / 2) topIdx = i;
+  }
+  const top = topIdx >= 0 ? col[topIdx] : null;
+  const bottom = topIdx + 1 < col.length ? col[topIdx + 1] : null;
+  const topOfTop = topIdx - 1 >= 0 ? col[topIdx - 1] : null;
+  const bottomOfBottom = topIdx + 2 < col.length ? col[topIdx + 2] : null;
+
+  if (top && topOfTop) {
+    const refGap = top.gridY - (topOfTop.gridY + topOfTop.gridH);
+    const curGap = dragged.gridY - (top.gridY + top.gridH);
+    if (refGap > 0.1 && Math.abs(curGap - refGap) <= SPACING_TOLERANCE) {
+      return { gridY: top.gridY + top.gridH + refGap };
+    }
+  }
+  if (bottom && bottomOfBottom) {
+    const refGap = bottomOfBottom.gridY - (bottom.gridY + bottom.gridH);
+    const curGap = bottom.gridY - (dragged.gridY + dragged.gridH);
+    if (refGap > 0.1 && Math.abs(curGap - refGap) <= SPACING_TOLERANCE) {
+      return { gridY: bottom.gridY - dragged.gridH - refGap };
+    }
+  }
+  if (top && bottom) {
+    const avail = bottom.gridY - (top.gridY + top.gridH);
+    const gap = (avail - dragged.gridH) / 2;
+    if (gap > 0.1) {
+      const curGapTop = dragged.gridY - (top.gridY + top.gridH);
+      const curGapBottom = bottom.gridY - (dragged.gridY + dragged.gridH);
+      if (Math.abs(curGapTop - gap) <= SPACING_TOLERANCE || Math.abs(curGapBottom - gap) <= SPACING_TOLERANCE) {
+        return { gridY: top.gridY + top.gridH + gap };
+      }
+    }
+  }
+  return {} as { gridY?: number };
+}
 
 const featureLabel: Record<string, string> = {
   ENTRANCE_MAIN: "Main entrance",
@@ -75,6 +245,9 @@ export function FloorPlan({
   editable = false,
   onBoothCommit,
   multiSelectedIds,
+  smartGuidesEnabled = false,
+  gridSnapEnabled = false,
+  venueWidthM,
 }: {
   features: FloorFeature[];
   booths: FloorBooth[];
@@ -96,11 +269,20 @@ export function FloorPlan({
   /** When set, booths whose id is in this set render with a distinct
    *  checked/highlighted look — used for the bulk multi-select price tool. */
   multiSelectedIds?: Set<string>;
+  /** While moving a booth, snap to other booths' edges/centers and equal
+   *  spacing, showing Figma/Canva-style guide lines and gap distances. */
+  smartGuidesEnabled?: boolean;
+  /** While moving a booth, snap its position to a fixed percentage grid. */
+  gridSnapEnabled?: boolean;
+  /** Real venue width in meters — when set, distance labels while dragging
+   *  show real meters instead of a raw canvas percentage. */
+  venueWidthM?: number | null;
 }) {
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const [hoveredBoothId, setHoveredBoothId] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ id: string; data: BoothPatch } | null>(null);
+  const [guides, setGuides] = useState<Guides | null>(null);
   const dragState = useRef<{ x: number; y: number; startTranslate: { x: number; y: number }; moved: boolean } | null>(null);
   const pinchState = useRef<{ dist: number; scale: number } | null>(null);
   const manipRef = useRef<Manip | null>(null);
@@ -182,13 +364,102 @@ export function FloorPlan({
     [preview]
   );
 
-  const computeMovePatch = (m: Extract<Manip, { kind: "move" }>, pct: { x: number; y: number }, b: FloorBooth): BoothPatch => {
+  const computeMovePatch = useCallback((
+    m: Extract<Manip, { kind: "move" }>,
+    pct: { x: number; y: number },
+    b: FloorBooth
+  ): { patch: BoothPatch; guides: Guides | null } => {
     const dx = pct.x - m.startPointer.x;
     const dy = pct.y - m.startPointer.y;
-    const gridX = Math.min(100 - b.gridW, Math.max(0, m.startGrid.gridX + dx));
-    const gridY = Math.min(100 - b.gridH, Math.max(0, m.startGrid.gridY + dy));
-    return { gridX, gridY };
-  };
+    let gridX = Math.min(100 - b.gridW, Math.max(0, m.startGrid.gridX + dx));
+    let gridY = Math.min(100 - b.gridH, Math.max(0, m.startGrid.gridY + dy));
+
+    const others = booths.filter((o) => o.id !== b.id);
+    const vLines: GuideLine[] = [];
+    const hLines: GuideLine[] = [];
+    const labels: GuideLabel[] = [];
+    let snappedX = false;
+    let snappedY = false;
+
+    if (smartGuidesEnabled) {
+      const align = computeAlignmentSnap({ gridX, gridY, gridW: b.gridW, gridH: b.gridH }, others);
+      if (align.gridX != null) {
+        gridX = align.gridX;
+        snappedX = true;
+        vLines.push(...align.vLines);
+      }
+      if (align.gridY != null) {
+        gridY = align.gridY;
+        snappedY = true;
+        hLines.push(...align.hLines);
+      }
+      if (!snappedX) {
+        const rowSnap = computeRowSpacingSnap({ gridX, gridY, gridW: b.gridW, gridH: b.gridH }, others);
+        if (rowSnap.gridX != null) {
+          gridX = rowSnap.gridX;
+          snappedX = true;
+        }
+      }
+      if (!snappedY) {
+        const colSnap = computeColumnSpacingSnap({ gridX, gridY, gridW: b.gridW, gridH: b.gridH }, others);
+        if (colSnap.gridY != null) {
+          gridY = colSnap.gridY;
+          snappedY = true;
+        }
+      }
+    }
+
+    if (gridSnapEnabled) {
+      if (!snappedX) gridX = Math.round(gridX / GRID_SIZE) * GRID_SIZE;
+      if (!snappedY) gridY = Math.round(gridY / GRID_SIZE) * GRID_SIZE;
+    }
+
+    gridX = Math.min(100 - b.gridW, Math.max(0, gridX));
+    gridY = Math.min(100 - b.gridH, Math.max(0, gridY));
+
+    if (smartGuidesEnabled) {
+      const midY = gridY + b.gridH / 2;
+      const row = others
+        .filter((o) => rangesOverlap(gridY, gridY + b.gridH, o.gridY, o.gridY + o.gridH))
+        .sort((a, c) => a.gridX - c.gridX);
+      let leftIdx = -1;
+      for (let i = 0; i < row.length; i++) {
+        if (row[i].gridX + row[i].gridW <= gridX + b.gridW / 2) leftIdx = i;
+      }
+      const leftN = leftIdx >= 0 ? row[leftIdx] : null;
+      const rightN = leftIdx + 1 < row.length ? row[leftIdx + 1] : null;
+      if (leftN) {
+        const gap = gridX - (leftN.gridX + leftN.gridW);
+        if (gap > 0.1) labels.push({ x: leftN.gridX + leftN.gridW + gap / 2, y: midY, text: formatDistance(gap, venueWidthM) });
+      }
+      if (rightN) {
+        const gap = rightN.gridX - (gridX + b.gridW);
+        if (gap > 0.1) labels.push({ x: gridX + b.gridW + gap / 2, y: midY, text: formatDistance(gap, venueWidthM) });
+      }
+
+      const midX = gridX + b.gridW / 2;
+      const col = others
+        .filter((o) => rangesOverlap(gridX, gridX + b.gridW, o.gridX, o.gridX + o.gridW))
+        .sort((a, c) => a.gridY - c.gridY);
+      let topIdx = -1;
+      for (let i = 0; i < col.length; i++) {
+        if (col[i].gridY + col[i].gridH <= gridY + b.gridH / 2) topIdx = i;
+      }
+      const topN = topIdx >= 0 ? col[topIdx] : null;
+      const botN = topIdx + 1 < col.length ? col[topIdx + 1] : null;
+      if (topN) {
+        const gap = gridY - (topN.gridY + topN.gridH);
+        if (gap > 0.1) labels.push({ x: midX, y: topN.gridY + topN.gridH + gap / 2, text: formatDistance(gap, venueWidthM) });
+      }
+      if (botN) {
+        const gap = botN.gridY - (gridY + b.gridH);
+        if (gap > 0.1) labels.push({ x: midX, y: gridY + b.gridH + gap / 2, text: formatDistance(gap, venueWidthM) });
+      }
+    }
+
+    const nextGuides = smartGuidesEnabled && (vLines.length || hLines.length || labels.length) ? { vLines, hLines, labels } : null;
+    return { patch: { gridX, gridY }, guides: nextGuides };
+  }, [booths, smartGuidesEnabled, gridSnapEnabled, venueWidthM]);
 
   const computeResizePatch = (m: Extract<Manip, { kind: "resize" }>, pct: { x: number; y: number }): BoothPatch => {
     const vx = pct.x - m.anchorWorld.x;
@@ -265,10 +536,16 @@ export function FloorPlan({
       const pct = pointToPercent(e.clientX, e.clientY);
       if (!pct) return;
       m.moved = true;
-      const patch = m.kind === "move" ? computeMovePatch(m, pct, b) : m.kind === "resize" ? computeResizePatch(m, pct) : computeRotatePatch(m, pct);
-      setPreview({ id: b.id, data: patch });
+      if (m.kind === "move") {
+        const { patch, guides: nextGuides } = computeMovePatch(m, pct, b);
+        setPreview({ id: b.id, data: patch });
+        setGuides(nextGuides);
+      } else {
+        const patch = m.kind === "resize" ? computeResizePatch(m, pct) : computeRotatePatch(m, pct);
+        setPreview({ id: b.id, data: patch });
+      }
     },
-    [pointToPercent]
+    [pointToPercent, computeMovePatch]
   );
 
   const onManipPointerUp = useCallback(
@@ -278,13 +555,15 @@ export function FloorPlan({
       e.stopPropagation();
       manipRef.current = null;
       setPreview(null);
+      setGuides(null);
       if (!m.moved) return;
       const pct = pointToPercent(e.clientX, e.clientY);
       if (!pct) return;
-      const patch = m.kind === "move" ? computeMovePatch(m, pct, b) : m.kind === "resize" ? computeResizePatch(m, pct) : computeRotatePatch(m, pct);
+      const patch =
+        m.kind === "move" ? computeMovePatch(m, pct, b).patch : m.kind === "resize" ? computeResizePatch(m, pct) : computeRotatePatch(m, pct);
       onBoothCommit?.(b.id, patch);
     },
-    [pointToPercent, onBoothCommit]
+    [pointToPercent, onBoothCommit, computeMovePatch]
   );
 
   return (
@@ -509,6 +788,28 @@ export function FloorPlan({
               </g>
             );
           })}
+
+          {guides && (
+            <g style={{ pointerEvents: "none" }}>
+              {guides.vLines.map((l, i) => (
+                <line key={`v${i}`} x1={l.pos} y1={l.from} x2={l.pos} y2={l.to} stroke="#EC4899" strokeWidth={0.25} strokeDasharray="1 0.6" />
+              ))}
+              {guides.hLines.map((l, i) => (
+                <line key={`h${i}`} x1={l.from} y1={l.pos} x2={l.to} y2={l.pos} stroke="#EC4899" strokeWidth={0.25} strokeDasharray="1 0.6" />
+              ))}
+              {guides.labels.map((lb, i) => {
+                const w = Math.max(4, lb.text.length * 1.4);
+                return (
+                  <g key={`lb${i}`}>
+                    <rect x={lb.x - w / 2} y={lb.y - 1.3} width={w} height={2.4} rx={0.6} fill="#1F2937" opacity={0.9} />
+                    <text x={lb.x} y={lb.y} textAnchor="middle" dominantBaseline="middle" fontSize={1.6} fill="#fff">
+                      {lb.text}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+          )}
         </svg>
       </div>
     </div>

@@ -14,6 +14,7 @@ interface EventData {
   coverImage: string | null;
   categories: string[];
   floorPlanImageUrl: string | null;
+  venueWidthM: number | null;
   status: string;
   whatsappVendorGroupLink: string | null;
   acceptanceDeadlineHours: number | null;
@@ -63,6 +64,7 @@ export function EventForm({
       coverImage: form.get("coverImage") || null,
       categories,
       floorPlanImageUrl: form.get("floorPlanImageUrl") || null,
+      venueWidthM: form.get("venueWidthM") || null,
       status: form.get("status"),
       whatsappVendorGroupLink: form.get("whatsappVendorGroupLink") || null,
       acceptanceDeadlineHours: form.get("acceptanceDeadlineHours") || null,
@@ -151,6 +153,12 @@ export function EventForm({
         name="acceptanceDeadlineHours"
         label="Acceptance deadline hours (override site default)"
         defaultValue={initial?.acceptanceDeadlineHours != null ? String(initial.acceptanceDeadlineHours) : undefined}
+      />
+      <Field
+        name="venueWidthM"
+        type="number"
+        label="Real venue width in meters (optional — shows real distances while dragging booths)"
+        defaultValue={initial?.venueWidthM != null ? String(initial.venueWidthM) : undefined}
       />
 
       {!initial && existingEvents.length > 0 && (

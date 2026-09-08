@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { EventForm } from "../EventForm";
 import { FloorPlanBuilder } from "./FloorPlanBuilder";
-import { EventPricingClient } from "./EventPricingClient";
 import { EventDangerZone } from "./EventDangerZone";
 
 export const metadata: Metadata = { title: "Edit Event — Admin" };
@@ -13,13 +12,10 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
   const event = await prisma.event.findUnique({ where: { id } });
   if (!event) notFound();
 
-  const [existingEvents, tiers, overrides] = await Promise.all([
+  const [existingEvents, tiers] = await Promise.all([
     prisma.event.findMany({ where: { id: { not: id } }, select: { id: true, name: true } }),
     prisma.pricingTier.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
-    prisma.eventPricing.findMany({ where: { eventId: id } }),
   ]);
-
-  const overrideMap = new Map(overrides.map((o) => [o.sizeKey, o.priceAedFils]));
 
   return (
     <div className="max-w-4xl">
@@ -38,35 +34,22 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
           coverImage: event.coverImage,
           categories: event.categories,
           floorPlanImageUrl: event.floorPlanImageUrl,
+          venueWidthM: event.venueWidthM,
           status: event.status,
           whatsappVendorGroupLink: event.whatsappVendorGroupLink,
           acceptanceDeadlineHours: event.acceptanceDeadlineHours,
         }}
       />
 
-      <h2 className="font-heading text-xl text-brown-dark mt-12 mb-1">Default pricing by booth size</h2>
-      <p className="text-xs text-brown-light mb-4">
-        This is the fallback price for booths placed with a size (e.g. from a bulk import). A booth given its own
-        price in the floor plan below always uses that instead.
-      </p>
-      <EventPricingClient
-        eventId={event.id}
-        tiers={tiers.map((t) => ({
-          sizeKey: t.sizeKey,
-          label: t.label,
-          globalPriceAedFils: t.priceAedFils,
-          overridePriceAedFils: overrideMap.get(t.sizeKey) ?? null,
-        }))}
-      />
-
       <h2 className="font-heading text-xl text-brown-dark mt-12 mb-4">Floor plan &amp; booths</h2>
       <FloorPlanBuilder
         eventId={event.id}
         floorPlanImageUrl={event.floorPlanImageUrl}
+        venueWidthM={event.venueWidthM}
         tiers={tiers.map((t) => ({
           sizeKey: t.sizeKey,
           label: t.label,
-          priceAedFils: overrideMap.get(t.sizeKey) ?? t.priceAedFils,
+          priceAedFils: t.priceAedFils,
         }))}
       />
 
