@@ -44,9 +44,27 @@ export const metadata: Metadata = {
   },
 };
 
+// Runs synchronously before first paint (a blocking <head> script, not a
+// React effect) so the correct theme's colors are already in place when the
+// page is first drawn — this is what prevents a light-mode flash for a
+// dark-mode visitor. Kept in sync with lib/theme/context.tsx's STORAGE_KEY.
+const NO_FLASH_THEME_SCRIPT = `(function(){try{var k="dah_theme",s=localStorage.getItem(k),t=(s==="light"||s==="dark")?s:(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t);}catch(e){}})();`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${heading.variable} ${body.variable} ${arabic.variable} h-full antialiased`}>
+    <html
+      lang="en"
+      className={`${heading.variable} ${body.variable} ${arabic.variable} h-full antialiased`}
+      // The no-flash script below sets data-theme on this element before
+      // React hydrates, so the server-rendered markup (which has no
+      // data-theme, since the real theme is only knowable client-side)
+      // will always "mismatch" the live DOM on this one attribute — that's
+      // expected and harmless, not a bug to fix upstream.
+      suppressHydrationWarning
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: NO_FLASH_THEME_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col bg-cream-soft text-ink">
         <ThemeProvider>
           <LocaleProvider>{children}</LocaleProvider>

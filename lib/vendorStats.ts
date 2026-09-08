@@ -52,20 +52,30 @@ export async function getVendorParticipation(vendorId: string) {
   };
 }
 
-const PROFILE_FIELDS = ["businessName", "contactName", "phone", "category", "instagram", "logoUrl"] as const;
-const RECOMMENDED_FIELDS = ["description", "website"] as const;
+// Always required — these are the only fields that can ever keep a vendor
+// below 100%. `website` is deliberately excluded: it's a nice-to-have, never
+// counted, so leaving it blank can never cost completion percentage.
+const REQUIRED_FIELDS = ["businessName", "contactName", "phone", "category", "instagram", "logoUrl", "description"] as const;
 
-/** Profile completion, calculated from required + recommended fields —
- *  never a stored percentage (see brief §31/32). */
-export function computeProfileCompletion(vendor: Record<string, unknown>) {
-  const fields = [...PROFILE_FIELDS, ...RECOMMENDED_FIELDS];
-  const filled = fields.filter((f) => {
+/** Profile completion — recomputed live from only the fields that are
+ *  CURRENTLY required, never a stored percentage (see brief §31/32).
+ *  Trade licence is the one field whose requiredness itself is configurable
+ *  (Admin → Settings → Trade Licence Required, the single source of truth
+ *  also used at signup — see lib/agreements.ts / VendorsClient): it only
+ *  joins the required set, and therefore only affects the percentage or
+ *  appears as "missing", when that setting is on. With it off, an
+ *  unfilled trade licence can never prevent 100%. */
+export function computeProfileCompletion(vendor: Record<string, unknown>, options: { tradeLicenseRequired: boolean }) {
+  const fields: string[] = [...REQUIRED_FIELDS];
+  if (options.tradeLicenseRequired) fields.push("tradeLicenseFileUrl");
+
+  const isFilled = (f: string) => {
     const v = vendor[f];
     return typeof v === "string" ? v.trim().length > 0 : v != null;
-  });
-  const missing = fields.filter((f) => !filled.includes(f));
+  };
+  const missing = fields.filter((f) => !isFilled(f));
   return {
-    percent: Math.round((filled.length / fields.length) * 100),
+    percent: Math.round(((fields.length - missing.length) / fields.length) * 100),
     missing,
   };
 }

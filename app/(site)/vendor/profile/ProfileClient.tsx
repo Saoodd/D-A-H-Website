@@ -70,7 +70,9 @@ const missingFieldLabelKey: Record<string, string> = {
   instagram: "form.instagram",
   logoUrl: "vendorProfile.logoLabel",
   description: "form.message",
-  website: "vendorProfile.tradeLicenseTitle",
+  // Only ever appears here when Admin → Settings → Trade Licence Required
+  // is on (see computeProfileCompletion) — never counted while it's off.
+  tradeLicenseFileUrl: "vendorProfile.tradeLicenseTitle",
 };
 
 export function ProfileClient({

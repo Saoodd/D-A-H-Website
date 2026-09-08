@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getVendorSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getSettings } from "@/lib/settings";
 import { getVendorParticipation, computeProfileCompletion } from "@/lib/vendorStats";
 import { ProfileClient } from "./ProfileClient";
 
@@ -14,7 +15,7 @@ export default async function VendorProfilePage() {
   const vendor = await prisma.vendor.findUnique({ where: { id: session.vendorId } });
   if (!vendor) redirect("/vendor/login");
 
-  const [participation, applicationsCount, warnings] = await Promise.all([
+  const [participation, applicationsCount, warnings, settings] = await Promise.all([
     getVendorParticipation(vendor.id),
     prisma.application.count({ where: { vendorId: vendor.id } }),
     prisma.vendorWarning.findMany({
@@ -32,9 +33,12 @@ export default async function VendorProfilePage() {
         event: { select: { name: true } },
       },
     }),
+    getSettings(),
   ]);
 
-  const completion = computeProfileCompletion(vendor as unknown as Record<string, unknown>);
+  const completion = computeProfileCompletion(vendor as unknown as Record<string, unknown>, {
+    tradeLicenseRequired: settings.tradeLicenseRequired,
+  });
 
   return (
     <ProfileClient

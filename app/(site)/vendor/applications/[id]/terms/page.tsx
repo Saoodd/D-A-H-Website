@@ -25,6 +25,10 @@ export default async function EventTermsPage({ params }: { params: Promise<{ id:
     <EventTermsClient
       applicationId={id}
       eventName={view.event.name}
+      eventDate={view.event.startDate}
+      venue={view.event.location}
+      businessName={view.businessName}
+      boothCode={view.boothHold?.code ?? null}
       title={agreement.title}
       version={agreement.version}
       bodyHtml={agreement.bodyHtml}

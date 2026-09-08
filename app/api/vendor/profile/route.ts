@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getVendorSession } from "@/lib/auth";
+import { getSettings } from "@/lib/settings";
 import { vendorProfileUpdateSchema } from "@/lib/validation";
 import { getVendorParticipation, computeProfileCompletion } from "@/lib/vendorStats";
 
@@ -14,11 +15,14 @@ export async function GET() {
   const vendor = await prisma.vendor.findUnique({ where: { id: session.vendorId } });
   if (!vendor) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const [participation, applicationsCount] = await Promise.all([
+  const [participation, applicationsCount, settings] = await Promise.all([
     getVendorParticipation(vendor.id),
     prisma.application.count({ where: { vendorId: vendor.id } }),
+    getSettings(),
   ]);
-  const completion = computeProfileCompletion(vendor as unknown as Record<string, unknown>);
+  const completion = computeProfileCompletion(vendor as unknown as Record<string, unknown>, {
+    tradeLicenseRequired: settings.tradeLicenseRequired,
+  });
 
   const { passwordHash: _passwordHash, ...safeVendor } = vendor;
   void _passwordHash;

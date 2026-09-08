@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useLocale } from "@/lib/i18n/context";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const links = [
   { href: "/vendor/dashboard", key: "vendorNav.overview" as const },
@@ -49,6 +50,9 @@ export function VendorNav({ businessName }: { businessName: string }) {
         >
           {t("vendorNav.logout")}
         </button>
+      </div>
+      <div className="hidden md:block mt-4">
+        <ThemeToggle />
       </div>
     </nav>
   );

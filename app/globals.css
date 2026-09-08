@@ -59,7 +59,26 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-body), Arial, Helvetica, sans-serif;
-  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Smooth light/dark theme transition — every surface reads its color from
+   the --color-* variables above, which simply get new values when
+   [data-theme] flips, so animating these specific properties everywhere is
+   enough to make the whole app (public site, vendor dashboard, admin
+   dashboard) cross-fade between themes instead of snapping. Deliberately
+   NOT `transition: all` — only color-ish properties, never layout/size, so
+   nothing shifts or reflows. An explicit `transition-*` utility elsewhere
+   (e.g. Tailwind's transition-colors on a hover state) wins over this via
+   normal cascade specificity, so per-component hover/focus transitions are
+   unaffected. */
+@media (prefers-reduced-motion: no-preference) {
+  *,
+  *::before,
+  *::after {
+    transition-property: background-color, border-color, color, fill, stroke, box-shadow, text-decoration-color;
+    transition-timing-function: ease;
+    transition-duration: 300ms;
+  }
 }
 
 html[dir="rtl"] body {

@@ -14,23 +14,16 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 const STORAGE_KEY = "dah_theme";
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("light");
-
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY) as Theme | null;
-      const initial =
-        stored === "light" || stored === "dark"
-          ? stored
-          : window.matchMedia("(prefers-color-scheme: dark)").matches
-          ? "dark"
-          : "light";
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time sync from localStorage/system preference after mount, deferred past SSR to avoid a hydration mismatch
-      setThemeState(initial);
-    } catch {
-      // localStorage/matchMedia unavailable — stay on default light theme
+  // The blocking <head> script (app/layout.tsx) already set the correct
+  // data-theme attribute before this ever renders, so read it straight back
+  // rather than re-deriving it — that would risk a brief render where React
+  // thinks the theme is "light" before a later effect corrects it.
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "dark") {
+      return "dark";
     }
-  }, []);
+    return "light";
+  });
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);

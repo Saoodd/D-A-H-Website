@@ -59,7 +59,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "There is no Terms & Conditions to accept for this event." }, { status: 404 });
   }
 
-  await recordAcceptance({
+  const acceptance = await recordAcceptance({
     agreementId: agreement.id,
     vendorId: session.vendorId,
     applicationId: application.id,
@@ -71,5 +71,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     userAgent: req.headers.get("user-agent"),
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, acceptedAt: acceptance.acceptedAt.toISOString(), representativeName: acceptance.representativeName });
 }

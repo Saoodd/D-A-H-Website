@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useLocale } from "@/lib/i18n/context";
 import { PhoneField } from "@/components/PhoneField";
 import { Reveal } from "@/components/Reveal";
+import { LuxeCheckbox } from "@/components/ui/LuxeCheckbox";
 import { VENDOR_CATEGORIES } from "@/lib/constants";
 
 export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: boolean }) {
@@ -215,26 +216,53 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
               </span>
             </label>
 
-            <label className="flex items-start gap-2.5 text-sm sm:col-span-2">
-              <input
-                type="checkbox"
-                checked={agreedToTerms}
-                onChange={(e) => setAgreedToTerms(e.target.checked)}
-                required
-                className="mt-0.5"
-              />
-              <span className="text-brown-light">
-                {t("vendorInfo.termsAgree")}{" "}
-                <Link href="/vendor-terms" target="_blank" className="underline text-brown">
-                  {t("vendorInfo.vendorTerms")}
-                </Link>{" "}
-                {t("vendorInfo.termsAnd")}{" "}
-                <Link href="/legal/privacy" target="_blank" className="underline text-brown">
-                  {t("vendorInfo.privacyPolicy")}
+            <div className="sm:col-span-2 rounded-2xl border border-brown/15 bg-cream-soft/70 p-6 md:p-7">
+              <div className="flex items-center gap-2 mb-3">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-brown-light shrink-0"
+                  aria-hidden="true"
+                >
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <path d="M14 2v6h6" />
+                  <path d="M9 13h6M9 17h6" />
+                </svg>
+                <p className="label-caps">{t("vendorInfo.agreementTitle")}</p>
+              </div>
+
+              <p className="text-sm text-brown-light leading-relaxed mb-4">{t("vendorInfo.agreementIntro")}</p>
+
+              <div className="flex flex-wrap gap-x-6 gap-y-2 mb-5 text-sm">
+                <Link href="/vendor-terms" target="_blank" className="text-brown underline decoration-brown/30 underline-offset-4 hover:decoration-brown">
+                  {t("vendorInfo.viewVendorTerms")}
                 </Link>
-                .
-              </span>
-            </label>
+                <Link href="/legal/privacy" target="_blank" className="text-brown underline decoration-brown/30 underline-offset-4 hover:decoration-brown">
+                  {t("vendorInfo.viewPrivacyPolicy")}
+                </Link>
+              </div>
+
+              <label className="flex items-start gap-3 pt-5 border-t border-brown/10 cursor-pointer">
+                <LuxeCheckbox checked={agreedToTerms} onChange={setAgreedToTerms} required className="mt-0.5" />
+                <span className="text-sm text-ink leading-relaxed">
+                  {t("vendorInfo.termsAgree")}{" "}
+                  <Link href="/vendor-terms" target="_blank" className="underline text-brown decoration-brown/30 underline-offset-4 hover:decoration-brown">
+                    {t("vendorInfo.vendorTerms")}
+                  </Link>{" "}
+                  {t("vendorInfo.termsAnd")}{" "}
+                  <Link href="/legal/privacy" target="_blank" className="underline text-brown decoration-brown/30 underline-offset-4 hover:decoration-brown">
+                    {t("vendorInfo.privacyPolicy")}
+                  </Link>
+                  .
+                </span>
+              </label>
+            </div>
 
             {error && <p className="sm:col-span-2 text-sm text-red-700">{error}</p>}
 

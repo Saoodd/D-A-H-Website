@@ -81,6 +81,10 @@ export const translations: Record<Locale, Record<string, string>> = {
     "vendorInfo.termsAnd": "and",
     "vendorInfo.vendorTerms": "Dar Al Hay Vendor Terms & Conditions",
     "vendorInfo.privacyPolicy": "Privacy Policy",
+    "vendorInfo.agreementTitle": "Agreement",
+    "vendorInfo.agreementIntro": "By creating a DAH Business Account, you agree to the Dar Al Hay Vendor Terms & Conditions and Privacy Policy.",
+    "vendorInfo.viewVendorTerms": "View Vendor Terms",
+    "vendorInfo.viewPrivacyPolicy": "View Privacy Policy",
 
     "gallery.title": "Gallery",
     "gallery.subtitle": "Moments from past DAH events.",
@@ -273,6 +277,10 @@ export const translations: Record<Locale, Record<string, string>> = {
     "vendorInfo.termsAnd": "و",
     "vendorInfo.vendorTerms": "شروط وأحكام بائعي دار الحي",
     "vendorInfo.privacyPolicy": "سياسة الخصوصية",
+    "vendorInfo.agreementTitle": "الاتفاقية",
+    "vendorInfo.agreementIntro": "بإنشائك حساب عمل في دار الحي، فإنك توافق على شروط وأحكام بائعي دار الحي وسياسة الخصوصية.",
+    "vendorInfo.viewVendorTerms": "عرض شروط البائعين",
+    "vendorInfo.viewPrivacyPolicy": "عرض سياسة الخصوصية",
 
     "gallery.title": "معرض الصور",
     "gallery.subtitle": "لحظات من فعاليات دار الحي السابقة.",
