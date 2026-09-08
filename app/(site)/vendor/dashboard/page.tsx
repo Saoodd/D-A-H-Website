@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { runExpiryPass } from "@/lib/expiry";
 import { getDisplayStatus } from "@/lib/status";
+import { getVendorParticipation } from "@/lib/vendorStats";
 import { DashboardClient } from "./DashboardClient";
 import { PendingVerificationClient } from "./PendingVerificationClient";
 
@@ -33,7 +34,7 @@ export default async function VendorDashboardPage() {
     await runExpiryPass(app.eventId);
   }
 
-  const [refreshed, settings, publishedEvents] = await Promise.all([
+  const [refreshed, settings, publishedEvents, participation, warnings] = await Promise.all([
     prisma.application.findMany({
       where: { vendorId: vendor.id },
       include: { event: true, payments: { where: { status: "SUCCEEDED" } } },
@@ -43,6 +44,12 @@ export default async function VendorDashboardPage() {
     prisma.event.findMany({
       where: { status: "PUBLISHED" },
       orderBy: { startDate: "asc" },
+    }),
+    getVendorParticipation(vendor.id),
+    prisma.vendorWarning.findMany({
+      where: { vendorId: vendor.id, status: "ACTIVE" },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, title: true, viewedAt: true, createdAt: true },
     }),
   ]);
 
@@ -68,6 +75,28 @@ export default async function VendorDashboardPage() {
           startDate: e.startDate.toISOString(),
           categories: e.categories,
         }))}
+      nextConfirmedEvent={
+        participation.upcoming.length > 0
+          ? {
+              eventName: participation.upcoming[0].eventName,
+              eventSlug: participation.upcoming[0].eventSlug,
+              startDate: participation.upcoming[0].startDate.toISOString(),
+              location: participation.upcoming[0].location,
+              boothCode: participation.upcoming[0].boothCode,
+            }
+          : null
+      }
+      payments={participation.history.map((h) => ({
+        applicationId: h.applicationId,
+        eventName: h.eventName,
+        boothCode: h.boothCode,
+        boothSize: h.boothSize,
+        amountAedFils: h.amountAedFils,
+        paidAt: h.paidAt ? h.paidAt.toISOString() : null,
+      }))}
+      unviewedWarnings={warnings
+        .filter((w) => !w.viewedAt)
+        .map((w) => ({ id: w.id, title: w.title }))}
     />
   );
 }

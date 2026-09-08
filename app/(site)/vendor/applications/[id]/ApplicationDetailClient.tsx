@@ -297,13 +297,15 @@ export function ApplicationDetailClient({
                 >
                   {t("checkout.payWithCard")}
                 </button>
-                <button
-                  onClick={() => pay("FAILED")}
-                  disabled={busy}
-                  className="w-full py-2 rounded-full border border-red-300 text-red-700 text-xs disabled:opacity-50"
-                >
-                  {locale === "ar" ? "محاكاة فشل الدفع (تجريبي)" : "Simulate a failed payment (sandbox)"}
-                </button>
+                {process.env.NODE_ENV !== "production" && (
+                  <button
+                    onClick={() => pay("FAILED")}
+                    disabled={busy}
+                    className="w-full py-2 rounded-full border border-red-300 text-red-700 text-xs disabled:opacity-50"
+                  >
+                    {locale === "ar" ? "محاكاة فشل الدفع (تجريبي، للتطوير فقط)" : "Simulate a failed payment (dev only)"}
+                  </button>
+                )}
               </div>
             </div>
           )}

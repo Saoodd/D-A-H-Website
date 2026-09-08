@@ -5,7 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLocale } from "@/lib/i18n/context";
 import { Countdown } from "@/components/Countdown";
-import { DisplayStatus } from "@/lib/constants";
+import { DisplayStatus, formatAed } from "@/lib/constants";
+import { VendorNav } from "@/components/vendor/VendorNav";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { EmptyState } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 
 interface AppRow {
   id: string;
@@ -23,35 +27,60 @@ interface AvailableEvent {
   categories: string[];
 }
 
-const statusColor: Record<DisplayStatus, string> = {
-  PENDING: "bg-cream-deep text-brown-dark",
-  REJECTED: "bg-red-100 text-red-800",
-  ACCEPTED_UNPAID: "bg-amber-100 text-amber-800",
-  PAID: "bg-green-100 text-green-800",
-  EXPIRED: "bg-zinc-200 text-zinc-700",
+interface NextConfirmedEvent {
+  eventName: string;
+  eventSlug: string;
+  startDate: string;
+  location: string;
+  boothCode: string;
+}
+
+interface PaymentRow {
+  applicationId: string;
+  eventName: string;
+  boothCode: string;
+  boothSize: string;
+  amountAedFils: number;
+  paidAt: string | null;
+}
+
+const statusTone: Record<DisplayStatus, "neutral" | "positive" | "attention" | "negative"> = {
+  PENDING: "neutral",
+  REJECTED: "negative",
+  ACCEPTED_UNPAID: "attention",
+  PAID: "positive",
+  EXPIRED: "neutral",
 };
+
+type Tab = "overview" | "applications" | "events" | "payments";
 
 export function DashboardClient({
   businessName,
   communityLink,
   applications,
   availableEvents,
+  nextConfirmedEvent,
+  payments,
+  unviewedWarnings,
 }: {
   businessName: string;
   communityLink: string | null;
   applications: AppRow[];
   availableEvents: AvailableEvent[];
+  nextConfirmedEvent: NextConfirmedEvent | null;
+  payments: PaymentRow[];
+  unviewedWarnings: { id: string; title: string }[];
 }) {
   const { t, locale } = useLocale();
   const router = useRouter();
+  const [tab, setTab] = useState<Tab>("overview");
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  async function logout() {
-    await fetch("/api/vendor/logout", { method: "POST" });
-    router.push("/");
-    router.refresh();
-  }
+  const dateFmt = (iso: string) => new Date(iso).toLocaleDateString(locale === "ar" ? "ar-AE" : "en-AE");
+
+  const nearDeadline = applications.filter((a) => a.displayStatus === "ACCEPTED_UNPAID" && a.acceptanceExpiresAt);
+  const hasActionItems = unviewedWarnings.length > 0 || nearDeadline.length > 0;
 
   async function applyToEvent(eventId: string) {
     setApplyingId(eventId);
@@ -72,127 +101,208 @@ export function DashboardClient({
     }
   }
 
+  const tabs: { key: Tab; label: string; count?: number }[] = [
+    { key: "overview", label: t("vendorOverview.tabOverview") },
+    { key: "applications", label: t("vendorOverview.tabApplications"), count: applications.length },
+    { key: "events", label: t("vendorOverview.tabEvents"), count: availableEvents.length },
+    { key: "payments", label: t("vendorOverview.tabPayments"), count: payments.length },
+  ];
+
   return (
-    <div className="container-page py-16 max-w-3xl">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="font-heading text-3xl text-brown-dark">{t("vendor.dashboardTitle")}</h1>
-          <p className="text-brown-light text-sm mt-1">{businessName}</p>
-        </div>
-        <button onClick={logout} className="text-sm text-brown-light underline">
-          {locale === "ar" ? "تسجيل الخروج" : "Log out"}
-        </button>
-      </div>
-
-      <div className="mb-10 rounded-2xl border border-brown/10 bg-cream p-6 flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-widest text-brown-light">{t("vendor.communityLink")}</p>
-          <p className="text-sm text-brown-light mt-1">
-            {locale === "ar" ? "متاحة دائماً لكل بائع تم التحقق منه." : "Always visible to any verified vendor."}
-          </p>
-        </div>
-        {communityLink ? (
-          <a
-            href={communityLink}
-            target="_blank"
-            rel="noreferrer"
-            className="px-5 py-2.5 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark transition-colors"
-          >
-            {locale === "ar" ? "انضم عبر واتساب" : "Join on WhatsApp"}
-          </a>
-        ) : (
-          <span className="text-sm text-brown-light">
-            {locale === "ar" ? "لم يتم تعيين رابط بعد" : "Not set yet"}
-          </span>
-        )}
-      </div>
-
-      {notice && (
-        <div className="mb-6 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm px-4 py-3">
-          {notice}
-        </div>
-      )}
-
-      <h2 className="font-heading text-xl text-brown-dark mb-4">
-        {locale === "ar" ? "الفعاليات القادمة" : "Upcoming events"}
-      </h2>
-
-      {availableEvents.length === 0 ? (
-        <p className="text-brown-light text-sm mb-10">
-          {locale === "ar" ? "لا توجد فعاليات جديدة للتقديم إليها حالياً." : "No new events to apply to right now."}
+    <div className="container-page py-12 md:py-16">
+      <div className="mb-8">
+        <h1 className="font-heading text-3xl text-brown-dark">{t("vendor.dashboardTitle")}</h1>
+        <p className="text-brown-light text-sm mt-1">
+          {t("vendorOverview.welcomeBack")}, {businessName}
         </p>
-      ) : (
-        <div className="space-y-3 mb-10">
-          {availableEvents.map((ev) => (
-            <div
-              key={ev.id}
-              className="flex items-center justify-between flex-wrap gap-3 rounded-xl border border-brown/10 bg-cream-soft p-5"
-            >
-              <div>
-                <p className="font-heading text-brown-dark">{ev.name}</p>
-                <p className="text-xs text-brown-light">
-                  {new Date(ev.startDate).toLocaleDateString(locale === "ar" ? "ar-AE" : "en-AE")} · {ev.location}
-                </p>
-                {ev.categories.length > 0 && (
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {ev.categories.map((c) => (
-                      <span key={c} className="text-[11px] bg-cream-deep text-brown-dark rounded-full px-2.5 py-0.5">
-                        {c}
-                      </span>
+      </div>
+
+      <div className="flex flex-col md:flex-row gap-8">
+        <VendorNav businessName={businessName} />
+
+        <div className="flex-1 min-w-0">
+          <div className="flex gap-1 overflow-x-auto mb-8 border-b border-brown/10">
+            {tabs.map((tb) => (
+              <button
+                key={tb.key}
+                onClick={() => setTab(tb.key)}
+                className={`shrink-0 px-4 py-2.5 text-sm border-b-2 -mb-px transition-colors ${
+                  tab === tb.key ? "border-brown text-brown-dark font-medium" : "border-transparent text-brown-light hover:text-brown-dark"
+                }`}
+              >
+                {tb.label}
+                {tb.count != null && tb.count > 0 && <span className="ms-1.5 text-xs text-brown-light">{tb.count}</span>}
+              </button>
+            ))}
+          </div>
+
+          {notice && (
+            <div className="mb-6 rounded-[10px] bg-amber-50 border border-amber-200 text-amber-900 text-sm px-4 py-3">
+              {notice}
+            </div>
+          )}
+
+          {tab === "overview" && (
+            <div className="space-y-6">
+              {hasActionItems && (
+                <div className="rounded-[10px] border border-amber-300/60 bg-amber-50 p-5">
+                  <p className="label-caps text-amber-900 mb-3">{t("vendorOverview.actionCentreTitle")}</p>
+                  <ul className="space-y-2">
+                    {unviewedWarnings.map((w) => (
+                      <li key={w.id}>
+                        <Link href="/vendor/profile" className="text-sm text-amber-900 underline">
+                          {t("vendorOverview.actionNewWarning")}
+                        </Link>
+                      </li>
                     ))}
+                    {nearDeadline.map((a) => (
+                      <li key={a.id} className="flex items-center gap-2 text-sm text-amber-900">
+                        <span>
+                          {t("vendorOverview.actionDeadline")} {a.eventName} —
+                        </span>
+                        {a.acceptanceExpiresAt && <Countdown target={a.acceptanceExpiresAt} />}
+                        <Link href={`/vendor/applications/${a.id}`} className="underline">
+                          {t("eventDetail.viewApplicationCta")}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="rounded-[10px] border border-brown/10 bg-cream p-6">
+                <p className="label-caps mb-1">{t("vendorOverview.nextEventTitle")}</p>
+                {nextConfirmedEvent ? (
+                  <div className="mt-2">
+                    <Link href={`/events/${nextConfirmedEvent.eventSlug}`} className="font-heading text-xl text-brown-dark hover:text-brown">
+                      {nextConfirmedEvent.eventName}
+                    </Link>
+                    <p className="text-sm text-brown-light mt-1">
+                      {dateFmt(nextConfirmedEvent.startDate)} · {nextConfirmedEvent.location} ·{" "}
+                      {t("vendorPayments.booth")} {nextConfirmedEvent.boothCode}
+                    </p>
                   </div>
+                ) : (
+                  <p className="text-sm text-brown-light mt-2">{t("vendorOverview.noNextEvent")}</p>
                 )}
               </div>
-              <button
-                onClick={() => applyToEvent(ev.id)}
-                disabled={applyingId === ev.id}
-                className="px-5 py-2 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark transition-colors disabled:opacity-50"
-              >
-                {applyingId === ev.id ? "…" : locale === "ar" ? "تقديم" : "Apply"}
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
 
-      <h2 className="font-heading text-xl text-brown-dark mb-4">
-        {locale === "ar" ? "طلباتك" : "Your applications"}
-      </h2>
-
-      {applications.length === 0 ? (
-        <p className="text-brown-light text-sm">
-          {locale === "ar" ? "لا توجد طلبات بعد — قدّم لإحدى الفعاليات أعلاه." : "No applications yet — apply to an event above."}
-        </p>
-      ) : (
-        <div className="space-y-4">
-          {applications.map((app) => (
-            <Link
-              key={app.id}
-              href={`/vendor/applications/${app.id}`}
-              className="block rounded-xl border border-brown/10 bg-cream-soft hover:bg-cream p-5 transition-colors"
-            >
-              <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="rounded-[10px] border border-brown/10 bg-cream p-6 flex items-center justify-between flex-wrap gap-4">
                 <div>
-                  <p className="font-heading text-brown-dark">{app.eventName}</p>
-                  <p className="text-xs text-brown-light">
-                    {new Date(app.eventStartDate).toLocaleDateString(locale === "ar" ? "ar-AE" : "en-AE")}
-                  </p>
+                  <p className="label-caps">{t("vendor.communityLink")}</p>
+                  <p className="text-sm text-brown-light mt-1">{t("vendorOverview.communityAlways")}</p>
                 </div>
-                <div className="flex items-center gap-3">
-                  {app.displayStatus === "ACCEPTED_UNPAID" && app.acceptanceExpiresAt && (
-                    <span className="text-xs text-brown-light">
-                      {t("vendor.deadlineLabel")} <Countdown target={app.acceptanceExpiresAt} />
-                    </span>
-                  )}
-                  <span className={`text-xs px-3 py-1 rounded-full ${statusColor[app.displayStatus]}`}>
-                    {t(`vendor.status.${app.displayStatus}`)}
-                  </span>
-                </div>
+                {communityLink ? (
+                  <Button size="md" onClick={() => window.open(communityLink, "_blank", "noreferrer")}>
+                    {t("vendorOverview.joinWhatsapp")}
+                  </Button>
+                ) : (
+                  <span className="text-sm text-brown-light">{t("vendorOverview.communityNotSet")}</span>
+                )}
               </div>
-            </Link>
-          ))}
+            </div>
+          )}
+
+          {tab === "applications" && (
+            <div>
+              {applications.length === 0 ? (
+                <EmptyState title={t("vendorOverview.applicationsEmpty")} />
+              ) : (
+                <div className="space-y-3">
+                  {applications.map((app) => (
+                    <Link
+                      key={app.id}
+                      href={`/vendor/applications/${app.id}`}
+                      className="block rounded-[10px] border border-brown/10 bg-cream hover:border-brown/25 p-5 transition-colors"
+                    >
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div>
+                          <p className="font-heading text-brown-dark">{app.eventName}</p>
+                          <p className="text-xs text-brown-light">{dateFmt(app.eventStartDate)}</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {app.displayStatus === "ACCEPTED_UNPAID" && app.acceptanceExpiresAt && (
+                            <span className="text-xs text-brown-light">
+                              {t("vendor.deadlineLabel")} <Countdown target={app.acceptanceExpiresAt} />
+                            </span>
+                          )}
+                          <StatusBadge label={t(`vendor.status.${app.displayStatus}`)} tone={statusTone[app.displayStatus]} />
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === "events" && (
+            <div>
+              {availableEvents.length === 0 ? (
+                <EmptyState title={t("vendorOverview.eventsEmpty")} />
+              ) : (
+                <div className="space-y-3">
+                  {availableEvents.map((ev) => (
+                    <div
+                      key={ev.id}
+                      className="flex items-center justify-between flex-wrap gap-3 rounded-[10px] border border-brown/10 bg-cream p-5"
+                    >
+                      <div>
+                        <p className="font-heading text-brown-dark">{ev.name}</p>
+                        <p className="text-xs text-brown-light">
+                          {dateFmt(ev.startDate)} · {ev.location}
+                        </p>
+                        {ev.categories.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {ev.categories.map((c) => (
+                              <span key={c} className="text-[11px] bg-cream-deep text-brown-dark rounded-full px-2.5 py-0.5">
+                                {c}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <Button size="md" onClick={() => applyToEvent(ev.id)} loading={applyingId === ev.id}>
+                        {applyingId === ev.id ? t("vendorOverview.applying") : t("vendorOverview.applyCta")}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === "payments" && (
+            <div>
+              {payments.length === 0 ? (
+                <EmptyState title={t("vendorOverview.paymentsEmpty")} />
+              ) : (
+                <div className="space-y-3">
+                  {payments.map((p) => (
+                    <div key={p.applicationId} className="rounded-[10px] border border-brown/10 bg-cream p-5">
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div>
+                          <p className="font-heading text-brown-dark">{p.eventName}</p>
+                          <p className="text-xs text-brown-light mt-1">
+                            {t("vendorPayments.booth")} {p.boothCode} ({p.boothSize})
+                            {p.paidAt ? ` · ${t("vendorPayments.paidOn")} ${dateFmt(p.paidAt)}` : ""}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-heading text-brown">{formatAed(p.amountAedFils)}</p>
+                          <Link href={`/vendor/applications/${p.applicationId}`} className="text-xs underline text-brown-light">
+                            {t("vendorPayments.viewApplication")}
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
