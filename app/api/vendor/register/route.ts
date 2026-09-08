@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { vendorRegisterSchema } from "@/lib/validation";
-import { hashPassword, createVendorSession } from "@/lib/auth";
+import { hashPassword, createVendorSession, getVendorSession } from "@/lib/auth";
 import { sendAccountCreatedEmails } from "@/lib/email";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 
@@ -10,6 +10,16 @@ import { rateLimit, clientIp } from "@/lib/rateLimit";
 // the business (Admin → Vendors). Applying to specific events happens
 // afterwards, from inside the dashboard (see /api/vendor/apply-event).
 export async function POST(req: NextRequest) {
+  // A signed-in vendor must never end up with a second account — this is
+  // enforced here regardless of what the signup UI shows/hides.
+  const session = await getVendorSession();
+  if (session) {
+    return NextResponse.json(
+      { error: "You're already signed in with a DAH business account. Sign out to create a different business account." },
+      { status: 409 }
+    );
+  }
+
   const ip = clientIp(req.headers);
   if (!rateLimit(`vendor-register:${ip}`, 5, 10 * 60 * 1000)) {
     return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });

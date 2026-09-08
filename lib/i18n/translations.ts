@@ -17,6 +17,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     "nav.contact": "Contact",
     "nav.vendorLogin": "Vendor Login",
     "nav.vendorDashboard": "My Dashboard",
+    "nav.becomeVendor": "Become a Vendor",
+    "nav.myDah": "My DAH",
+    "nav.signOut": "Sign Out",
 
     "footer.tagline": "A stage for Dubai's most ambitious independent businesses.",
     "footer.legal": "Legal",
@@ -196,6 +199,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     "nav.contact": "تواصل معنا",
     "nav.vendorLogin": "دخول البائعين",
     "nav.vendorDashboard": "لوحتي",
+    "nav.becomeVendor": "كن بائعاً",
+    "nav.myDah": "حسابي",
+    "nav.signOut": "تسجيل الخروج",
 
     "footer.tagline": "منصة لأصحاب الأعمال المستقلة الأكثر طموحاً في دبي.",
     "footer.legal": "قانوني",

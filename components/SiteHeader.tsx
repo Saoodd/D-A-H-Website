@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Logo } from "./Logo";
 import { LanguageToggle } from "./LanguageToggle";
@@ -9,15 +10,27 @@ import { useLocale } from "@/lib/i18n/context";
 
 export function SiteHeader({ vendorLoggedIn }: { vendorLoggedIn: boolean }) {
   const { t } = useLocale();
+  const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
 
   const links = [
     { href: "/", label: t("nav.home") },
     { href: "/events", label: t("nav.events") },
-    { href: "/vendors", label: t("nav.vendors") },
     { href: "/gallery", label: t("nav.gallery") },
     { href: "/contact", label: t("nav.contact") },
   ];
+
+  function isActive(href: string) {
+    if (href === "/") return pathname === "/";
+    return pathname === href || pathname?.startsWith(href + "/");
+  }
+
+  async function signOut() {
+    await fetch("/api/vendor/logout", { method: "POST" });
+    router.push("/");
+    router.refresh();
+  }
 
   return (
     <header className="sticky top-0 z-40 bg-cream-soft/90 backdrop-blur border-b border-brown/10">
@@ -27,20 +40,48 @@ export function SiteHeader({ vendorLoggedIn }: { vendorLoggedIn: boolean }) {
         </Link>
 
         <nav className="hidden md:flex items-center gap-7 text-sm">
-          {links.map((l) => (
-            <Link key={l.href} href={l.href} className="hover:text-brown-light transition-colors">
-              {l.label}
-            </Link>
-          ))}
+          {links.map((l) => {
+            const active = isActive(l.href);
+            return (
+              <Link
+                key={l.href}
+                href={l.href}
+                className={`relative pb-1 transition-colors ${
+                  active ? "text-brown-dark" : "text-brown-light hover:text-brown-dark"
+                }`}
+              >
+                {l.label}
+                <span
+                  className={`absolute inset-x-0 -bottom-[3px] h-px bg-brown transition-opacity ${
+                    active ? "opacity-100" : "opacity-0"
+                  }`}
+                />
+              </Link>
+            );
+          })}
         </nav>
 
-        <div className="hidden md:flex items-center gap-3">
-          <Link
-            href={vendorLoggedIn ? "/vendor/dashboard" : "/vendor/login"}
-            className="text-sm border border-brown/30 rounded-full px-4 py-1.5 hover:bg-brown hover:text-cream-soft transition-colors"
-          >
-            {vendorLoggedIn ? t("nav.vendorDashboard") : t("nav.vendorLogin")}
-          </Link>
+        <div className="hidden md:flex items-center gap-5">
+          <span className="w-px h-5 bg-brown/15" aria-hidden="true" />
+
+          {vendorLoggedIn ? (
+            <div className="flex items-center gap-4 text-sm">
+              <Link href="/vendor/dashboard" className="text-brown-dark hover:text-brown-light transition-colors">
+                {t("nav.myDah")}
+              </Link>
+              <button onClick={signOut} className="text-brown-light hover:text-brown-dark transition-colors">
+                {t("nav.signOut")}
+              </button>
+            </div>
+          ) : (
+            <Link
+              href="/vendors"
+              className="text-sm text-brown-dark border-b border-brown/40 pb-0.5 hover:border-brown transition-colors"
+            >
+              {t("nav.becomeVendor")}
+            </Link>
+          )}
+
           <ThemeToggle />
           <LanguageToggle />
         </div>
@@ -59,17 +100,45 @@ export function SiteHeader({ vendorLoggedIn }: { vendorLoggedIn: boolean }) {
       {open && (
         <div className="md:hidden border-t border-brown/10 bg-cream-soft">
           <div className="container-page py-4 flex flex-col gap-4 text-sm">
-            {links.map((l) => (
-              <Link key={l.href} href={l.href} onClick={() => setOpen(false)}>
-                {l.label}
-              </Link>
-            ))}
-            <Link href={vendorLoggedIn ? "/vendor/dashboard" : "/vendor/login"} onClick={() => setOpen(false)}>
-              {vendorLoggedIn ? t("nav.vendorDashboard") : t("nav.vendorLogin")}
-            </Link>
-            <div className="flex items-center gap-3">
-              <ThemeToggle />
-              <LanguageToggle />
+            {links.map((l) => {
+              const active = isActive(l.href);
+              return (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  onClick={() => setOpen(false)}
+                  className={active ? "text-brown-dark font-medium" : "text-brown-light"}
+                >
+                  {l.label}
+                </Link>
+              );
+            })}
+
+            <div className="border-t border-brown/10 pt-4 flex flex-col gap-4">
+              {vendorLoggedIn ? (
+                <>
+                  <Link href="/vendor/dashboard" onClick={() => setOpen(false)} className="text-brown-dark">
+                    {t("nav.myDah")}
+                  </Link>
+                  <button
+                    onClick={() => {
+                      setOpen(false);
+                      signOut();
+                    }}
+                    className="text-brown-light text-left"
+                  >
+                    {t("nav.signOut")}
+                  </button>
+                </>
+              ) : (
+                <Link href="/vendors" onClick={() => setOpen(false)} className="text-brown-dark">
+                  {t("nav.becomeVendor")}
+                </Link>
+              )}
+              <div className="flex items-center gap-3">
+                <ThemeToggle />
+                <LanguageToggle />
+              </div>
             </div>
           </div>
         </div>
