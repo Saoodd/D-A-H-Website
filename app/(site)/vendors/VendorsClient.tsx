@@ -22,6 +22,9 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
   const [tradeLicenseFileName, setTradeLicenseFileName] = useState("");
   const [uploadingLicense, setUploadingLicense] = useState(false);
 
+  const [logoUrl, setLogoUrl] = useState("");
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
   async function handleTradeLicenseChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -40,6 +43,26 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
       e.target.value = "";
     } finally {
       setUploadingLicense(false);
+    }
+  }
+
+  async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    setUploadingLogo(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/vendor/upload-signup", { method: "POST", body });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      setLogoUrl(data.url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+      e.target.value = "";
+    } finally {
+      setUploadingLogo(false);
     }
   }
 
@@ -84,6 +107,7 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
           instagram: instagramHandle.trim() ? `@${instagramHandle.trim().replace(/^@/, "")}` : "",
           description: form.get("description"),
           password,
+          logoUrl,
           tradeLicenseFileUrl,
           agreedToTerms,
           website: form.get("website"), // honeypot
@@ -128,7 +152,7 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
                 : "Thanks — our team will review and verify your business. Log into your dashboard any time to check the status."}
             </p>
             <Link href="/vendor/dashboard" className="underline text-brown">
-              {t("nav.myDah")}
+              {t("nav.myProfile")}
             </Link>
           </div>
         ) : (
@@ -194,6 +218,22 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
                 className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
               />
             </label>
+
+            <div className="sm:col-span-2 flex flex-col gap-1 text-sm">
+              {t("vendorInfo.businessLogoOptional")}
+              <div className="flex items-center gap-4">
+                {logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- vendor-uploaded logo via Blob, not a static asset
+                  <img src={logoUrl} alt="" className="w-14 h-14 rounded-full object-cover border border-brown/15 shrink-0" />
+                ) : (
+                  <div className="w-14 h-14 rounded-full border border-dashed border-brown/25 shrink-0" aria-hidden="true" />
+                )}
+                <label className="text-sm px-4 py-2 rounded-full border border-brown/25 text-brown-dark hover:bg-brown/5 cursor-pointer transition-colors">
+                  {uploadingLogo ? t("vendorInfo.uploading") : t("vendorProfile.uploadLogo")}
+                  <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleLogoChange} className="hidden" />
+                </label>
+              </div>
+            </div>
 
             <Field name="password" type="password" label={t("form.password")} required minLength={8} />
             <Field name="confirmPassword" type="password" label={t("form.confirmPassword")} required minLength={8} />
@@ -269,7 +309,7 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
             <div className="sm:col-span-2">
               <button
                 type="submit"
-                disabled={submitting || uploadingLicense}
+                disabled={submitting || uploadingLicense || uploadingLogo}
                 className="px-7 py-3 rounded-full bg-brown text-cream-soft text-sm tracking-wide hover:bg-brown-dark transition-colors disabled:opacity-50"
               >
                 {submitting ? "…" : t("vendorInfo.submit")}

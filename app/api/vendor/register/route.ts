@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
       category: data.category,
       description: data.description || "",
       instagram: data.instagram || null,
+      logoUrl: data.logoUrl || null,
       tradeLicenseFileUrl: data.tradeLicenseFileUrl || null,
       verified: false,
     },

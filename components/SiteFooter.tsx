@@ -18,7 +18,7 @@ export function SiteFooter() {
             <p className="font-heading text-brown mb-3">{t("nav.events")}</p>
             <ul className="space-y-2 text-brown-light">
               <li><Link href="/events" className="hover:text-brown">{t("nav.events")}</Link></li>
-              <li><Link href="/vendors" className="hover:text-brown">{t("nav.vendors")}</Link></li>
+              <li><Link href="/vendors" className="hover:text-brown">{t("nav.becomeVendor")}</Link></li>
               <li><Link href="/gallery" className="hover:text-brown">{t("nav.gallery")}</Link></li>
             </ul>
           </div>

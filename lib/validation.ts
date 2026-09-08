@@ -20,6 +20,7 @@ export const vendorRegisterSchema = honeypotSchema.extend({
   instagram: z.string().trim().max(150).optional().or(z.literal("")),
   description: z.string().trim().max(500).optional().or(z.literal("")),
   password: z.string().min(8).max(200),
+  logoUrl: z.string().trim().max(500).optional().or(z.literal("")),
   tradeLicenseFileUrl: z.string().trim().max(500).optional().or(z.literal("")),
   // Must be explicitly true — checked server-side regardless of what the
   // signup form's checkbox UI does, per the platform's terms-acceptance rule.

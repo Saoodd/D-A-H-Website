@@ -5,8 +5,9 @@ import { getVendorSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { VendorNav } from "@/components/vendor/VendorNav";
 import { EmptyState } from "@/components/ui/Card";
+import { EventAgreementsAccordion, type EventAgreementGroup } from "@/components/vendor/EventAgreementsAccordion";
 
-export const metadata: Metadata = { title: "Agreements & Documents — My DAH" };
+export const metadata: Metadata = { title: "Agreements & Documents — My Profile" };
 
 export default async function VendorAgreementsPage() {
   const session = await getVendorSession();
@@ -23,6 +24,40 @@ export default async function VendorAgreementsPage() {
   const accountAgreements = acceptances.filter((a) => a.snapshotType === "VENDOR_TERMS");
   const eventAgreements = acceptances.filter((a) => a.snapshotType === "EVENT_TERMS");
 
+  // Every event carries its own independent Terms & Conditions, so the
+  // natural way to browse them back is one group per event — resolve the
+  // real event (name, start date) behind each acceptance's applicationId
+  // rather than trusting the point-in-time snapshot name alone.
+  const applicationIds = Array.from(new Set(eventAgreements.map((a) => a.applicationId).filter((id): id is string => !!id)));
+  const applications = applicationIds.length
+    ? await prisma.application.findMany({
+        where: { id: { in: applicationIds } },
+        select: { id: true, event: { select: { id: true, name: true, startDate: true } } },
+      })
+    : [];
+  const eventByApplicationId = new Map(applications.map((a) => [a.id, a.event]));
+
+  const groupsMap = new Map<string, EventAgreementGroup>();
+  for (const a of eventAgreements) {
+    const event = a.applicationId ? eventByApplicationId.get(a.applicationId) : null;
+    const key = event?.id ?? a.snapshotEventName ?? a.id;
+    const existing = groupsMap.get(key);
+    const item = { id: a.id, title: a.snapshotTitle, version: a.snapshotVersion, acceptedAt: a.acceptedAt.toISOString(), representativeName: a.representativeName };
+    if (existing) {
+      existing.agreements.push(item);
+    } else {
+      groupsMap.set(key, {
+        eventId: key,
+        eventName: event?.name ?? a.snapshotEventName ?? "Event",
+        eventDate: event?.startDate ? event.startDate.toISOString() : null,
+        agreements: [item],
+      });
+    }
+  }
+  const eventGroups = Array.from(groupsMap.values()).sort(
+    (a, b) => new Date(b.agreements[0].acceptedAt).getTime() - new Date(a.agreements[0].acceptedAt).getTime()
+  );
+
   return (
     <div className="container-page py-12">
       <div className="flex flex-col md:flex-row gap-8">
@@ -36,7 +71,8 @@ export default async function VendorAgreementsPage() {
           </p>
 
           <section className="mb-10">
-            <p className="label-caps mb-3">Account Agreements</p>
+            <p className="label-caps mb-1">Account Agreements</p>
+            <p className="text-xs text-brown-light mb-3">Accepted once, when you created your DAH business account.</p>
             {accountAgreements.length === 0 ? (
               <EmptyState title="Nothing accepted yet" />
             ) : (
@@ -49,21 +85,12 @@ export default async function VendorAgreementsPage() {
           </section>
 
           <section>
-            <p className="label-caps mb-3">Event Agreements</p>
-            {eventAgreements.length === 0 ? (
+            <p className="label-caps mb-1">Event Agreements</p>
+            <p className="text-xs text-brown-light mb-3">A separate agreement for every event you&rsquo;ve applied to — grouped below by event.</p>
+            {eventGroups.length === 0 ? (
               <EmptyState title="No event agreements yet" />
             ) : (
-              <div className="space-y-2">
-                {eventAgreements.map((a) => (
-                  <AgreementRow
-                    key={a.id}
-                    id={a.id}
-                    title={a.snapshotEventName ? `${a.snapshotTitle} — ${a.snapshotEventName}` : a.snapshotTitle}
-                    version={a.snapshotVersion}
-                    acceptedAt={a.acceptedAt.toISOString()}
-                  />
-                ))}
-              </div>
+              <EventAgreementsAccordion groups={eventGroups} />
             )}
           </section>
         </div>

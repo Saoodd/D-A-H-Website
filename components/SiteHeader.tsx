@@ -67,19 +67,24 @@ export function SiteHeader({ vendorLoggedIn }: { vendorLoggedIn: boolean }) {
           {vendorLoggedIn ? (
             <div className="flex items-center gap-4 text-sm">
               <Link href="/vendor/dashboard" className="text-brown-dark hover:text-brown-light transition-colors">
-                {t("nav.myDah")}
+                {t("nav.myProfile")}
               </Link>
               <button onClick={signOut} className="text-brown-light hover:text-brown-dark transition-colors">
                 {t("nav.signOut")}
               </button>
             </div>
           ) : (
-            <Link
-              href="/vendors"
-              className="text-sm text-brown-dark border-b border-brown/40 pb-0.5 hover:border-brown transition-colors"
-            >
-              {t("nav.becomeVendor")}
-            </Link>
+            <div className="flex items-center gap-4 text-sm">
+              <Link href="/vendor/login" className="text-brown-light hover:text-brown-dark transition-colors">
+                {t("nav.logIn")}
+              </Link>
+              <Link
+                href="/vendors"
+                className="text-brown-dark border-b border-brown/40 pb-0.5 hover:border-brown transition-colors"
+              >
+                {t("nav.becomeVendor")}
+              </Link>
+            </div>
           )}
 
           <ThemeToggle />
@@ -118,7 +123,7 @@ export function SiteHeader({ vendorLoggedIn }: { vendorLoggedIn: boolean }) {
               {vendorLoggedIn ? (
                 <>
                   <Link href="/vendor/dashboard" onClick={() => setOpen(false)} className="text-brown-dark">
-                    {t("nav.myDah")}
+                    {t("nav.myProfile")}
                   </Link>
                   <button
                     onClick={() => {
@@ -131,9 +136,14 @@ export function SiteHeader({ vendorLoggedIn }: { vendorLoggedIn: boolean }) {
                   </button>
                 </>
               ) : (
-                <Link href="/vendors" onClick={() => setOpen(false)} className="text-brown-dark">
-                  {t("nav.becomeVendor")}
-                </Link>
+                <>
+                  <Link href="/vendors" onClick={() => setOpen(false)} className="text-brown-dark font-medium">
+                    {t("nav.becomeVendor")}
+                  </Link>
+                  <Link href="/vendor/login" onClick={() => setOpen(false)} className="text-brown-light">
+                    {t("nav.logIn")}
+                  </Link>
+                </>
               )}
               <div className="flex items-center gap-3">
                 <ThemeToggle />

@@ -3,13 +3,14 @@ import { put } from "@vercel/blob";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10MB
-const ALLOWED_TYPES = ["image/png", "image/jpeg", "application/pdf"];
+const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "application/pdf"];
 
-// Trade licence upload for the signup form, before any account (and
-// therefore any vendor session) exists yet. Rate-limited by IP since it
-// can't be scoped to a vendor. Same Blob store as the authenticated
-// vendor-upload route (see /api/vendor/upload) — the resulting URL is
-// attached to the Vendor row when /api/vendor/register creates it.
+// Shared upload endpoint for the signup form's two optional files (business
+// logo, trade licence) — before any account (and therefore any vendor
+// session) exists yet. Rate-limited by IP since it can't be scoped to a
+// vendor. Same Blob store as the authenticated vendor-upload route (see
+// /api/vendor/upload) — the resulting URL is attached to the Vendor row
+// when /api/vendor/register creates it.
 export async function POST(req: NextRequest) {
   const ip = clientIp(req.headers);
   if (!rateLimit(`vendor-upload-signup:${ip}`, 10, 10 * 60 * 1000)) {
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No file provided." }, { status: 400 });
   }
   if (!ALLOWED_TYPES.includes(file.type)) {
-    return NextResponse.json({ error: "Only PDF, JPG or PNG files are allowed." }, { status: 400 });
+    return NextResponse.json({ error: "Only PDF, JPG, PNG or WEBP files are allowed." }, { status: 400 });
   }
   if (file.size > MAX_BYTES) {
     return NextResponse.json({ error: "File is too large (max 10MB)." }, { status: 400 });

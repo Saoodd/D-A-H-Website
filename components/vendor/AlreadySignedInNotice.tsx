@@ -32,7 +32,7 @@ export function AlreadySignedInNotice({ businessName }: { businessName: string }
       </p>
       <div className="flex items-center justify-center gap-6 flex-wrap">
         <Link href="/vendor/dashboard" className="px-6 py-2.5 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark transition-colors">
-          {locale === "ar" ? "الذهاب إلى حسابي" : "Go to My DAH"}
+          {locale === "ar" ? "الذهاب إلى ملفي الشخصي" : "Go to My Profile"}
         </Link>
         <button onClick={signOutAndReload} disabled={signingOut} className="text-sm underline text-brown-light hover:text-brown-dark disabled:opacity-50">
           {locale === "ar" ? "تسجيل الخروج لإنشاء حساب عمل مختلف" : "Sign out to create a different business account"}
