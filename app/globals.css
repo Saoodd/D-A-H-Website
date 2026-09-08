@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* DAH palette — warm ivory / stone / espresso / near-black, with one
    restrained bronze accent used sparingly (a thin rule, a small detail —
@@ -103,6 +104,19 @@ html[dir="rtl"] .label-caps {
 :focus-visible {
   outline: 2px solid var(--color-brown);
   outline-offset: 2px;
+}
+
+/* Rich-text/agreement content (Tailwind Typography) in the DAH palette
+   instead of the plugin's default grays — used for admin-authored
+   Terms & Conditions and legal copy wherever `.prose` is applied. */
+.prose {
+  --tw-prose-body: var(--color-ink);
+  --tw-prose-headings: var(--color-brown-dark);
+  --tw-prose-bold: var(--color-brown-dark);
+  --tw-prose-links: var(--color-brown);
+  --tw-prose-bullets: var(--color-brown-light);
+  --tw-prose-counters: var(--color-brown-light);
+  --tw-prose-hr: color-mix(in srgb, var(--color-brown) 15%, transparent);
 }
 
 .container-page {

@@ -33,14 +33,14 @@ datasource db {
 // Site-wide settings (singleton row, id = "singleton")
 // ---------------------------------------------------------------------------
 model Settings {
-  id                             String   @id @default("singleton")
+  id                             String  @id @default("singleton")
   mainCommunityWhatsappLink      String? // Main DAH Community Group — account-level, not tied to any event
-  defaultAcceptanceDeadlineHours Int      @default(24)
+  defaultAcceptanceDeadlineHours Int     @default(24)
 
   // Single source of truth for contact details shown across the public site
   // (Contact page, footer, emails) — never hardcode these in components.
-  contactEmail            String?
-  contactInstagramHandle  String? // without the leading @
+  contactEmail           String?
+  contactInstagramHandle String? // without the leading @
 
   // Single source of truth for the trade-license requirement so vendor
   // registration copy and the Terms & Conditions page can never contradict
@@ -91,18 +91,19 @@ model Event {
   // Real width, in meters, that the floor plan canvas represents — optional.
   // When set, the floor plan builder's drag distance/spacing guides show
   // real meters (derived from this scale) instead of a raw canvas percentage.
-  venueWidthM Float?
+  venueWidthM       Float?
 
   whatsappVendorGroupLink String? // event-specific, payment-gated
 
   // Overrides Settings.defaultAcceptanceDeadlineHours for this event only.
   acceptanceDeadlineHours Int?
 
-  booths         Booth[]
-  features       FloorPlanFeature[]
-  applications   Application[]
+  booths           Booth[]
+  features         FloorPlanFeature[]
+  applications     Application[]
   pricingOverrides EventPricing[]
-  vendorWarnings VendorWarning[]
+  vendorWarnings   VendorWarning[]
+  agreements       Agreement[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -112,31 +113,31 @@ model Event {
 // different booth fee at a specific market without changing the global
 // default. Falls back to PricingTier.priceAedFils when no row exists here.
 model EventPricing {
-  id            String   @id @default(cuid())
-  eventId       String
-  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  sizeKey       String // matches PricingTier.sizeKey
-  priceAedFils  Int
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(cuid())
+  eventId      String
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  sizeKey      String // matches PricingTier.sizeKey
+  priceAedFils Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([eventId, sizeKey])
 }
 
 model FloorPlanFeature {
-  id    String @id @default(cuid())
-  eventId String
-  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  eventId  String
+  event    Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
   // ENTRANCE_MAIN | ENTRANCE_SIDE | TOILET_FEMALE | TOILET_MALE | OFFICE | LOADING | STAIRS | OTHER
-  type  String
-  label String
+  type     String
+  label    String
   // Position/size as a percentage (0-100) of the floor plan canvas/image.
   // See components/floorplan.
   gridX    Float
   gridY    Float
   gridW    Float
   gridH    Float
-  rotation Int   @default(0) // degrees, for arrow/door orientation
+  rotation Int    @default(0) // degrees, for arrow/door orientation
 
   createdAt DateTime @default(now())
 }
@@ -158,20 +159,20 @@ model Booth {
 
   // Position/size as a percentage (0-100) of the floor plan canvas/image —
   // lets the admin click-to-place a booth instead of typing coordinates.
-  gridX Float
-  gridY Float
-  gridW Float
-  gridH Float
-  rotation Int @default(0) // degrees, set by dragging the rotate handle in the floor plan builder
+  gridX    Float
+  gridY    Float
+  gridW    Float
+  gridH    Float
+  rotation Int   @default(0) // degrees, set by dragging the rotate handle in the floor plan builder
 
   status String @default("AVAILABLE") // AVAILABLE | HELD | RESERVED | SOLD
 
   // System-driven hold (5 min review / 5 min payment) — enforced server-side
   // by checking holdExpiresAt on every read/write, never trusting the client.
   holdStage           String? // REVIEW | PAYMENT
-  holdExpiresAt        DateTime?
-  heldByApplicationId  String?
-  heldByApplication    Application? @relation("BoothHeldBy", fields: [heldByApplicationId], references: [id])
+  holdExpiresAt       DateTime?
+  heldByApplicationId String?
+  heldByApplication   Application? @relation("BoothHeldBy", fields: [heldByApplicationId], references: [id])
 
   // Admin-driven manual reservation/sale — no timer.
   assignedApplicationId String?
@@ -215,9 +216,15 @@ model Vendor {
   tradeLicenseFileUrl String? // uploaded via the existing Vercel Blob setup, same as floor plan images
   tradeLicenseExpiry  DateTime?
 
-  applications Application[]
-  notes        VendorNote[]
-  warnings     VendorWarning[]
+  applications         Application[]
+  notes                VendorNote[]
+  warnings             VendorWarning[]
+  // Every Agreement (VENDOR_TERMS at signup, EVENT_TERMS per booking) this
+  // vendor has accepted — look up the VENDOR_TERMS one via
+  // `agreementAcceptances.find(a => a.agreement.type === "VENDOR_TERMS")`
+  // rather than a direct pointer, since the acceptance row can only be
+  // created after this Vendor row exists.
+  agreementAcceptances AgreementAcceptance[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -297,6 +304,7 @@ model Application {
   cancellationRequests CancellationRequest[]
   adjustments          Adjustment[]
   payments             Payment[]
+  agreementAcceptances AgreementAcceptance[]
 
   heldBooths     Booth[] @relation("BoothHeldBy")
   assignedBooths Booth[] @relation("BoothAssignedTo")
@@ -344,6 +352,77 @@ model CancellationRequest {
   reason        String
   status        String      @default("PENDING") // PENDING | ACKNOWLEDGED
   createdAt     DateTime    @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Agreements — two independent, versioned document types, deliberately
+// never mixed:
+//   VENDOR_TERMS: one lineage per account signup (eventId always null).
+//   EVENT_TERMS:  one independent lineage PER event (eventId always set) —
+//                 duplicating an event copies the current text into a
+//                 brand-new lineage, never linked back to the source
+//                 event's, so editing one never touches the other.
+// Only one row per (type, eventId) may be PUBLISHED at a time; editing a
+// published agreement creates a new DRAFT version rather than overwriting
+// it in place, so every past acceptance stays pinned to the exact text it
+// was made against (see AgreementAcceptance.snapshotBodyHtml below).
+// ---------------------------------------------------------------------------
+model Agreement {
+  id      String  @id @default(cuid())
+  type    String // VENDOR_TERMS | EVENT_TERMS
+  eventId String? // set only for EVENT_TERMS
+  event   Event?  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  version  Int
+  title    String
+  bodyHtml String @db.Text
+
+  status      String    @default("DRAFT") // DRAFT | PUBLISHED | ARCHIVED
+  publishedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  acceptances AgreementAcceptance[]
+
+  @@unique([type, eventId, version])
+  @@index([type, eventId, status])
+}
+
+// Immutable evidence of one vendor accepting one specific Agreement
+// version. Snapshot fields are captured at accept-time and never change
+// even if the Agreement row is later edited/republished as a new version
+// — the signed record must always be readable exactly as it was accepted,
+// independent of the live Agreement row.
+model AgreementAcceptance {
+  id          String    @id @default(cuid())
+  agreementId String
+  agreement   Agreement @relation(fields: [agreementId], references: [id])
+  vendorId    String
+  vendor      Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  // Set only for EVENT_TERMS acceptances — ties this acceptance to the
+  // specific application/booking it was made for.
+  applicationId      String?
+  application        Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  representativeName String? // typed full name — EVENT_TERMS only
+
+  snapshotType         String
+  snapshotTitle        String
+  snapshotVersion      Int
+  snapshotBodyHtml     String  @db.Text
+  snapshotBusinessName String
+  snapshotContactName  String
+  snapshotEventName    String? // EVENT_TERMS only
+
+  ipAddress String?
+  userAgent String?
+
+  acceptedAt DateTime @default(now())
+
+  @@index([vendorId])
+  @@index([agreementId])
+  @@index([applicationId])
 }
 
 model GalleryImage {
