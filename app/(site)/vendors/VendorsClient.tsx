@@ -15,6 +15,32 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
   const [category, setCategory] = useState<string>(VENDOR_CATEGORIES[0]);
   const [categoryOther, setCategoryOther] = useState("");
   const [instagramHandle, setInstagramHandle] = useState("");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+
+  const [tradeLicenseFileUrl, setTradeLicenseFileUrl] = useState("");
+  const [tradeLicenseFileName, setTradeLicenseFileName] = useState("");
+  const [uploadingLicense, setUploadingLicense] = useState(false);
+
+  async function handleTradeLicenseChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    setUploadingLicense(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/vendor/upload-signup", { method: "POST", body });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      setTradeLicenseFileUrl(data.url);
+      setTradeLicenseFileName(file.name);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+      e.target.value = "";
+    } finally {
+      setUploadingLicense(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -31,6 +57,18 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
       setError(locale === "ar" ? "يرجى تحديد الفئة" : "Please specify your category");
       return;
     }
+    if (tradeLicenseRequired && !tradeLicenseFileUrl) {
+      setError(locale === "ar" ? "الرخصة التجارية مطلوبة" : "A trade licence document is required");
+      return;
+    }
+    if (!agreedToTerms) {
+      setError(
+        locale === "ar"
+          ? "يجب الموافقة على شروط وأحكام البائعين وسياسة الخصوصية"
+          : "You must agree to the Vendor Terms & Conditions and Privacy Policy"
+      );
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch("/api/vendor/register", {
@@ -45,6 +83,8 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
           instagram: instagramHandle.trim() ? `@${instagramHandle.trim().replace(/^@/, "")}` : "",
           description: form.get("description"),
           password,
+          tradeLicenseFileUrl,
+          agreedToTerms,
           website: form.get("website"), // honeypot
         }),
       });
@@ -66,48 +106,16 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
         <header className="max-w-2xl mb-12">
           <h1 className="font-heading text-3xl md:text-4xl text-brown-dark">{t("vendorInfo.title")}</h1>
           <p className="mt-3 text-brown-light">{t("vendorInfo.subtitle")}</p>
+          <p className="mt-4 text-sm text-brown-light">
+            {t("vendorInfo.loginPrompt")}{" "}
+            <Link href="/vendor/login" className="underline text-brown">
+              {t("vendorInfo.loginLink")}
+            </Link>
+          </p>
         </header>
       </Reveal>
 
-      <Reveal delayMs={100} className="max-w-xl mb-16">
-        <h2 className="font-heading text-xl text-brown-dark mb-3">
-          {locale === "ar" ? "المتطلبات والتوقعات" : "Requirements & expectations"}
-        </h2>
-        <ul className="space-y-2 text-brown-light text-sm list-disc pl-4">
-          <li>
-            {tradeLicenseRequired
-              ? locale === "ar"
-                ? "رخصة تجارية سارية المفعول"
-                : "A valid trade license"
-              : locale === "ar"
-              ? "رخصة تجارية (اختيارية — أخبرنا إن لم تكن لديك بعد)"
-              : "Trade license (optional — let us know if you don't have one yet)"}
-          </li>
-          <li>{locale === "ar" ? "الالتزام بمواعيد الإعداد والتفكيك" : "On-time setup and breakdown per the event schedule"}</li>
-          <li>{locale === "ar" ? "تقديم منتج/خدمة تتماشى مع هوية دار الحي" : "A product or service that fits the DAH brand and mix"}</li>
-          <li>{locale === "ar" ? "الالتزام بشروط وأحكام الحجز" : "Agreement to the booking Terms & Conditions"}</li>
-        </ul>
-        <p className="mt-4 text-xs text-brown-light">
-          {locale === "ar"
-            ? "بعد إنشاء حسابك، سيقوم فريقنا بمراجعة عملك والتحقق منه. بمجرد التحقق، يمكنك التقديم لأي فعالية قادمة من لوحتك."
-            : "After you create your account, our team reviews and verifies your business. Once verified, you can apply to any upcoming event from your dashboard."}
-        </p>
-        <p className="mt-4 text-sm text-brown-light">
-          {t("vendorInfo.loginPrompt")}{" "}
-          <Link href="/vendor/login" className="underline text-brown">
-            {t("vendorInfo.loginLink")}
-          </Link>
-        </p>
-      </Reveal>
-
-      <Reveal delayMs={200} id="apply" className="bg-cream rounded-2xl border border-brown/10 p-6 md:p-10">
-        <h2 className="font-heading text-2xl text-brown-dark mb-1">{t("vendorInfo.applyTitle")}</h2>
-        <p className="text-sm text-brown-light mb-6">
-          {locale === "ar"
-            ? "أنشئ حساب عملك في دار الحي — ليس مرتبطاً بفعالية معينة."
-            : "Create your Dar Al Hay business account — this isn't tied to a specific event."}
-        </p>
-
+      <Reveal delayMs={100} id="apply" className="bg-cream rounded-2xl border border-brown/10 p-6 md:p-10">
         {done ? (
           <div className="text-center py-10">
             <h3 className="font-heading text-xl text-brown-dark mb-2">
@@ -119,7 +127,7 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
                 : "Thanks — our team will review and verify your business. Log into your dashboard any time to check the status."}
             </p>
             <Link href="/vendor/dashboard" className="underline text-brown">
-              {t("nav.vendorDashboard")}
+              {t("nav.myDah")}
             </Link>
           </div>
         ) : (
@@ -189,12 +197,51 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
             <Field name="password" type="password" label={t("form.password")} required minLength={8} />
             <Field name="confirmPassword" type="password" label={t("form.confirmPassword")} required minLength={8} />
 
+            <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+              {tradeLicenseRequired ? t("vendorInfo.tradeLicenseRequired") : t("vendorInfo.tradeLicenseOptional")}
+              <input
+                type="file"
+                accept="application/pdf,image/jpeg,image/png"
+                onChange={handleTradeLicenseChange}
+                required={tradeLicenseRequired && !tradeLicenseFileUrl}
+                className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft text-sm file:me-3 file:rounded-full file:border-0 file:bg-brown file:text-cream-soft file:px-3 file:py-1 file:text-xs"
+              />
+              <span className="text-xs text-brown-light">
+                {uploadingLicense
+                  ? t("vendorInfo.uploading")
+                  : tradeLicenseFileName
+                  ? tradeLicenseFileName
+                  : t("vendorInfo.tradeLicenseHint")}
+              </span>
+            </label>
+
+            <label className="flex items-start gap-2.5 text-sm sm:col-span-2">
+              <input
+                type="checkbox"
+                checked={agreedToTerms}
+                onChange={(e) => setAgreedToTerms(e.target.checked)}
+                required
+                className="mt-0.5"
+              />
+              <span className="text-brown-light">
+                {t("vendorInfo.termsAgree")}{" "}
+                <Link href="/vendor-terms" target="_blank" className="underline text-brown">
+                  {t("vendorInfo.vendorTerms")}
+                </Link>{" "}
+                {t("vendorInfo.termsAnd")}{" "}
+                <Link href="/legal/privacy" target="_blank" className="underline text-brown">
+                  {t("vendorInfo.privacyPolicy")}
+                </Link>
+                .
+              </span>
+            </label>
+
             {error && <p className="sm:col-span-2 text-sm text-red-700">{error}</p>}
 
             <div className="sm:col-span-2">
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || uploadingLicense}
                 className="px-7 py-3 rounded-full bg-brown text-cream-soft text-sm tracking-wide hover:bg-brown-dark transition-colors disabled:opacity-50"
               >
                 {submitting ? "…" : t("vendorInfo.submit")}
