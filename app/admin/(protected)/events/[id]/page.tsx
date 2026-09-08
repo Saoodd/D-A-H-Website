@@ -1,29 +1,78 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { EventForm } from "../EventForm";
-import { FloorPlanBuilder } from "./FloorPlanBuilder";
-import { EventDangerZone } from "./EventDangerZone";
+import { getDisplayStatus } from "@/lib/status";
+import { EventWorkspaceClient } from "./EventWorkspaceClient";
 
-export const metadata: Metadata = { title: "Edit Event — Admin" };
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const event = await prisma.event.findUnique({ where: { id }, select: { name: true } });
+  return { title: event ? `${event.name} — Admin` : "Edit Event — Admin" };
+}
 
 export default async function EditEventPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const event = await prisma.event.findUnique({ where: { id } });
+  const event = await prisma.event.findUnique({ where: { id }, include: { booths: true } });
   if (!event) notFound();
 
-  const [existingEvents, tiers] = await Promise.all([
+  const [existingEvents, tiers, applications, payments] = await Promise.all([
     prisma.event.findMany({ where: { id: { not: id } }, select: { id: true, name: true } }),
     prisma.pricingTier.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
+    prisma.application.findMany({
+      where: { eventId: id },
+      include: { vendor: { select: { id: true, businessName: true, verified: true } }, payments: { where: { status: "SUCCEEDED" } } },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.payment.findMany({
+      where: { eventId: id, status: "SUCCEEDED" },
+      include: { application: { select: { businessName: true, id: true } }, booth: { select: { code: true } } },
+      orderBy: { paidAt: "desc" },
+    }),
   ]);
 
-  return (
-    <div className="max-w-4xl">
-      <h1 className="font-heading text-2xl text-brown-dark mb-6">{event.name}</h1>
+  const sold = event.booths.filter((b) => b.status === "SOLD");
+  const revenue = sold.reduce((sum, b) => sum + (b.priceAedFilsAtSale || 0), 0);
 
-      <EventForm
-        existingEvents={existingEvents}
-        initial={{
+  const uniqueVendors = Array.from(
+    new Map(applications.map((a) => [a.vendor.id, { id: a.vendor.id, businessName: a.vendor.businessName, verified: a.vendor.verified }])).values()
+  );
+
+  return (
+    <EventWorkspaceClient
+      event={{
+        id: event.id,
+        name: event.name,
+        status: event.status,
+      }}
+      stats={{
+        applicationsCount: applications.length,
+        pending: applications.filter((a) => a.status === "PENDING").length,
+        accepted: applications.filter((a) => a.status === "ACCEPTED").length,
+        rejected: applications.filter((a) => a.status === "REJECTED").length,
+        boothsSold: sold.length,
+        boothsTotal: event.booths.length,
+        revenue,
+        vendorsCount: uniqueVendors.length,
+      }}
+      applications={applications.map((a) => ({
+        id: a.id,
+        businessName: a.businessName,
+        vendorId: a.vendor.id,
+        displayStatus: getDisplayStatus(a, a.payments.length > 0),
+        createdAt: a.createdAt.toISOString(),
+      }))}
+      vendors={uniqueVendors}
+      payments={payments.map((p) => ({
+        id: p.id,
+        businessName: p.application.businessName,
+        applicationId: p.application.id,
+        boothCode: p.booth.code,
+        amountAedFils: p.amountAedFils,
+        paidAt: p.paidAt ? p.paidAt.toISOString() : null,
+      }))}
+      eventFormProps={{
+        existingEvents,
+        initial: {
           id: event.id,
           name: event.name,
           slug: event.slug,
@@ -39,22 +88,14 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
           status: event.status,
           whatsappVendorGroupLink: event.whatsappVendorGroupLink,
           acceptanceDeadlineHours: event.acceptanceDeadlineHours,
-        }}
-      />
-
-      <h2 className="font-heading text-xl text-brown-dark mt-12 mb-4">Floor plan &amp; booths</h2>
-      <FloorPlanBuilder
-        eventId={event.id}
-        floorPlanImageUrl={event.floorPlanImageUrl}
-        venueWidthM={event.venueWidthM}
-        tiers={tiers.map((t) => ({
-          sizeKey: t.sizeKey,
-          label: t.label,
-          priceAedFils: t.priceAedFils,
-        }))}
-      />
-
-      <EventDangerZone eventId={event.id} eventName={event.name} />
-    </div>
+        },
+      }}
+      floorPlanProps={{
+        eventId: event.id,
+        floorPlanImageUrl: event.floorPlanImageUrl,
+        venueWidthM: event.venueWidthM,
+        tiers: tiers.map((t) => ({ sizeKey: t.sizeKey, label: t.label, priceAedFils: t.priceAedFils })),
+      }}
+    />
   );
 }

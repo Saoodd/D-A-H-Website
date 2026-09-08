@@ -580,7 +580,7 @@ export function FloorPlanBuilder({
   return (
     <div>
       {notice && (
-        <div className="mb-4 flex items-start justify-between gap-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm px-4 py-3">
+        <div className="mb-4 flex items-start justify-between gap-3 rounded-[8px] bg-amber-50 border border-amber-200 text-amber-900 text-sm px-4 py-3">
           <span>{notice}</span>
           <button onClick={() => setNotice(null)} className="shrink-0 text-amber-700 underline text-xs">
             dismiss
@@ -588,17 +588,12 @@ export function FloorPlanBuilder({
         </div>
       )}
 
-      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-brown/10 bg-cream p-4">
-        <div className="flex-1 min-w-[220px]">
-          <p className="text-sm font-medium text-brown-dark">Floor plan image</p>
-          <p className="text-xs text-brown-light">
-            {floorPlanImageUrl
-              ? "Upload a different photo/scan to replace it."
-              : "Upload a photo or scan of the real venue layout — booths you place will click-to-place directly onto it."}
-          </p>
-        </div>
-        <label className="px-4 py-2 rounded-full border border-brown/30 text-sm cursor-pointer hover:bg-brown hover:text-cream-soft transition-colors">
-          {uploadingImage ? "Uploading…" : floorPlanImageUrl ? "Replace image" : "Upload image"}
+      {/* Compact top toolbar — upload, undo/redo, guide toggles. Booth
+          creation and the selection inspector live in the right-hand panel
+          below, instead of stacked as forms above/below the canvas. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[10px] border border-brown/10 bg-cream p-3">
+        <label className="px-3 py-1.5 rounded-[6px] border border-brown/25 text-xs cursor-pointer hover:bg-brown hover:text-cream-soft transition-colors">
+          {uploadingImage ? "Uploading…" : floorPlanImageUrl ? "Replace image" : "Upload floor plan image"}
           <input
             type="file"
             accept="image/png,image/jpeg,image/webp,image/gif"
@@ -627,408 +622,429 @@ export function FloorPlanBuilder({
             Remove image
           </button>
         )}
-      </div>
 
-      <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-brown/10 bg-cream p-4">
-        <label className="flex flex-col gap-1 text-xs text-brown-light">
-          Name of booth <span className="text-brown-light/60">(ex: B25)</span>
-          <input
-            value={placeName}
-            onChange={(e) => setPlaceName(e.target.value)}
-            placeholder="B25"
-            className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-sm w-28"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-brown-light">
-          Price of booth (AED) <span className="text-brown-light/60">(ex: 1837.5)</span>
-          <input
-            value={placePrice}
-            onChange={(e) => setPlacePrice(e.target.value)}
-            type="number"
-            step="0.01"
-            min="0"
-            required
-            placeholder="1837.5"
-            className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-sm w-28"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-brown-light">
-          Color
-          <div className="flex items-center gap-1.5">
-            <input
-              type="color"
-              value={/^#[0-9a-fA-F]{6}$/.test(placeColor) ? placeColor : "#C97C4B"}
-              onChange={(e) => setPlaceColor(e.target.value)}
-              className="w-8 h-8 rounded border border-brown/20 bg-cream-soft cursor-pointer p-0.5"
-            />
-            <input
-              value={placeColor}
-              onChange={(e) => setPlaceColor(e.target.value)}
-              placeholder="#C97C4B"
-              maxLength={7}
-              className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-sm w-24 font-mono"
-            />
-          </div>
-        </label>
+        <div className="w-px h-5 bg-brown/15 mx-1" />
+
         <button
           type="button"
-          onClick={() => setPlacementOn((v) => !v)}
-          disabled={!placementOn && (!placeName.trim() || !placePrice.trim())}
-          className={`ml-auto px-5 py-2 rounded-full text-sm disabled:opacity-50 ${
-            placementOn ? "bg-green-700 text-white" : "bg-brown text-cream-soft"
-          }`}
+          onClick={handleUndo}
+          disabled={undoStack.length === 0}
+          title="Undo (Cmd/Ctrl+Z)"
+          className="w-7 h-7 rounded-full border border-brown/25 hover:bg-brown/10 disabled:opacity-30 text-sm"
         >
-          {placementOn ? "Placing — click the map (click again to stop)" : "Click to add booths"}
+          ↶
         </button>
-      </div>
+        <button
+          type="button"
+          onClick={handleRedo}
+          disabled={redoStack.length === 0}
+          title="Redo (Cmd/Ctrl+Shift+Z)"
+          className="w-7 h-7 rounded-full border border-brown/25 hover:bg-brown/10 disabled:opacity-30 text-sm"
+        >
+          ↷
+        </button>
 
-      <div className="mb-2 flex flex-wrap items-center gap-4 text-xs text-brown-light">
-        <label className="flex items-center gap-1.5 cursor-pointer">
+        <div className="w-px h-5 bg-brown/15 mx-1" />
+
+        <label className="flex items-center gap-1.5 cursor-pointer text-xs text-brown-light">
           <input type="checkbox" checked={smartGuidesEnabled} onChange={toggleSmartGuides} />
-          Smart guides (align &amp; equal spacing)
+          Smart guides
         </label>
-        <label className="flex items-center gap-1.5 cursor-pointer">
+        <label className="flex items-center gap-1.5 cursor-pointer text-xs text-brown-light">
           <input type="checkbox" checked={gridSnapEnabled} onChange={toggleGridSnap} />
           Snap to grid
         </label>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleUndo}
-            disabled={undoStack.length === 0}
-            title="Undo (Cmd/Ctrl+Z)"
-            className="w-7 h-7 rounded-full border border-brown/30 hover:bg-brown/10 disabled:opacity-30"
-          >
-            ↶
-          </button>
-          <button
-            type="button"
-            onClick={handleRedo}
-            disabled={redoStack.length === 0}
-            title="Redo (Cmd/Ctrl+Shift+Z)"
-            className="w-7 h-7 rounded-full border border-brown/30 hover:bg-brown/10 disabled:opacity-30"
-          >
-            ↷
-          </button>
-        </div>
+
         {!venueWidthM && (
-          <span className="text-brown-light/70 basis-full">
-            Tip: set a real venue width (meters) in the event details above to show real distances while dragging.
+          <span className="text-xs text-brown-light/70 ml-auto">
+            Tip: set a venue width (meters) in Settings to show real distances while dragging.
           </span>
         )}
       </div>
 
-      {selectionCount > 1 && (
-        <div className="mb-4 rounded-xl border border-blue-300 bg-blue-50 p-4 sticky top-2 z-10 space-y-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="text-sm font-medium text-blue-900">{selectionCount} booths selected</span>
-            <button type="button" onClick={() => setSelectedIds(new Set())} className="text-xs text-blue-900 underline">
-              Clear selection
-            </button>
-            <span className="text-xs text-blue-800/70 ml-auto">
-              Drag any selected booth to move the group · arrow keys nudge · Cmd/Ctrl+D duplicates · Delete removes
-            </span>
-          </div>
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        <div className="flex-1 min-w-0 w-full">
+          <FloorPlan
+            features={features}
+            booths={booths}
+            sizeStyles={sizeStyles}
+            allowAnyStatusClick
+            backgroundImageUrl={floorPlanImageUrl}
+            placementMode={placementOn}
+            onCanvasClick={handleCanvasClick}
+            onDeselect={() => setSelectedIds(new Set())}
+            editable={!placementOn}
+            onBoothCommit={onBoothCommit}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+            onGroupCommit={onGroupCommit}
+            onDeleteSelected={deleteSelection}
+            onDuplicateSelected={duplicateSelection}
+            smartGuidesEnabled={smartGuidesEnabled}
+            gridSnapEnabled={gridSnapEnabled}
+            venueWidthM={venueWidthM}
+          />
+          <Legend sizeStyles={sizeStyles} />
 
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-blue-900">Align:</span>
-            {(
-              [
-                ["left", "Left"],
-                ["right", "Right"],
-                ["top", "Top"],
-                ["bottom", "Bottom"],
-                ["centerH", "Center H"],
-                ["centerV", "Center V"],
-              ] as const
-            ).map(([kind, label]) => (
-              <button
-                key={kind}
-                type="button"
-                onClick={() => alignSelection(kind)}
-                className="px-3 py-1.5 rounded-full border border-blue-300 bg-white text-xs text-blue-900 hover:bg-blue-100"
-              >
-                {label}
-              </button>
-            ))}
-            <span className="text-xs text-blue-900 ml-2">Distribute:</span>
-            <button
-              type="button"
-              onClick={() => distributeSelection("horizontal")}
-              disabled={selectionCount < 3}
-              className="px-3 py-1.5 rounded-full border border-blue-300 bg-white text-xs text-blue-900 hover:bg-blue-100 disabled:opacity-40"
-            >
-              Horizontally
-            </button>
-            <button
-              type="button"
-              onClick={() => distributeSelection("vertical")}
-              disabled={selectionCount < 3}
-              className="px-3 py-1.5 rounded-full border border-blue-300 bg-white text-xs text-blue-900 hover:bg-blue-100 disabled:opacity-40"
-            >
-              Vertically
+          <div className="mt-8">
+            <button type="button" onClick={() => setShowAdvanced((v) => !v)} className="text-xs text-brown-light underline">
+              {showAdvanced ? "Hide advanced tools" : "Advanced: add structural features / bulk-import booths"}
             </button>
           </div>
 
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1 text-xs text-blue-900">
-              New price (AED) for all selected
-              <input
-                value={selectionPrice}
-                onChange={(e) => setSelectionPrice(e.target.value)}
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="1837.5"
-                className="border border-blue-300 rounded-lg px-2 py-1.5 bg-white text-sm w-32"
-              />
-            </label>
-            <button
-              type="button"
-              onClick={applySelectionPrice}
-              disabled={applyingSelectionPrice || !selectionPrice.trim()}
-              className="px-4 py-2 rounded-full bg-blue-700 text-white text-sm disabled:opacity-50"
-            >
-              {applyingSelectionPrice ? "Applying…" : "Apply price"}
-            </button>
-            <button
-              type="button"
-              onClick={duplicateSelection}
-              disabled={busyAction}
-              className="px-4 py-2 rounded-full border border-blue-300 bg-white text-sm text-blue-900 disabled:opacity-50"
-            >
-              Duplicate
-            </button>
-            <button
-              type="button"
-              onClick={deleteSelection}
-              disabled={busyAction}
-              className="px-4 py-2 rounded-full border border-red-300 text-red-700 text-sm disabled:opacity-50"
-            >
-              Delete selected
-            </button>
-          </div>
-        </div>
-      )}
+          {showAdvanced && (
+            <div className="mt-4 space-y-6">
+              <form onSubmit={addFeature} className="rounded-[10px] border border-brown/10 bg-cream p-5">
+                <p className="text-sm font-medium text-brown-dark mb-3">
+                  Add a structural feature (entrance, toilets, office, loading, stairs)
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <select name="type" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft col-span-2">
+                    {FEATURE_TYPE.map((t) => (
+                      <option key={t} value={t}>
+                        {t.replaceAll("_", " ")}
+                      </option>
+                    ))}
+                  </select>
+                  <input name="label" placeholder="Label" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft col-span-2" />
+                  <input name="gridX" type="number" step="0.5" placeholder="X %" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                  <input name="gridY" type="number" step="0.5" placeholder="Y %" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                  <input name="gridW" type="number" step="0.5" placeholder="Width %" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                  <input name="gridH" type="number" step="0.5" placeholder="Height %" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                  <input name="rotation" type="number" placeholder="Rotation °" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft col-span-2" />
+                </div>
+                <button type="submit" className="mt-3 px-4 py-2 rounded-[6px] bg-brown text-cream-soft text-sm">
+                  Add feature
+                </button>
+              </form>
 
-      <FloorPlan
-        features={features}
-        booths={booths}
-        sizeStyles={sizeStyles}
-        allowAnyStatusClick
-        backgroundImageUrl={floorPlanImageUrl}
-        placementMode={placementOn}
-        onCanvasClick={handleCanvasClick}
-        onDeselect={() => setSelectedIds(new Set())}
-        editable={!placementOn}
-        onBoothCommit={onBoothCommit}
-        selectedIds={selectedIds}
-        onSelectionChange={setSelectedIds}
-        onGroupCommit={onGroupCommit}
-        onDeleteSelected={deleteSelection}
-        onDuplicateSelected={duplicateSelection}
-        smartGuidesEnabled={smartGuidesEnabled}
-        gridSnapEnabled={gridSnapEnabled}
-        venueWidthM={venueWidthM}
-      />
-      <Legend sizeStyles={sizeStyles} />
-
-      {selected && (
-        <div className="mt-4 rounded-xl border border-brown/20 bg-cream p-5">
-          <div className="flex items-center justify-between mb-3">
-            <p className="font-heading text-lg text-brown-dark">Booth {selected.code}</p>
-            <button onClick={() => setSelectedIds(new Set())} className="text-xs text-brown-light underline">
-              Close
-            </button>
-          </div>
-          <p className="text-xs text-brown-light mb-3">
-            Current status {selected.status}
-            {selected.occupant && ` · Occupied by ${selected.occupant.name}`}
-          </p>
-
-          <div className="grid sm:grid-cols-2 gap-3 text-sm">
-            <label className="flex flex-col gap-1">
-              Code
-              <input id="booth-code" defaultValue={selected.code} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft" />
-            </label>
-            <label className="flex flex-col gap-1">
-              Price (AED) <span className="text-brown-light/60 text-xs">(blank = use pricing tier)</span>
-              <input
-                id="booth-price"
-                type="number"
-                step="0.01"
-                min="0"
-                defaultValue={selected.priceAedFils != null ? selected.priceAedFils / 100 : ""}
-                placeholder="e.g. 1837.5"
-                className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              Color
-              <div className="flex items-center gap-1.5">
-                <input
-                  id="booth-color-picker"
-                  type="color"
-                  defaultValue={
-                    selected.colorHex && /^#[0-9a-fA-F]{6}$/.test(selected.colorHex) ? selected.colorHex : "#C97C4B"
-                  }
-                  onChange={(e) => {
-                    const textInput = document.getElementById("booth-color") as HTMLInputElement | null;
-                    if (textInput) textInput.value = e.target.value;
-                  }}
-                  className="w-9 h-9 rounded border border-brown/20 bg-cream-soft cursor-pointer p-0.5"
+              <div className="rounded-[10px] border border-brown/10 bg-cream p-5">
+                <p className="text-sm font-medium text-brown-dark mb-2">Bulk import booths (paste JSON)</p>
+                <p className="text-xs text-brown-light mb-3">
+                  {'Array of {"code","size","gridX","gridY","gridW","gridH"} (X/Y/W/H as % of the canvas, 0-100) — paste the full real booth list here once confirmed. Existing codes are updated in place; new codes are created as available.'}
+                </p>
+                <textarea
+                  value={bulkText}
+                  onChange={(e) => setBulkText(e.target.value)}
+                  rows={6}
+                  placeholder='[{"code":"A1","size":"2x2","gridX":10,"gridY":10,"gridW":6,"gridH":6}]'
+                  className="w-full border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft text-xs font-mono"
                 />
-                <input
-                  id="booth-color"
-                  defaultValue={selected.colorHex || ""}
-                  placeholder="blank = use size color"
-                  maxLength={7}
-                  className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft flex-1 font-mono"
-                />
+                <button onClick={submitBulk} className="mt-3 px-4 py-2 rounded-[6px] bg-brown text-cream-soft text-sm">
+                  Import
+                </button>
               </div>
-            </label>
-            <label className="flex flex-col gap-1">
-              Status
-              <select
-                defaultValue={selected.status}
-                id="booth-status-select"
-                className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
-              >
-                <option value="AVAILABLE">Available</option>
-                <option value="RESERVED">Reserved</option>
-                <option value="SOLD">Sold</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1">
-              Assign to approved applicant
-              <select id="booth-assign-select" defaultValue={selected.occupant?.applicationId || ""} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft">
-                <option value="">— none —</option>
-                {acceptedApplications.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.businessName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 sm:col-span-2">
-              Or a manual name (walk-in / favor, no application on file)
-              <input id="booth-manual-name" defaultValue={selected.occupant?.applicationId ? "" : selected.occupant?.name || ""} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft" />
-            </label>
-
-            <p className="sm:col-span-2 text-xs text-brown-light -mb-1">
-              Tip: drag the booth to move it, its corner handles to resize, and the handle above it to rotate — or fine-tune exact numbers below.
-            </p>
-            <details className="sm:col-span-2">
-              <summary className="text-xs text-brown-light cursor-pointer">Fine-tune position, size &amp; rotation</summary>
-              <div className="mt-2 grid grid-cols-5 gap-2">
-                <input id="booth-x" type="number" step="0.5" defaultValue={selected.gridX} placeholder="X %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
-                <input id="booth-y" type="number" step="0.5" defaultValue={selected.gridY} placeholder="Y %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
-                <input id="booth-w" type="number" step="0.5" defaultValue={selected.gridW} placeholder="W %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
-                <input id="booth-h" type="number" step="0.5" defaultValue={selected.gridH} placeholder="H %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
-                <input id="booth-rotation" type="number" step="1" defaultValue={selected.rotation ?? 0} placeholder="Rotate °" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
-              </div>
-            </details>
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button
-              onClick={() => {
-                const status = (document.getElementById("booth-status-select") as HTMLSelectElement).value;
-                const assignedApplicationId = (document.getElementById("booth-assign-select") as HTMLSelectElement).value;
-                const manualAssigneeName = (document.getElementById("booth-manual-name") as HTMLInputElement).value;
-                const code = (document.getElementById("booth-code") as HTMLInputElement).value;
-                const price = (document.getElementById("booth-price") as HTMLInputElement).value;
-                const color = (document.getElementById("booth-color") as HTMLInputElement).value.trim();
-                const x = (document.getElementById("booth-x") as HTMLInputElement).value;
-                const y = (document.getElementById("booth-y") as HTMLInputElement).value;
-                const w = (document.getElementById("booth-w") as HTMLInputElement).value;
-                const h = (document.getElementById("booth-h") as HTMLInputElement).value;
-                const rotation = (document.getElementById("booth-rotation") as HTMLInputElement).value;
-                saveSelected({
-                  status,
-                  code,
-                  priceAedFils: price ? Math.round(Number(price) * 100) : null,
-                  colorHex: color || null,
-                  gridX: Number(x),
-                  gridY: Number(y),
-                  gridW: Number(w),
-                  gridH: Number(h),
-                  rotation: rotation ? Number(rotation) : 0,
-                  assignedApplicationId: assignedApplicationId || null,
-                  manualAssigneeName: assignedApplicationId ? null : manualAssigneeName || null,
-                });
-              }}
-              className="px-5 py-2 rounded-full bg-brown text-cream-soft text-sm"
-            >
-              Save
-            </button>
-            <button
-              onClick={() => saveSelected({ status: "AVAILABLE", assignedApplicationId: null, manualAssigneeName: null })}
-              className="px-5 py-2 rounded-full border border-brown/30 text-sm"
-            >
-              Clear to available
-            </button>
-            <button onClick={deleteSelected} className="px-5 py-2 rounded-full border border-red-300 text-red-700 text-sm">
-              Delete booth
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="mt-8">
-        <button
-          type="button"
-          onClick={() => setShowAdvanced((v) => !v)}
-          className="text-xs text-brown-light underline"
-        >
-          {showAdvanced ? "Hide advanced tools" : "Advanced: add structural features / bulk-import booths"}
-        </button>
-      </div>
-
-      {showAdvanced && (
-        <div className="mt-4 space-y-6">
-          <form onSubmit={addFeature} className="rounded-xl border border-brown/10 bg-cream-soft p-5">
-            <p className="text-sm font-medium text-brown-dark mb-3">
-              Add a structural feature (entrance, toilets, office, loading, stairs)
-            </p>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <select name="type" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream col-span-2">
-                {FEATURE_TYPE.map((t) => (
-                  <option key={t} value={t}>
-                    {t.replaceAll("_", " ")}
-                  </option>
-                ))}
-              </select>
-              <input name="label" placeholder="Label" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream col-span-2" />
-              <input name="gridX" type="number" step="0.5" placeholder="X %" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream" />
-              <input name="gridY" type="number" step="0.5" placeholder="Y %" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream" />
-              <input name="gridW" type="number" step="0.5" placeholder="Width %" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream" />
-              <input name="gridH" type="number" step="0.5" placeholder="Height %" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream" />
-              <input name="rotation" type="number" placeholder="Rotation °" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream col-span-2" />
             </div>
-            <button type="submit" className="mt-3 px-4 py-2 rounded-full bg-brown text-cream-soft text-sm">
-              Add feature
-            </button>
-          </form>
-
-          <div className="rounded-xl border border-brown/10 bg-cream-soft p-5">
-            <p className="text-sm font-medium text-brown-dark mb-2">Bulk import booths (paste JSON)</p>
-            <p className="text-xs text-brown-light mb-3">
-              {'Array of {"code","size","gridX","gridY","gridW","gridH"} (X/Y/W/H as % of the canvas, 0-100) — paste the full real booth list here once confirmed. Existing codes are updated in place; new codes are created as available.'}
-            </p>
-            <textarea
-              value={bulkText}
-              onChange={(e) => setBulkText(e.target.value)}
-              rows={6}
-              placeholder='[{"code":"A1","size":"2x2","gridX":10,"gridY":10,"gridW":6,"gridH":6}]'
-              className="w-full border border-brown/20 rounded-lg px-3 py-2 bg-cream text-xs font-mono"
-            />
-            <button onClick={submitBulk} className="mt-3 px-4 py-2 rounded-full bg-brown text-cream-soft text-sm">
-              Import
-            </button>
-          </div>
+          )}
         </div>
-      )}
+
+        {/* Right inspector: multi-select tools, then a single booth's editor,
+            then (when nothing is selected) the add-a-booth mini-form. */}
+        <div className="w-full lg:w-80 shrink-0 lg:sticky lg:top-4 space-y-4">
+          {selectionCount > 1 && (
+            <div className="rounded-[10px] border border-blue-300 bg-blue-50 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-blue-900">{selectionCount} booths selected</span>
+                <button type="button" onClick={() => setSelectedIds(new Set())} className="text-xs text-blue-900 underline">
+                  Clear
+                </button>
+              </div>
+              <p className="text-xs text-blue-800/70">
+                Drag any selected booth to move the group · arrow keys nudge · Cmd/Ctrl+D duplicates · Delete removes
+              </p>
+
+              <div>
+                <p className="text-xs text-blue-900 mb-1.5">Align</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(
+                    [
+                      ["left", "Left"],
+                      ["right", "Right"],
+                      ["top", "Top"],
+                      ["bottom", "Bottom"],
+                      ["centerH", "Center H"],
+                      ["centerV", "Center V"],
+                    ] as const
+                  ).map(([kind, label]) => (
+                    <button
+                      key={kind}
+                      type="button"
+                      onClick={() => alignSelection(kind)}
+                      className="px-2.5 py-1 rounded-[6px] border border-blue-300 bg-white text-xs text-blue-900 hover:bg-blue-100"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs text-blue-900 mb-1.5">Distribute</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => distributeSelection("horizontal")}
+                    disabled={selectionCount < 3}
+                    className="px-2.5 py-1 rounded-[6px] border border-blue-300 bg-white text-xs text-blue-900 hover:bg-blue-100 disabled:opacity-40"
+                  >
+                    Horizontally
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => distributeSelection("vertical")}
+                    disabled={selectionCount < 3}
+                    className="px-2.5 py-1 rounded-[6px] border border-blue-300 bg-white text-xs text-blue-900 hover:bg-blue-100 disabled:opacity-40"
+                  >
+                    Vertically
+                  </button>
+                </div>
+              </div>
+
+              <label className="flex flex-col gap-1 text-xs text-blue-900">
+                New price (AED) for all selected
+                <input
+                  value={selectionPrice}
+                  onChange={(e) => setSelectionPrice(e.target.value)}
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="1837.5"
+                  className="border border-blue-300 rounded-lg px-2 py-1.5 bg-white text-sm w-full"
+                />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={applySelectionPrice}
+                  disabled={applyingSelectionPrice || !selectionPrice.trim()}
+                  className="px-3 py-1.5 rounded-[6px] bg-blue-700 text-white text-xs disabled:opacity-50"
+                >
+                  {applyingSelectionPrice ? "Applying…" : "Apply price"}
+                </button>
+                <button
+                  type="button"
+                  onClick={duplicateSelection}
+                  disabled={busyAction}
+                  className="px-3 py-1.5 rounded-[6px] border border-blue-300 bg-white text-xs text-blue-900 disabled:opacity-50"
+                >
+                  Duplicate
+                </button>
+                <button
+                  type="button"
+                  onClick={deleteSelection}
+                  disabled={busyAction}
+                  className="px-3 py-1.5 rounded-[6px] border border-red-300 text-red-700 text-xs disabled:opacity-50"
+                >
+                  Delete selected
+                </button>
+              </div>
+            </div>
+          )}
+
+          {selectionCount <= 1 && selected && (
+            <div className="rounded-[10px] border border-brown/20 bg-cream p-5">
+              <div className="flex items-center justify-between mb-3">
+                <p className="font-heading text-lg text-brown-dark">Booth {selected.code}</p>
+                <button onClick={() => setSelectedIds(new Set())} className="text-xs text-brown-light underline">
+                  Close
+                </button>
+              </div>
+              <p className="text-xs text-brown-light mb-3">
+                Current status {selected.status}
+                {selected.occupant && ` · Occupied by ${selected.occupant.name}`}
+              </p>
+
+              <div className="space-y-3 text-sm">
+                <label className="flex flex-col gap-1">
+                  Code
+                  <input id="booth-code" defaultValue={selected.code} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft" />
+                </label>
+                <label className="flex flex-col gap-1">
+                  Price (AED) <span className="text-brown-light/60 text-xs">(blank = use pricing tier)</span>
+                  <input
+                    id="booth-price"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    defaultValue={selected.priceAedFils != null ? selected.priceAedFils / 100 : ""}
+                    placeholder="e.g. 1837.5"
+                    className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  Color
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      id="booth-color-picker"
+                      type="color"
+                      defaultValue={
+                        selected.colorHex && /^#[0-9a-fA-F]{6}$/.test(selected.colorHex) ? selected.colorHex : "#C97C4B"
+                      }
+                      onChange={(e) => {
+                        const textInput = document.getElementById("booth-color") as HTMLInputElement | null;
+                        if (textInput) textInput.value = e.target.value;
+                      }}
+                      className="w-9 h-9 rounded border border-brown/20 bg-cream-soft cursor-pointer p-0.5"
+                    />
+                    <input
+                      id="booth-color"
+                      defaultValue={selected.colorHex || ""}
+                      placeholder="blank = use size color"
+                      maxLength={7}
+                      className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft flex-1 font-mono"
+                    />
+                  </div>
+                </label>
+                <label className="flex flex-col gap-1">
+                  Status
+                  <select
+                    defaultValue={selected.status}
+                    id="booth-status-select"
+                    className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
+                  >
+                    <option value="AVAILABLE">Available</option>
+                    <option value="RESERVED">Reserved</option>
+                    <option value="SOLD">Sold</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1">
+                  Assign to approved applicant
+                  <select id="booth-assign-select" defaultValue={selected.occupant?.applicationId || ""} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft">
+                    <option value="">— none —</option>
+                    {acceptedApplications.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.businessName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1">
+                  Or a manual name (walk-in / favor, no application on file)
+                  <input id="booth-manual-name" defaultValue={selected.occupant?.applicationId ? "" : selected.occupant?.name || ""} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft" />
+                </label>
+
+                <p className="text-xs text-brown-light">
+                  Drag the booth to move it, its corner handles to resize, and the handle above it to rotate — or fine-tune exact numbers below.
+                </p>
+                <details>
+                  <summary className="text-xs text-brown-light cursor-pointer">Fine-tune position, size &amp; rotation</summary>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <input id="booth-x" type="number" step="0.5" defaultValue={selected.gridX} placeholder="X %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
+                    <input id="booth-y" type="number" step="0.5" defaultValue={selected.gridY} placeholder="Y %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
+                    <input id="booth-w" type="number" step="0.5" defaultValue={selected.gridW} placeholder="W %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
+                    <input id="booth-h" type="number" step="0.5" defaultValue={selected.gridH} placeholder="H %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
+                    <input id="booth-rotation" type="number" step="1" defaultValue={selected.rotation ?? 0} placeholder="Rotate °" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs col-span-2" />
+                  </div>
+                </details>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  onClick={() => {
+                    const status = (document.getElementById("booth-status-select") as HTMLSelectElement).value;
+                    const assignedApplicationId = (document.getElementById("booth-assign-select") as HTMLSelectElement).value;
+                    const manualAssigneeName = (document.getElementById("booth-manual-name") as HTMLInputElement).value;
+                    const code = (document.getElementById("booth-code") as HTMLInputElement).value;
+                    const price = (document.getElementById("booth-price") as HTMLInputElement).value;
+                    const color = (document.getElementById("booth-color") as HTMLInputElement).value.trim();
+                    const x = (document.getElementById("booth-x") as HTMLInputElement).value;
+                    const y = (document.getElementById("booth-y") as HTMLInputElement).value;
+                    const w = (document.getElementById("booth-w") as HTMLInputElement).value;
+                    const h = (document.getElementById("booth-h") as HTMLInputElement).value;
+                    const rotation = (document.getElementById("booth-rotation") as HTMLInputElement).value;
+                    saveSelected({
+                      status,
+                      code,
+                      priceAedFils: price ? Math.round(Number(price) * 100) : null,
+                      colorHex: color || null,
+                      gridX: Number(x),
+                      gridY: Number(y),
+                      gridW: Number(w),
+                      gridH: Number(h),
+                      rotation: rotation ? Number(rotation) : 0,
+                      assignedApplicationId: assignedApplicationId || null,
+                      manualAssigneeName: assignedApplicationId ? null : manualAssigneeName || null,
+                    });
+                  }}
+                  className="px-4 py-2 rounded-[6px] bg-brown text-cream-soft text-sm"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => saveSelected({ status: "AVAILABLE", assignedApplicationId: null, manualAssigneeName: null })}
+                  className="px-4 py-2 rounded-[6px] border border-brown/30 text-sm"
+                >
+                  Clear to available
+                </button>
+                <button onClick={deleteSelected} className="px-4 py-2 rounded-[6px] border border-red-300 text-red-700 text-sm">
+                  Delete booth
+                </button>
+              </div>
+            </div>
+          )}
+
+          {selectionCount === 0 && (
+            <div className="rounded-[10px] border border-brown/10 bg-cream p-5">
+              <p className="text-sm font-medium text-brown-dark mb-1">Add a booth</p>
+              <p className="text-xs text-brown-light mb-3">
+                Fill in the details, then click &ldquo;Start placing&rdquo; and click anywhere on the map to drop it.
+              </p>
+              <div className="space-y-3">
+                <label className="flex flex-col gap-1 text-xs text-brown-light">
+                  Name <span className="text-brown-light/60">(ex: B25)</span>
+                  <input
+                    value={placeName}
+                    onChange={(e) => setPlaceName(e.target.value)}
+                    placeholder="B25"
+                    className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-sm"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-brown-light">
+                  Price (AED) <span className="text-brown-light/60">(ex: 1837.5)</span>
+                  <input
+                    value={placePrice}
+                    onChange={(e) => setPlacePrice(e.target.value)}
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    placeholder="1837.5"
+                    className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-sm"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-brown-light">
+                  Color
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="color"
+                      value={/^#[0-9a-fA-F]{6}$/.test(placeColor) ? placeColor : "#C97C4B"}
+                      onChange={(e) => setPlaceColor(e.target.value)}
+                      className="w-8 h-8 rounded border border-brown/20 bg-cream-soft cursor-pointer p-0.5"
+                    />
+                    <input
+                      value={placeColor}
+                      onChange={(e) => setPlaceColor(e.target.value)}
+                      placeholder="#C97C4B"
+                      maxLength={7}
+                      className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-sm flex-1 font-mono"
+                    />
+                  </div>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setPlacementOn((v) => !v)}
+                  disabled={!placementOn && (!placeName.trim() || !placePrice.trim())}
+                  className={`w-full px-4 py-2 rounded-[6px] text-sm disabled:opacity-50 ${
+                    placementOn ? "bg-emerald-700 text-white" : "bg-brown text-cream-soft"
+                  }`}
+                >
+                  {placementOn ? "Placing — click the map (click again to stop)" : "Start placing"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
