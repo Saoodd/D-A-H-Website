@@ -81,3 +81,30 @@ export const vendorIdentifierSchema = z.object({
 export const adminLoginSchema = z.object({
   password: z.string().min(1),
 });
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().trim().email().max(200),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(8).max(200),
+});
+
+export const forgotUsernameSchema = z.object({
+  email: z.string().trim().email().max(200),
+});
+
+export const emailChangeRequestSchema = z.object({
+  newEmail: z.string().trim().email().max(200),
+  password: z.string().min(1),
+});
+
+export const emailChangeConfirmSchema = z.object({
+  token: z.string().min(1),
+});
+
+export const deleteAccountSchema = z.object({
+  password: z.string().min(1),
+  confirmation: z.string().min(1), // must equal the vendor's own username, checked in the route
+});

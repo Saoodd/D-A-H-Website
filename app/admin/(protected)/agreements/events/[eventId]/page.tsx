@@ -27,7 +27,7 @@ export default async function AdminEventTermsWorkspacePage({ params }: { params:
         ← All Event Terms
       </Link>
       <PageHeader
-        eyebrow="Event Terms"
+        eyebrow="Agreements → Event Terms"
         title={event.name}
         description={`${new Date(event.startDate).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}${event.location ? ` · ${event.location}` : ""} — this event's Terms & Conditions are entirely separate from Signup Terms and from every other event.`}
       />

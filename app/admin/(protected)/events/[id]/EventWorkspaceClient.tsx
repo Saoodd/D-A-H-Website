@@ -9,6 +9,7 @@ import { EventForm } from "../EventForm";
 import { FloorPlanBuilder } from "./FloorPlanBuilder";
 import { EventDangerZone } from "./EventDangerZone";
 import { AgreementEditor } from "@/components/admin/AgreementEditor";
+import { EventSetupChecklist } from "./EventSetupChecklist";
 
 type Tab = "overview" | "applications" | "floorplan" | "vendors" | "payments" | "terms" | "settings";
 
@@ -121,6 +122,19 @@ export function EventWorkspaceClient({
 
       {tab === "overview" && (
         <div className="max-w-3xl">
+          {event.status === "DRAFT" && (
+            <EventSetupChecklist
+              items={[
+                { label: "Basic Information", done: true },
+                { label: "Dates & Venue", done: true },
+                { label: "Booth Pricing", done: stats.boothsTotal > 0 },
+                { label: "Floor Plan", done: !!floorPlanProps.floorPlanImageUrl || stats.boothsTotal > 0 },
+                { label: "Terms & Conditions", done: termsStatus.hasPublishedTerms, required: true },
+                { label: "Cover Image", done: !!eventFormProps.initial?.coverImage },
+              ]}
+              onGoToTerms={() => setTab("terms")}
+            />
+          )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             <MetricCard label="Applications" value={stats.applicationsCount} hint={`${stats.pending} pending`} />
             <MetricCard label="Booths sold" value={`${stats.boothsSold} / ${stats.boothsTotal}`} />

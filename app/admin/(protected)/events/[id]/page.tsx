@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getDisplayStatus } from "@/lib/status";
 import { getPublishedAgreement } from "@/lib/agreements";
+import { getEventRevenueAedFils } from "@/lib/payments";
 import { EventWorkspaceClient } from "./EventWorkspaceClient";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -16,7 +17,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
   const event = await prisma.event.findUnique({ where: { id }, include: { booths: true } });
   if (!event) notFound();
 
-  const [existingEvents, tiers, applications, payments] = await Promise.all([
+  const [existingEvents, tiers, applications, payments, revenue] = await Promise.all([
     prisma.event.findMany({ where: { id: { not: id } }, select: { id: true, name: true } }),
     prisma.pricingTier.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
     prisma.application.findMany({
@@ -29,10 +30,13 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
       include: { application: { select: { businessName: true, id: true } }, booth: { select: { code: true } } },
       orderBy: { paidAt: "desc" },
     }),
+    // Same authoritative sum used by the Payments area — never a
+    // booth-price-snapshot heuristic, which can diverge after a manual
+    // adjustment or a walk-in booth assigned without a payment record.
+    getEventRevenueAedFils(id),
   ]);
 
   const sold = event.booths.filter((b) => b.status === "SOLD");
-  const revenue = sold.reduce((sum, b) => sum + (b.priceAedFilsAtSale || 0), 0);
 
   const uniqueVendors = Array.from(
     new Map(applications.map((a) => [a.vendor.id, { id: a.vendor.id, businessName: a.vendor.businessName, verified: a.vendor.verified }])).values()

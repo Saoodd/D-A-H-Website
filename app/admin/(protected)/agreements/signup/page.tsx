@@ -9,7 +9,7 @@ export default function AdminSignupTermsPage() {
   return (
     <div className="max-w-5xl">
       <PageHeader
-        eyebrow="Agreements"
+        eyebrow="Agreements → Signup Terms"
         title="Signup Terms & Conditions"
         description="The single, permanent DAH account agreement every vendor accepts once, when they create their business account — not tied to any one event."
       />

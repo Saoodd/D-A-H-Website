@@ -24,6 +24,13 @@ const displayStatusTone: Record<string, "neutral" | "positive" | "attention" | "
   ACCEPTED_UNPAID: "attention",
 };
 
+// Plain, non-technical wording throughout — never the raw internal status
+// value (e.g. "ACCEPTED_UNPAID").
+const displayStatusLabel: Record<string, string> = {
+  PAID: "Confirmed",
+  ACCEPTED_UNPAID: "Awaiting Payment",
+};
+
 export function VendorAgreementStatusTable({ rows }: { rows: Row[] }) {
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -60,10 +67,10 @@ export function VendorAgreementStatusTable({ rows }: { rows: Row[] }) {
                 <th className="px-1 py-2 font-medium">Contact</th>
                 <th className="px-1 py-2 font-medium">Username</th>
                 <th className="px-1 py-2 font-medium">Booth</th>
-                <th className="px-1 py-2 font-medium">Booking</th>
-                <th className="px-1 py-2 font-medium">Agreement</th>
-                <th className="px-1 py-2 font-medium">Accepted by</th>
-                <th className="px-1 py-2 font-medium">Accepted</th>
+                <th className="px-1 py-2 font-medium">Application Status</th>
+                <th className="px-1 py-2 font-medium">Agreement Status</th>
+                <th className="px-1 py-2 font-medium">Signed By</th>
+                <th className="px-1 py-2 font-medium">Signed At</th>
               </tr>
             </thead>
             <tbody>
@@ -92,11 +99,11 @@ export function VendorAgreementStatusTable({ rows }: { rows: Row[] }) {
                     <td className="px-1 py-3 text-brown-light">@{r.username}</td>
                     <td className="px-1 py-3 text-brown-light">{r.boothCode ?? "—"}</td>
                     <td className="px-1 py-3">
-                      <StatusBadge label={r.displayStatus.replace("_", " ")} tone={displayStatusTone[r.displayStatus] ?? "neutral"} />
+                      <StatusBadge label={displayStatusLabel[r.displayStatus] ?? r.displayStatus} tone={displayStatusTone[r.displayStatus] ?? "neutral"} />
                     </td>
                     <td className="px-1 py-3">
                       <StatusBadge
-                        label={r.agreementAccepted ? `Accepted v${r.acceptedVersion}` : "Not yet accepted"}
+                        label={r.agreementAccepted ? `Accepted (v${r.acceptedVersion})` : "Not Signed"}
                         tone={r.agreementAccepted ? "positive" : "attention"}
                       />
                     </td>

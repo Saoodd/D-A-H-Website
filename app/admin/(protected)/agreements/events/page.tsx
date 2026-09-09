@@ -11,7 +11,7 @@ export default async function AdminEventTermsPage() {
   return (
     <div className="max-w-5xl">
       <PageHeader
-        eyebrow="Agreements"
+        eyebrow="Agreements → Event Terms"
         title="Event Terms"
         description="Each DAH event carries its own, separate Terms & Conditions — written, published and signed independently of Signup Terms and of every other event."
       />

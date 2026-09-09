@@ -16,6 +16,7 @@ interface Vendor {
   instagram: string | null;
   logoUrl: string | null;
   verified: boolean;
+  accountStatus: string;
   applicationCount: number;
   createdAt: string;
 }
@@ -139,7 +140,11 @@ export function VendorsListClient({
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="font-heading text-brown-dark">{v.businessName}</p>
-                      <StatusBadge label={v.verified ? "Verified" : "Unverified"} tone={v.verified ? "positive" : "attention"} />
+                      {v.accountStatus === "CLOSED" ? (
+                        <StatusBadge label="Closed" tone="neutral" />
+                      ) : (
+                        <StatusBadge label={v.verified ? "Verified" : "Unverified"} tone={v.verified ? "positive" : "attention"} />
+                      )}
                     </div>
                     <p className="text-xs text-brown-light mt-1">
                       {v.contactName} · {v.email} · {v.phone}
@@ -152,7 +157,7 @@ export function VendorsListClient({
                   </div>
                 </div>
                 <div className="flex gap-2 shrink-0">
-                  {v.verified ? (
+                  {v.accountStatus === "CLOSED" ? null : v.verified ? (
                     <button
                       disabled={busyId === v.id}
                       onClick={(e) => setVerified(v.id, false, e)}

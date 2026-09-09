@@ -6,17 +6,42 @@ import { useLocale } from "@/lib/i18n/context";
 import { PhoneField } from "@/components/PhoneField";
 import { Reveal } from "@/components/Reveal";
 import { LuxeCheckbox } from "@/components/ui/LuxeCheckbox";
+import { FieldError, fieldErrorRingClass } from "@/components/ui/FieldError";
 import { VENDOR_CATEGORIES } from "@/lib/constants";
+import {
+  validateRequired,
+  validateEmail,
+  validateUsername,
+  validatePhone,
+  validatePassword,
+  validatePasswordConfirmation,
+  validateTermsAccepted,
+  guessErrorField,
+} from "@/lib/clientValidation";
+
+type FieldKey = "businessName" | "contactName" | "email" | "username" | "phone" | "category" | "password" | "confirmPassword" | "terms";
+type FieldErrors = Partial<Record<FieldKey, string>>;
 
 export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: boolean }) {
   const { t, locale } = useLocale();
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+
+  const [businessName, setBusinessName] = useState("");
+  const [contactName, setContactName] = useState("");
+  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
+  const [phone, setPhone] = useState("");
   const [category, setCategory] = useState<string>(VENDOR_CATEGORIES[0]);
   const [categoryOther, setCategoryOther] = useState("");
   const [instagramHandle, setInstagramHandle] = useState("");
+  const [description, setDescription] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [honeypot, setHoneypot] = useState(""); // hidden from real users — see the input below
 
   const [tradeLicenseFileUrl, setTradeLicenseFileUrl] = useState("");
   const [tradeLicenseFileName, setTradeLicenseFileName] = useState("");
@@ -24,6 +49,10 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
 
   const [logoUrl, setLogoUrl] = useState("");
   const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  function clearFieldError(key: FieldKey) {
+    setFieldErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev));
+  }
 
   async function handleTradeLicenseChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -69,54 +98,58 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    const form = new FormData(e.currentTarget);
-    const password = String(form.get("password") || "");
-    const confirmPassword = String(form.get("confirmPassword") || "");
-    if (password !== confirmPassword) {
-      setError(locale === "ar" ? "كلمتا المرور غير متطابقتين" : "Passwords do not match");
-      return;
-    }
+
     const finalCategory = category === "Other" ? categoryOther.trim() : category;
-    if (!finalCategory) {
-      setError(locale === "ar" ? "يرجى تحديد الفئة" : "Please specify your category");
-      return;
-    }
+    const nextErrors: FieldErrors = {
+      businessName: validateRequired(businessName, locale === "ar" ? "اسم النشاط التجاري" : "business name") || undefined,
+      contactName: validateRequired(contactName, locale === "ar" ? "اسم جهة الاتصال" : "contact name") || undefined,
+      email: validateEmail(email) || undefined,
+      username: validateUsername(username) || undefined,
+      phone: validatePhone(phone) || undefined,
+      category: finalCategory ? undefined : locale === "ar" ? "يرجى تحديد الفئة." : "Please select your category.",
+      password: validatePassword(password) || undefined,
+      confirmPassword: validatePasswordConfirmation(password, confirmPassword) || undefined,
+      terms: validateTermsAccepted(agreedToTerms) || undefined,
+    };
+    setFieldErrors(nextErrors);
+    if (Object.values(nextErrors).some(Boolean)) return;
+
     if (tradeLicenseRequired && !tradeLicenseFileUrl) {
-      setError(locale === "ar" ? "الرخصة التجارية مطلوبة" : "A trade licence document is required");
+      setError(locale === "ar" ? "الرخصة التجارية مطلوبة." : "A trade licence document is required.");
       return;
     }
-    if (!agreedToTerms) {
-      setError(
-        locale === "ar"
-          ? "يجب الموافقة على شروط وأحكام البائعين وسياسة الخصوصية"
-          : "You must agree to the Vendor Terms & Conditions and Privacy Policy"
-      );
-      return;
-    }
+
     setSubmitting(true);
     try {
       const res = await fetch("/api/vendor/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          businessName: form.get("businessName"),
-          contactName: form.get("contactName"),
-          email: form.get("email"),
-          username: form.get("username"),
-          phone: form.get("phone"),
+          businessName,
+          contactName,
+          email,
+          username,
+          phone,
           category: finalCategory,
           instagram: instagramHandle.trim() ? `@${instagramHandle.trim().replace(/^@/, "")}` : "",
-          description: form.get("description"),
+          description,
           password,
           logoUrl,
           tradeLicenseFileUrl,
           agreedToTerms,
-          website: form.get("website"), // honeypot
+          website: honeypot,
         }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Something went wrong");
+        const message: string = body.error || (locale === "ar" ? "حدث خطأ ما" : "Something went wrong");
+        const field = guessErrorField(message);
+        if (field && ["username", "email", "password", "phone", "terms"].includes(field)) {
+          setFieldErrors((prev) => ({ ...prev, [field as FieldKey]: message }));
+        } else {
+          setError(message);
+        }
+        return;
       }
       setDone(true);
     } catch (err) {
@@ -157,18 +190,47 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
             </Link>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="grid sm:grid-cols-2 gap-5">
+          <form onSubmit={handleSubmit} noValidate className="grid sm:grid-cols-2 gap-5">
             {/* Honeypot — hidden from real users, bots tend to fill every field */}
             <div className="hidden" aria-hidden="true">
               <label>
                 Website
-                <input type="text" name="website" tabIndex={-1} autoComplete="off" />
+                <input type="text" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} tabIndex={-1} autoComplete="off" />
               </label>
             </div>
 
-            <Field name="businessName" label={t("form.businessName")} required />
-            <Field name="contactName" label={t("form.contactName")} required />
-            <Field name="email" type="email" label={t("form.email")} required />
+            <TextField
+              label={t("form.businessName")}
+              required
+              value={businessName}
+              onChange={(v) => {
+                setBusinessName(v);
+                clearFieldError("businessName");
+              }}
+              error={fieldErrors.businessName}
+            />
+            <TextField
+              label={t("form.contactName")}
+              required
+              value={contactName}
+              onChange={(v) => {
+                setContactName(v);
+                clearFieldError("contactName");
+              }}
+              error={fieldErrors.contactName}
+            />
+            <TextField
+              label={t("form.email")}
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(v) => {
+                setEmail(v);
+                clearFieldError("email");
+              }}
+              error={fieldErrors.email}
+            />
 
             <label className="flex flex-col gap-1 text-sm">
               <span>
@@ -176,22 +238,33 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
                 <RequiredMark />
               </span>
               <input
-                name="username"
-                required
-                minLength={3}
-                maxLength={30}
-                pattern="[A-Za-z0-9_]+"
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  clearFieldError("username");
+                }}
                 autoComplete="username"
-                className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
+                aria-invalid={!!fieldErrors.username}
+                className={`border rounded-lg px-3 py-2 bg-cream-soft ${fieldErrors.username ? fieldErrorRingClass : "border-brown/20"}`}
               />
               <span className="text-xs text-brown-light mt-0.5">
                 {locale === "ar"
                   ? "يمكن استخدام اسم المستخدم لتسجيل الدخول إلى حسابك في دار الحي."
                   : "Your username can be used to log in to your DAH account."}
               </span>
+              <FieldError message={fieldErrors.username} />
             </label>
 
-            <PhoneField name="phone" label={t("form.phone")} required />
+            <PhoneField
+              name="phone"
+              label={t("form.phone")}
+              required
+              error={fieldErrors.phone}
+              onChangeValue={(v) => {
+                setPhone(v);
+                clearFieldError("phone");
+              }}
+            />
 
             <label className="flex flex-col gap-1 text-sm">
               <span>
@@ -200,9 +273,11 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
               </span>
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                required
-                className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
+                onChange={(e) => {
+                  setCategory(e.target.value);
+                  clearFieldError("category");
+                }}
+                className={`border rounded-lg px-3 py-2 bg-cream-soft ${fieldErrors.category ? fieldErrorRingClass : "border-brown/20"}`}
               >
                 {VENDOR_CATEGORIES.map((c) => (
                   <option key={c} value={c}>
@@ -213,12 +288,15 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
               {category === "Other" && (
                 <input
                   value={categoryOther}
-                  onChange={(e) => setCategoryOther(e.target.value)}
-                  required
+                  onChange={(e) => {
+                    setCategoryOther(e.target.value);
+                    clearFieldError("category");
+                  }}
                   placeholder={locale === "ar" ? "حدد فئتك" : "Tell us your category"}
                   className="mt-1 border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
                 />
               )}
+              <FieldError message={fieldErrors.category} />
             </label>
 
             <label className="flex flex-col gap-1 text-sm">
@@ -242,7 +320,8 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
                 <span className="text-brown-light font-normal">— {locale === "ar" ? "اختياري" : "Optional"}</span>
               </span>
               <textarea
-                name="description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
                 rows={3}
                 maxLength={500}
                 placeholder={locale === "ar" ? "بضع جمل عن ما تقدمه" : "A couple of sentences about what you offer"}
@@ -266,8 +345,24 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
               </div>
             </div>
 
-            <PasswordField name="password" label={t("form.password")} autoComplete="new-password" />
-            <PasswordField name="confirmPassword" label={t("form.confirmPassword")} autoComplete="new-password" />
+            <PasswordField
+              label={t("form.password")}
+              value={password}
+              onChange={(v) => {
+                setPassword(v);
+                clearFieldError("password");
+              }}
+              error={fieldErrors.password}
+            />
+            <PasswordField
+              label={t("form.confirmPassword")}
+              value={confirmPassword}
+              onChange={(v) => {
+                setConfirmPassword(v);
+                clearFieldError("confirmPassword");
+              }}
+              error={fieldErrors.confirmPassword}
+            />
 
             <label className="flex flex-col gap-1 text-sm sm:col-span-2">
               {tradeLicenseRequired ? t("vendorInfo.tradeLicenseRequired") : t("vendorInfo.tradeLicenseOptional")}
@@ -275,7 +370,6 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
                 type="file"
                 accept="application/pdf,image/jpeg,image/png"
                 onChange={handleTradeLicenseChange}
-                required={tradeLicenseRequired && !tradeLicenseFileUrl}
                 className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft text-sm file:me-3 file:rounded-full file:border-0 file:bg-brown file:text-cream-soft file:px-3 file:py-1 file:text-xs"
               />
               <span className="text-xs text-brown-light">
@@ -320,7 +414,14 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
               </div>
 
               <label className="flex items-start gap-3 pt-5 border-t border-brown/10 cursor-pointer">
-                <LuxeCheckbox checked={agreedToTerms} onChange={setAgreedToTerms} required className="mt-0.5" />
+                <LuxeCheckbox
+                  checked={agreedToTerms}
+                  onChange={(v) => {
+                    setAgreedToTerms(v);
+                    clearFieldError("terms");
+                  }}
+                  className="mt-0.5"
+                />
                 <span className="text-sm text-ink leading-relaxed">
                   {t("vendorInfo.termsAgree")}{" "}
                   <Link href="/vendor-terms" target="_blank" className="underline text-brown decoration-brown/30 underline-offset-4 hover:decoration-brown">
@@ -333,9 +434,10 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
                   .
                 </span>
               </label>
+              <FieldError message={fieldErrors.terms} />
             </div>
 
-            {error && <p className="sm:col-span-2 text-sm text-red-700">{error}</p>}
+            {error && <p className="sm:col-span-2 text-sm text-red-700 dark:text-red-400">{error}</p>}
 
             <div className="sm:col-span-2">
               <button
@@ -354,9 +456,10 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
 }
 
 // Subtle, muted required-field marker — deliberately not red, so a form
-// full of required fields never reads as an error state. The native
-// `required` attribute on each input already covers screen-reader
-// semantics; this is a visual cue only.
+// full of required fields never reads as an error state. This is only a
+// visual cue now — actual required-ness is enforced by our own submit-time
+// validation (see lib/clientValidation.ts), never the native `required`
+// attribute, so there's no browser validation popup to keep in sync with it.
 function RequiredMark() {
   return (
     <span className="text-brown/40" aria-hidden="true">
@@ -366,18 +469,22 @@ function RequiredMark() {
   );
 }
 
-function Field({
-  name,
+function TextField({
   label,
   type = "text",
   required,
-  minLength,
+  autoComplete,
+  value,
+  onChange,
+  error,
 }: {
-  name: string;
   label: string;
   type?: string;
   required?: boolean;
-  minLength?: number;
+  autoComplete?: string;
+  value: string;
+  onChange: (v: string) => void;
+  error?: string;
 }) {
   return (
     <label className="flex flex-col gap-1 text-sm">
@@ -386,12 +493,14 @@ function Field({
         {required && <RequiredMark />}
       </span>
       <input
-        name={name}
         type={type}
-        required={required}
-        minLength={minLength}
-        className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoComplete={autoComplete}
+        aria-invalid={!!error}
+        className={`border rounded-lg px-3 py-2 bg-cream-soft ${error ? fieldErrorRingClass : "border-brown/20"}`}
       />
+      <FieldError message={error} />
     </label>
   );
 }
@@ -399,7 +508,7 @@ function Field({
 // Same show/hide behavior as the vendor login form's password field — each
 // instance keeps its own toggle state, so Password and Confirm password can
 // be shown/hidden independently.
-function PasswordField({ name, label, autoComplete }: { name: string; label: string; autoComplete: string }) {
+function PasswordField({ label, value, onChange, error }: { label: string; value: string; onChange: (v: string) => void; error?: string }) {
   const { t } = useLocale();
   const [visible, setVisible] = useState(false);
   return (
@@ -410,12 +519,12 @@ function PasswordField({ name, label, autoComplete }: { name: string; label: str
       </span>
       <span className="relative flex items-center">
         <input
-          name={name}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
           type={visible ? "text" : "password"}
-          required
-          minLength={8}
-          autoComplete={autoComplete}
-          className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft w-full pe-16"
+          autoComplete="new-password"
+          aria-invalid={!!error}
+          className={`border rounded-lg px-3 py-2 bg-cream-soft w-full pe-16 ${error ? fieldErrorRingClass : "border-brown/20"}`}
         />
         <button
           type="button"
@@ -425,6 +534,7 @@ function PasswordField({ name, label, autoComplete }: { name: string; label: str
           {visible ? t("form.hidePassword") : t("form.showPassword")}
         </button>
       </span>
+      <FieldError message={error} />
     </label>
   );
 }

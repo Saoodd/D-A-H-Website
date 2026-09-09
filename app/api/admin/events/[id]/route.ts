@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
+import { getPublishedAgreement } from "@/lib/agreements";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -22,7 +23,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if ("floorPlanImageUrl" in body) data.floorPlanImageUrl = body.floorPlanImageUrl || null;
   if ("venueWidthM" in body) data.venueWidthM = body.venueWidthM ? Number(body.venueWidthM) : null;
   if ("showPublicPricing" in body) data.showPublicPricing = Boolean(body.showPublicPricing);
-  if (["DRAFT", "PUBLISHED", "CLOSED"].includes(body.status)) data.status = body.status;
+  if (["DRAFT", "PUBLISHED", "CLOSED"].includes(body.status)) {
+    // An event can be saved as a Draft with no Terms at all, but it can
+    // never go live without one — enforced here, not just in the UI, so
+    // this can't be bypassed by calling the API directly.
+    if (body.status === "PUBLISHED") {
+      const publishedTerms = await getPublishedAgreement("EVENT_TERMS", id);
+      if (!publishedTerms) {
+        return NextResponse.json(
+          { error: "Add and publish this event's Terms & Conditions before publishing the event.", code: "TERMS_REQUIRED" },
+          { status: 409 }
+        );
+      }
+    }
+    data.status = body.status;
+  }
   if ("whatsappVendorGroupLink" in body) data.whatsappVendorGroupLink = body.whatsappVendorGroupLink || null;
   if ("acceptanceDeadlineHours" in body) {
     data.acceptanceDeadlineHours = body.acceptanceDeadlineHours ? Number(body.acceptanceDeadlineHours) : null;

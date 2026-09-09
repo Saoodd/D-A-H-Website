@@ -117,6 +117,18 @@ export async function saveDraft(agreementId: string, data: { title: string; body
   return prisma.agreement.update({ where: { id: agreementId }, data: { title: data.title, bodyHtml: data.bodyHtml } });
 }
 
+/** Deletes an in-progress DRAFT only — never the currently PUBLISHED
+ *  version, never an ARCHIVED (past) version, and never any
+ *  AgreementAcceptance signed against a different version. A draft has by
+ *  definition never been published, so no vendor has ever signed it. */
+export async function discardDraft(agreementId: string) {
+  const agreement = await prisma.agreement.findUnique({ where: { id: agreementId } });
+  if (!agreement || agreement.status !== "DRAFT") {
+    throw new Error("Only a draft can be discarded.");
+  }
+  await prisma.agreement.delete({ where: { id: agreementId } });
+}
+
 export async function publishDraft(agreementId: string) {
   const agreement = await prisma.agreement.findUnique({ where: { id: agreementId } });
   if (!agreement || agreement.status !== "DRAFT") {

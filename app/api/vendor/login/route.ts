@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     ? await prisma.vendor.findUnique({ where: { email: identifier.toLowerCase() } })
     : await prisma.vendor.findUnique({ where: { usernameLower: normalizeUsername(identifier) } });
 
-  if (!vendor || !(await verifyPassword(parsed.data.password, vendor.passwordHash))) {
+  if (!vendor || vendor.accountStatus !== "ACTIVE" || !(await verifyPassword(parsed.data.password, vendor.passwordHash))) {
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
   }
 

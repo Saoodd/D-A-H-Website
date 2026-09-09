@@ -68,6 +68,7 @@ export default async function AdminVendorsPage({
         instagram: v.instagram,
         logoUrl: v.logoUrl,
         verified: v.verified,
+        accountStatus: v.accountStatus,
         applicationCount: v._count.applications,
         createdAt: v.createdAt.toISOString(),
       }))}

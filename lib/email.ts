@@ -209,3 +209,57 @@ export async function sendContactMessageAdminEmail(opts: {
     wrap(`<p><strong>${opts.name}</strong> (${opts.email}) wrote:</p><p>${opts.message}</p>`)
   );
 }
+
+export async function sendPasswordResetEmail(opts: { vendorEmail: string; businessName: string; resetUrl: string }) {
+  await send(
+    opts.vendorEmail,
+    "Reset your Dar Al Hay password",
+    wrap(`<h2 style="margin-top:0;">Reset your password</h2>
+      <p>Hi ${opts.businessName}, we received a request to reset your DAH account password. This link expires in 1 hour and can only be used once.</p>
+      <p><a href="${opts.resetUrl}" style="display:inline-block;background:#6B4429;color:#EDE9E2;padding:12px 20px;border-radius:8px;text-decoration:none;">Choose a new password</a></p>
+      <p style="font-size:12px;color:#9A8672;">If you didn't request this, you can safely ignore this email — your password won't change.</p>`)
+  );
+}
+
+export async function sendUsernameReminderEmail(opts: { vendorEmail: string; businessName: string; username: string }) {
+  await send(
+    opts.vendorEmail,
+    "Your Dar Al Hay username",
+    wrap(`<h2 style="margin-top:0;">Hi ${opts.businessName},</h2>
+      <p>You (or someone with access to this email) asked us to remind you of your DAH username.</p>
+      <p style="font-size:20px;font-weight:600;color:#3A2417;margin:20px 0;">${opts.username}</p>
+      <p><a href="${siteUrl()}/vendor/login">Log in to your dashboard</a></p>`)
+  );
+}
+
+export async function sendEmailChangeVerifyEmail(opts: { newEmail: string; businessName: string; verifyUrl: string }) {
+  await send(
+    opts.newEmail,
+    "Confirm your new Dar Al Hay email address",
+    wrap(`<h2 style="margin-top:0;">Confirm this email address</h2>
+      <p>Hi ${opts.businessName}, please confirm that <strong>${opts.newEmail}</strong> is your new DAH account email. This link expires in 1 hour.</p>
+      <p><a href="${opts.verifyUrl}" style="display:inline-block;background:#6B4429;color:#EDE9E2;padding:12px 20px;border-radius:8px;text-decoration:none;">Confirm new email</a></p>
+      <p style="font-size:12px;color:#9A8672;">Your login email won't change until you confirm this link. If you didn't request this, you can ignore it.</p>`)
+  );
+}
+
+export async function sendEmailChangedNotice(opts: { oldEmail: string; businessName: string; newEmail: string }) {
+  await send(
+    opts.oldEmail,
+    "Your Dar Al Hay account email was changed",
+    wrap(`<h2 style="margin-top:0;">Hi ${opts.businessName},</h2>
+      <p>This is a security notice: your DAH account login email was just changed to <strong>${opts.newEmail}</strong>.</p>
+      <p>If you made this change, no action is needed. If you didn't, please contact us immediately.</p>`)
+  );
+}
+
+export async function sendAccountClosedEmail(opts: { vendorEmail: string; businessName: string }) {
+  await send(
+    opts.vendorEmail,
+    "Your Dar Al Hay account has been closed",
+    wrap(`<h2 style="margin-top:0;">Hi ${opts.businessName},</h2>
+      <p>As requested, your DAH business account has been closed. You'll no longer be able to log in.</p>
+      <p>Records DAH is required to retain — signed agreements, payments and booking history — remain on file as required by law; your personal profile details have been removed.</p>
+      <p>If this wasn't you, please contact us immediately.</p>`)
+  );
+}

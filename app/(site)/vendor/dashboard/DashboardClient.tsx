@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useLocale } from "@/lib/i18n/context";
 import { Countdown } from "@/components/Countdown";
 import { DisplayStatus, formatAed } from "@/lib/constants";
+import { UpcomingEventsSection, type UpcomingEventRow } from "./UpcomingEventsSection";
 import { VendorNav } from "@/components/vendor/VendorNav";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/Card";
@@ -58,6 +59,7 @@ export function DashboardClient({
   businessName,
   communityLink,
   applications,
+  upcomingEvents,
   availableEvents,
   nextConfirmedEvent,
   payments,
@@ -66,6 +68,7 @@ export function DashboardClient({
   businessName: string;
   communityLink: string | null;
   applications: AppRow[];
+  upcomingEvents: UpcomingEventRow[];
   availableEvents: AvailableEvent[];
   nextConfirmedEvent: NextConfirmedEvent | null;
   payments: PaymentRow[];
@@ -169,6 +172,8 @@ export function DashboardClient({
                   </ul>
                 </div>
               )}
+
+              <UpcomingEventsSection events={upcomingEvents} onApply={applyToEvent} applyingId={applyingId} />
 
               <div className="rounded-[10px] border border-brown/10 bg-cream p-6">
                 <p className="label-caps mb-1">{t("vendorOverview.nextEventTitle")}</p>

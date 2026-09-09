@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FieldError, fieldErrorRingClass } from "@/components/ui/FieldError";
 
 // Common Gulf/regional country codes first (DAH is Dubai-based), then a few
 // other commonly-relevant ones. Not exhaustive — easy to extend.
@@ -25,15 +26,28 @@ export function PhoneField({
   required,
   defaultCountryCode = "+971",
   defaultNumber = "",
+  error,
+  onChangeValue,
 }: {
   name?: string;
   label: string;
   required?: boolean;
   defaultCountryCode?: string;
   defaultNumber?: string;
+  // Field-level error text from the parent's own validation (see
+  // lib/clientValidation.ts) — this component never validates itself, it
+  // only renders the message and a matching border state.
+  error?: string | null;
+  onChangeValue?: (combined: string) => void;
 }) {
   const [countryCode, setCountryCode] = useState(defaultCountryCode);
   const [number, setNumber] = useState(defaultNumber);
+
+  function update(nextCode: string, nextNumber: string) {
+    setCountryCode(nextCode);
+    setNumber(nextNumber);
+    onChangeValue?.(nextNumber ? `${nextCode} ${nextNumber}` : "");
+  }
 
   return (
     <label className="flex flex-col gap-1 text-sm">
@@ -49,7 +63,7 @@ export function PhoneField({
       <div className="flex gap-2">
         <select
           value={countryCode}
-          onChange={(e) => setCountryCode(e.target.value)}
+          onChange={(e) => update(e.target.value, number)}
           aria-label="Country code"
           className="border border-brown/20 rounded-lg px-2 py-2 bg-cream-soft w-[110px] shrink-0"
         >
@@ -62,14 +76,15 @@ export function PhoneField({
         <input
           type="tel"
           value={number}
-          onChange={(e) => setNumber(e.target.value)}
-          required={required}
+          onChange={(e) => update(countryCode, e.target.value)}
           placeholder="50 123 4567"
-          className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft flex-1 min-w-0"
+          aria-invalid={!!error}
+          className={`border rounded-lg px-3 py-2 bg-cream-soft flex-1 min-w-0 ${error ? fieldErrorRingClass : "border-brown/20"}`}
         />
       </div>
       {/* Combined value is what actually gets submitted via FormData under `name` */}
       <input type="hidden" name={name} value={number ? `${countryCode} ${number}` : ""} />
+      <FieldError message={error} />
     </label>
   );
 }

@@ -23,7 +23,7 @@ type SortOrder = "newest" | "oldest";
 function termsBadge(row: EventRow): { label: string; tone: "positive" | "attention" | "neutral" } {
   if (row.publishedVersion !== null) return { label: `Published v${row.publishedVersion}`, tone: "positive" };
   if (row.hasDraft) return { label: "Draft only", tone: "attention" };
-  return { label: "No Terms", tone: "neutral" };
+  return { label: "Not Configured", tone: "neutral" };
 }
 
 export function EventTermsListClient({ events }: { events: EventRow[] }) {

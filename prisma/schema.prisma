@@ -233,9 +233,54 @@ model Vendor {
   // rather than a direct pointer, since the acceptance row can only be
   // created after this Vendor row exists.
   agreementAcceptances AgreementAcceptance[]
+  passwordResetTokens  PasswordResetToken[]
+  emailChangeTokens    EmailChangeToken[]
+
+  // Soft-delete: closing an account never deletes the row (agreements,
+  // payments and bookings all reference vendorId and must stay readable),
+  // it just disables login and clears non-required personal data. Keeping
+  // the row also keeps `usernameLower`/`email` reserved in their unique
+  // indexes, so a closed account's identifiers can never be immediately
+  // claimed by someone else.
+  accountStatus String    @default("ACTIVE") // ACTIVE | CLOSED
+  closedAt      DateTime?
+  emailChangedAt DateTime? // last time the login email was changed, for audit
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Single-use, expiring "forgot password" token. Only a hash is stored —
+// the raw token exists solely in the emailed link — so a leaked database
+// snapshot can never be used to reset a vendor's password. Every request
+// (even for an unknown email) responds identically; this table only fills
+// in when the email genuinely matches an account.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  vendorId  String
+  vendor    Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([vendorId])
+}
+
+// Verifies a NEW email address before it becomes the account's real login
+// email — the login identifier only changes once this token is consumed,
+// so a mistyped or unreachable new address can never lock a vendor out.
+model EmailChangeToken {
+  id        String    @id @default(cuid())
+  vendorId  String
+  vendor    Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  newEmail  String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([vendorId])
 }
 
 // Private DAH-internal notes about a vendor — never returned by any

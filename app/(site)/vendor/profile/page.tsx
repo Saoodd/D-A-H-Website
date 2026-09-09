@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getVendorSession } from "@/lib/auth";
+import { getVendorSession, destroyVendorSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { getVendorParticipation, computeProfileCompletion } from "@/lib/vendorStats";
@@ -14,6 +14,10 @@ export default async function VendorProfilePage() {
 
   const vendor = await prisma.vendor.findUnique({ where: { id: session.vendorId } });
   if (!vendor) redirect("/vendor/login");
+  if (vendor.accountStatus !== "ACTIVE") {
+    await destroyVendorSession();
+    redirect("/vendor/login");
+  }
 
   const [participation, applicationsCount, warnings, settings] = await Promise.all([
     getVendorParticipation(vendor.id),

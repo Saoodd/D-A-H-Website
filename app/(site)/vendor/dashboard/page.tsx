@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getVendorSession } from "@/lib/auth";
+import { getVendorSession, destroyVendorSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { isValidHttpUrl } from "@/lib/url";
 import { runExpiryPass } from "@/lib/expiry";
 import { getDisplayStatus } from "@/lib/status";
 import { getVendorParticipation } from "@/lib/vendorStats";
+import { getMinPriceForEvent } from "@/lib/events";
 import { DashboardClient } from "./DashboardClient";
 import { PendingVerificationClient } from "./PendingVerificationClient";
 
@@ -18,6 +19,10 @@ export default async function VendorDashboardPage() {
 
   const vendor = await prisma.vendor.findUnique({ where: { id: session.vendorId } });
   if (!vendor) redirect("/vendor/login");
+  if (vendor.accountStatus !== "ACTIVE") {
+    await destroyVendorSession();
+    redirect("/vendor/login");
+  }
 
   // Unverified vendors can't apply to events yet, but they're still a
   // registered account: they can see/edit their profile and the main DAH
@@ -60,7 +65,29 @@ export default async function VendorDashboardPage() {
     }),
   ]);
 
-  const appliedEventIds = new Set(refreshed.map((a) => a.eventId));
+  const appliedByEventId = new Map(refreshed.map((a) => [a.eventId, a]));
+  const now = new Date();
+  const upcomingPublished = publishedEvents.filter((e) => e.startDate >= now);
+
+  // One row per upcoming published event, whether or not this vendor has
+  // applied yet — the Overview snapshot the vendor sees first, so they
+  // never have to go hunting in the separate Events tab just to see what's
+  // on. Starting price is only computed when the event actually shows
+  // public pricing, to avoid a wasted booth query otherwise.
+  const upcomingEvents = await Promise.all(
+    upcomingPublished.map(async (e) => {
+      const application = appliedByEventId.get(e.id);
+      return {
+        id: e.id,
+        name: e.name,
+        location: e.location,
+        startDate: e.startDate.toISOString(),
+        minPriceAedFils: e.showPublicPricing ? await getMinPriceForEvent(e.id) : null,
+        applicationId: application?.id ?? null,
+        displayStatus: application ? getDisplayStatus(application, application.payments.length > 0) : null,
+      };
+    })
+  );
 
   return (
     <DashboardClient
@@ -73,8 +100,9 @@ export default async function VendorDashboardPage() {
         displayStatus: getDisplayStatus(a, a.payments.length > 0),
         acceptanceExpiresAt: a.acceptanceExpiresAt ? a.acceptanceExpiresAt.toISOString() : null,
       }))}
+      upcomingEvents={upcomingEvents}
       availableEvents={publishedEvents
-        .filter((e) => !appliedEventIds.has(e.id))
+        .filter((e) => !appliedByEventId.has(e.id))
         .map((e) => ({
           id: e.id,
           name: e.name,

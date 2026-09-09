@@ -37,15 +37,22 @@ export function AgreementEditor({
   const [history, setHistory] = useState<AgreementRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [previewVersion, setPreviewVersion] = useState<AgreementRow | null>(null);
+  const [previewingDraft, setPreviewingDraft] = useState(false);
 
   const [title, setTitle] = useState("");
   const [bodyHtml, setBodyHtml] = useState("");
+  const [savedTitle, setSavedTitle] = useState("");
+  const [savedBodyHtml, setSavedBodyHtml] = useState("");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const query = `type=${type}${eventId ? `&eventId=${eventId}` : ""}`;
+  const hasUnsavedChanges = !!draft && (title !== savedTitle || bodyHtml !== savedBodyHtml);
 
   async function load() {
     setLoading(true);
@@ -58,6 +65,8 @@ export function AgreementEditor({
       if (data.draft) {
         setTitle(data.draft.title);
         setBodyHtml(data.draft.bodyHtml);
+        setSavedTitle(data.draft.title);
+        setSavedBodyHtml(data.draft.bodyHtml);
       }
     } finally {
       setLoading(false);
@@ -69,6 +78,17 @@ export function AgreementEditor({
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload only when the scope itself changes
   }, [query]);
+
+  // Warn before an accidental tab close / navigation away while a draft has
+  // unsaved edits — this never fires for a merely-viewed published version.
+  useEffect(() => {
+    function handler(e: BeforeUnloadEvent) {
+      if (!hasUnsavedChanges) return;
+      e.preventDefault();
+    }
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasUnsavedChanges]);
 
   async function startDraft() {
     setStarting(true);
@@ -83,6 +103,8 @@ export function AgreementEditor({
         setDraft(data.draft);
         setTitle(data.draft.title);
         setBodyHtml(data.draft.bodyHtml);
+        setSavedTitle(data.draft.title);
+        setSavedBodyHtml(data.draft.bodyHtml);
       }
     } finally {
       setStarting(false);
@@ -101,6 +123,9 @@ export function AgreementEditor({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Could not save draft");
+      setSavedTitle(title);
+      setSavedBodyHtml(bodyHtml);
+      setLastSavedAt(new Date());
       setNotice("Draft saved.");
       await load();
     } catch (err) {
@@ -135,6 +160,29 @@ export function AgreementEditor({
     }
   }
 
+  async function discardDraft() {
+    if (!draft) return;
+    setConfirmingDiscard(false);
+    setDiscarding(true);
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/admin/agreements/draft/${draft.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not discard draft");
+      setDraft(null);
+      setTitle("");
+      setBodyHtml("");
+      setLastSavedAt(null);
+      setPreviewingDraft(false);
+      setNotice("Draft discarded.");
+      await load();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Could not discard draft");
+    } finally {
+      setDiscarding(false);
+    }
+  }
+
   if (loading) return <p className="text-sm text-brown-light">Loading…</p>;
 
   return (
@@ -145,7 +193,7 @@ export function AgreementEditor({
           {published ? (
             <StatusBadge label={`v${published.version}`} tone="positive" />
           ) : (
-            <StatusBadge label="None published" tone="attention" />
+            <StatusBadge label="Not configured" tone="attention" />
           )}
         </div>
         {published ? (
@@ -168,9 +216,20 @@ export function AgreementEditor({
       )}
 
       {draft && (
-        <div className="rounded-[10px] border border-amber-300/60 bg-amber-50 p-5 space-y-4">
+        <div className="rounded-[10px] border border-amber-300/60 bg-amber-50 dark:bg-amber-950/10 p-5 space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <p className="label-caps text-amber-900">Draft — version {draft.version} (not yet live)</p>
+            <div>
+              <p className="label-caps text-amber-900 dark:text-amber-400">Draft — Version {draft.version} (not yet live)</p>
+              <p className="text-xs text-amber-800/80 dark:text-amber-400/70 mt-0.5">
+                {saving
+                  ? "Saving…"
+                  : hasUnsavedChanges
+                  ? "Unsaved changes"
+                  : lastSavedAt
+                  ? `Last saved ${lastSavedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+                  : "Not saved yet"}
+              </p>
+            </div>
           </div>
           <label className="flex flex-col gap-1 text-sm">
             Title
@@ -182,13 +241,49 @@ export function AgreementEditor({
           </label>
           <RichTextEditor value={bodyHtml} onChange={setBodyHtml} />
           {notice && <p className="text-sm text-brown-dark">{notice}</p>}
-          <div className="flex flex-wrap gap-3">
+
+          {/* Always-visible action row — Save / Preview / Publish / Discard, so
+              it's never ambiguous which document (draft vs. live) is being
+              edited: everything in this amber block is the draft. */}
+          <div className="flex flex-wrap gap-3 pt-2 border-t border-amber-300/40">
             <Button onClick={save} loading={saving} variant="secondary">
-              Save draft
+              Save Draft
+            </Button>
+            <Button onClick={() => setPreviewingDraft((v) => !v)} variant="secondary">
+              {previewingDraft ? "Hide Preview" : "Preview"}
             </Button>
             <Button onClick={publish} loading={publishing}>
-              Publish
+              Publish Version
             </Button>
+            <Button onClick={() => setConfirmingDiscard(true)} variant="ghost" disabled={discarding}>
+              Discard Draft
+            </Button>
+          </div>
+
+          {previewingDraft && (
+            <div className="rounded-[10px] border border-brown/20 bg-cream p-6">
+              <p className="label-caps mb-3">Preview — Draft v{draft.version}</p>
+              <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {confirmingDiscard && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4" role="dialog" aria-modal="true" aria-label="Discard draft">
+          <div className="w-full max-w-sm rounded-[10px] bg-cream border border-brown/10 p-6">
+            <p className="font-heading text-lg text-brown-dark mb-2">Discard this draft?</p>
+            <p className="text-sm text-brown-light mb-6">
+              Your unpublished changes will be deleted. The currently published version will remain unchanged.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <Button variant="secondary" size="sm" onClick={() => setConfirmingDiscard(false)}>
+                Keep Editing
+              </Button>
+              <Button variant="destructive" size="sm" onClick={discardDraft} loading={discarding}>
+                Discard Draft
+              </Button>
+            </div>
           </div>
         </div>
       )}

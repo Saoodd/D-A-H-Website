@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 interface EventData {
   id: string;
@@ -36,7 +37,9 @@ export function EventForm({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [termsRequired, setTermsRequired] = useState(false);
   const [duplicateFrom, setDuplicateFrom] = useState("");
+  const [copyTerms, setCopyTerms] = useState(false);
   const [categories, setCategories] = useState<string[]>(initial?.categories || []);
   const [categoryDraft, setCategoryDraft] = useState("");
   const [showPublicPricing, setShowPublicPricing] = useState(initial?.showPublicPricing ?? true);
@@ -55,6 +58,7 @@ export function EventForm({
     e.preventDefault();
     setBusy(true);
     setError(null);
+    setTermsRequired(false);
     const form = new FormData(e.currentTarget);
     const payload = {
       name: form.get("name"),
@@ -72,6 +76,7 @@ export function EventForm({
       whatsappVendorGroupLink: form.get("whatsappVendorGroupLink") || null,
       acceptanceDeadlineHours: form.get("acceptanceDeadlineHours") || null,
       duplicateFromEventId: duplicateFrom || undefined,
+      copyTerms: duplicateFrom ? copyTerms : undefined,
     };
     try {
       const res = await fetch(initial ? `/api/admin/events/${initial.id}` : "/api/admin/events", {
@@ -80,7 +85,14 @@ export function EventForm({
         body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Save failed");
+      if (!res.ok) {
+        if (data.code === "TERMS_REQUIRED") {
+          setTermsRequired(true);
+          setError(data.error);
+          return;
+        }
+        throw new Error(data.error || "Save failed");
+      }
       router.push(`/admin/events/${data.event.id}`);
       router.refresh();
     } catch (err) {
@@ -189,7 +201,32 @@ export function EventForm({
         </label>
       )}
 
-      {error && <p className="sm:col-span-2 text-sm text-red-700">{error}</p>}
+      {!initial && duplicateFrom && (
+        <label className="flex items-start gap-2 text-sm sm:col-span-2 rounded-lg border border-brown/15 bg-cream-soft px-4 py-3">
+          <input type="checkbox" checked={copyTerms} onChange={(e) => setCopyTerms(e.target.checked)} className="mt-0.5" />
+          <span>
+            Copy Terms &amp; Conditions from the original event?
+            <span className="block text-xs text-brown-light mt-0.5">
+              Off by default — every event should have its own Terms. If checked, the source event&rsquo;s current published Terms become this event&rsquo;s
+              starting v1 (a brand-new, independent version — editing one never affects the other).
+            </span>
+          </span>
+        </label>
+      )}
+
+      {error && (
+        <div className="sm:col-span-2 rounded-lg border border-red-300/50 bg-red-50 dark:bg-red-950/20 px-4 py-3">
+          <p className="text-sm text-red-800 dark:text-red-400">{error}</p>
+          {termsRequired && initial?.id && (
+            <Link
+              href={`/admin/agreements/events/${initial.id}`}
+              className="inline-block mt-2 text-sm underline text-red-800 dark:text-red-400 hover:no-underline"
+            >
+              Add Terms &amp; Conditions →
+            </Link>
+          )}
+        </div>
+      )}
 
       <div className="sm:col-span-2">
         <button type="submit" disabled={busy} className="px-6 py-2.5 rounded-full bg-brown text-cream-soft text-sm disabled:opacity-50">
