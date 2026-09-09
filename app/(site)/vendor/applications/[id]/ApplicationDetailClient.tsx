@@ -9,6 +9,7 @@ import { FloorPlan } from "@/components/floorplan/FloorPlan";
 import { Legend } from "@/components/floorplan/Legend";
 import { BoothConfirmModal } from "@/components/vendor/BoothConfirmModal";
 import { SelectedBoothCard } from "@/components/vendor/SelectedBoothCard";
+import { ReceiptSummaryCard } from "@/components/vendor/ReceiptSummaryCard";
 import type { FloorBooth, FloorFeature, SizeStyle } from "@/components/floorplan/types";
 import type { ApplicationView } from "@/lib/applicationView";
 
@@ -40,7 +41,6 @@ export function ApplicationDetailClient({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [checkoutSession, setCheckoutSession] = useState<{ paymentId: string; amountAedFils: number } | null>(null);
-  const [cancelReason, setCancelReason] = useState("");
   // A booth click never holds it immediately — it only opens the
   // confirmation modal below. The hold request itself only fires once the
   // vendor explicitly confirms (see confirmPendingBooth).
@@ -207,23 +207,6 @@ export function ApplicationDetailClient({
       await refreshStatus();
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "Something went wrong");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function requestCancellation() {
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/cancel/${applicationId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: cancelReason }),
-      });
-      if (res.ok) {
-        setNotice(locale === "ar" ? "تم إرسال طلب الإلغاء." : "Cancellation request sent.");
-        await refreshStatus();
-      }
     } finally {
       setBusy(false);
     }
@@ -461,19 +444,37 @@ export function ApplicationDetailClient({
 
       {view.displayStatus === "PAID" && (
         <div className="mt-8 space-y-6">
-          <div className="rounded-xl border border-green-200 bg-green-50 p-6">
-            <p className="text-sm text-green-800">{locale === "ar" ? "تم تأكيد الكشك" : "Your booth is confirmed"}</p>
-            <p className="font-heading text-2xl text-brown-dark mt-1">{view.soldBooth?.code}</p>
-            {view.soldBooth?.priceAedFils != null && (
-              <p className="text-sm text-brown-light mt-1">{formatAed(view.soldBooth.priceAedFils)} paid</p>
-            )}
+          <div className="rounded-[10px] border border-brown/10 bg-cream p-7 sm:p-8">
+            <p className="label-caps mb-4">{locale === "ar" ? "مؤكد ومدفوع" : "Confirmed & Paid"}</p>
+            <p className="text-xs uppercase tracking-wide text-brown-light mb-1">{locale === "ar" ? "كشكك" : "Your Booth"}</p>
+            <p className="font-heading text-5xl sm:text-6xl text-brown-dark leading-none tracking-tight">{view.soldBooth?.code}</p>
             {view.soldBooth?.soldAt && (
-              <p className="text-xs text-brown-light">{new Date(view.soldBooth.soldAt).toLocaleString()}</p>
+              <p className="mt-5 pt-5 border-t border-brown/10 text-sm text-brown-light">
+                {locale === "ar" ? "تم الدفع في" : "Paid on"}{" "}
+                {new Date(view.soldBooth.soldAt).toLocaleDateString(locale === "ar" ? "ar-AE" : "en-AE", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </p>
             )}
           </div>
 
+          {view.receipt && <ReceiptSummaryCard receipt={view.receipt} />}
+
+          {view.receipt && (
+            <a
+              href={`/vendor/receipts/${view.receipt.paymentId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-block px-6 py-2.5 rounded-full border border-brown/30 text-sm text-brown-dark hover:bg-brown/10 transition-colors"
+            >
+              {locale === "ar" ? "تنزيل الإيصال" : "Download Receipt"}
+            </a>
+          )}
+
           {view.event.whatsappVendorGroupLink && (
-            <div className="rounded-xl border border-brown/10 bg-cream p-6 flex items-center justify-between flex-wrap gap-3">
+            <div className="rounded-[10px] border border-brown/10 bg-cream p-6 flex items-center justify-between flex-wrap gap-3">
               <span className="text-sm text-brown-dark">{locale === "ar" ? "مجموعة واتساب لهذه الفعالية" : "This event's vendor WhatsApp group"}</span>
               <a
                 href={view.event.whatsappVendorGroupLink}
@@ -486,46 +487,16 @@ export function ApplicationDetailClient({
             </div>
           )}
 
-          {!view.cancellationRequested ? (
-            <div className="rounded-xl border border-brown/10 p-6">
-              <p className="text-sm text-brown-light mb-1">{locale === "ar" ? "بحاجة للإلغاء؟" : "Need to cancel?"}</p>
-              <p className="text-xs text-brown-light mb-3">
-                {locale === "ar" ? (
-                  <>
-                    الحجوزات غير قابلة للاسترداد بعد الدفع، إلا في حالات استثنائية توافق عليها دار الحي. راجع{" "}
-                    <a href="/legal/refunds" className="underline">
-                      سياسة الاسترداد والإلغاء
-                    </a>
-                    .
-                  </>
-                ) : (
-                  <>
-                    Bookings are non-refundable once paid, except where DAH specifically approves an exception. See our{" "}
-                    <a href="/legal/refunds" className="underline">
-                      Refund &amp; Cancellation Policy
-                    </a>
-                    .
-                  </>
-                )}
-              </p>
-              <textarea
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-                placeholder={locale === "ar" ? "السبب (اختياري)" : "Reason (optional)"}
-                rows={2}
-                className="w-full border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft text-sm mb-3"
-              />
-              <button
-                onClick={requestCancellation}
-                disabled={busy}
-                className="px-5 py-2 rounded-full border border-red-300 text-red-700 text-sm disabled:opacity-50"
-              >
-                {t("vendor.cancelBooth")}
-              </button>
-            </div>
-          ) : (
+          {view.cancellationRequested ? (
             <p className="text-sm text-brown-light">
               {locale === "ar" ? "تم إرسال طلب الإلغاء — سيتواصل معك فريقنا." : "Cancellation requested — our team will follow up with you."}
+            </p>
+          ) : (
+            <p className="text-xs text-brown-light">
+              {locale === "ar" ? "بحاجة للمساعدة بخصوص حجزك؟" : "Need help with your booking?"}{" "}
+              <a href="/contact" className="underline">
+                {locale === "ar" ? "تواصل مع دار الحي" : "Contact DAH"}
+              </a>
             </p>
           )}
         </div>

@@ -390,6 +390,12 @@ model Payment {
   provider    String // e.g. "sandbox", "ziina", "shopify_payments", "adcb"
   providerRef String? // charge/session id from the gateway
 
+  // Assigned exactly once, atomically, the moment a payment actually
+  // succeeds (via the ReceiptNumberSeq Postgres sequence — see migration) —
+  // never a random client-side value, never reused, stable for the life of
+  // the payment. Null for PENDING/FAILED payments, which have no receipt.
+  receiptNumber String? @unique
+
   createdAt DateTime  @default(now())
   paidAt    DateTime?
 }

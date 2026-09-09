@@ -4,6 +4,7 @@ import { getVendorSession } from "@/lib/auth";
 import { runExpiryPass } from "@/lib/expiry";
 import { getGateway, getSandboxGateway } from "@/payments/gateway";
 import { sendPaymentSuccessEmail, sendPaymentFailedEmail } from "@/lib/email";
+import { assignReceiptNumber } from "@/lib/receipts";
 
 // TODO: once a live gateway is wired in, this route's "outcome" input goes
 // away — success/failure will instead be driven by that gateway's webhook
@@ -82,6 +83,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
       );
     }
     await prisma.payment.update({ where: { id: paymentId }, data: { status: "SUCCEEDED", paidAt: soldAt } });
+    await assignReceiptNumber(paymentId, soldAt);
 
     await sendPaymentSuccessEmail({
       vendorEmail: application.email,

@@ -140,6 +140,13 @@ function DetailGrid({ t }: { t: TransactionRow }) {
       </DetailRow>
       <DetailRow label="Provider">{t.provider}</DetailRow>
       <DetailRow label="Reference">{t.providerRef ?? "—"}</DetailRow>
+      {t.status === "SUCCEEDED" && (
+        <DetailRow label="Receipt">
+          <Link href={`/admin/payments/receipts/${t.id}`} target="_blank" className="text-brown-dark underline underline-offset-2 hover:text-brown">
+            View / Download
+          </Link>
+        </DetailRow>
+      )}
     </dl>
   );
 }

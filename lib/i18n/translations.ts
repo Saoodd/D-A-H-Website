@@ -120,7 +120,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "vendor.status.EXPIRED": "Acceptance expired",
     "vendor.selectBooth": "Select your booth",
     "vendor.deadlineLabel": "Complete payment within",
-    "vendor.cancelBooth": "Cancel my booth",
 
     "vendorNav.overview": "Overview",
     "vendorNav.agreements": "Agreements",
@@ -316,7 +315,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "vendor.status.EXPIRED": "انتهت مهلة القبول",
     "vendor.selectBooth": "اختر كشكك",
     "vendor.deadlineLabel": "أكمل الدفع خلال",
-    "vendor.cancelBooth": "إلغاء الكشك",
 
     "vendorNav.overview": "نظرة عامة",
     "vendorNav.agreements": "الاتفاقيات",

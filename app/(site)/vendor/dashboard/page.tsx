@@ -124,14 +124,17 @@ export default async function VendorDashboardPage() {
             }
           : null
       }
-      payments={participation.history.map((h) => ({
-        applicationId: h.applicationId,
-        eventName: h.eventName,
-        boothCode: h.boothCode,
-        boothSize: h.boothSize,
-        amountAedFils: h.amountAedFils,
-        paidAt: h.paidAt ? h.paidAt.toISOString() : null,
-      }))}
+      payments={[...participation.upcoming, ...participation.history]
+        .sort((a, b) => (b.paidAt?.getTime() ?? 0) - (a.paidAt?.getTime() ?? 0))
+        .map((h) => ({
+          paymentId: h.paymentId,
+          applicationId: h.applicationId,
+          eventName: h.eventName,
+          boothCode: h.boothCode,
+          boothSize: h.boothSize,
+          amountAedFils: h.amountAedFils,
+          paidAt: h.paidAt ? h.paidAt.toISOString() : null,
+        }))}
       unviewedWarnings={warnings
         .filter((w) => !w.viewedAt)
         .map((w) => ({ id: w.id, title: w.title }))}

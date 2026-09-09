@@ -5,6 +5,7 @@ import { getDisplayStatus } from "./status";
 import { getSettings } from "./settings";
 import { DisplayStatus } from "./constants";
 import { eventHasPublishedTerms, hasAcceptedCurrentEventTerms } from "./agreements";
+import { getReceiptData, type ReceiptData } from "./receipts";
 
 export interface ApplicationView {
   id: string;
@@ -44,6 +45,9 @@ export interface ApplicationView {
     amountAedFils: number;
     providerRef: string | null;
   } | null;
+  // Only set once a payment has actually SUCCEEDED — the same authoritative
+  // computation used by both the vendor's and admin's printable receipts.
+  receipt: ReceiptData | null;
   cancellationRequested: boolean;
   communityLink: string | null;
   // Every event carries its own independent Terms & Conditions (never a
@@ -95,6 +99,7 @@ export async function getApplicationView(
   const eventTermsAccepted = eventTermsRequired
     ? await hasAcceptedCurrentEventTerms(vendorId, applicationId, fresh.eventId)
     : true;
+  const receipt = succeededPayment ? await getReceiptData(succeededPayment.id) : null;
 
   return {
     id: fresh.id,
@@ -135,6 +140,7 @@ export async function getApplicationView(
     latestPayment: latest
       ? { id: latest.id, status: latest.status, amountAedFils: latest.amountAedFils, providerRef: latest.providerRef }
       : null,
+    receipt,
     cancellationRequested: fresh.cancellationRequests.length > 0,
     communityLink: settings.mainCommunityWhatsappLink,
     eventTermsRequired,

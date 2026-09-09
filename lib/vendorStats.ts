@@ -30,6 +30,7 @@ export async function getVendorParticipation(vendorId: string) {
   }
 
   const toEntry = (p: (typeof all)[number]) => ({
+    paymentId: p.id,
     applicationId: p.applicationId,
     eventId: p.eventId,
     eventName: p.application.event.name,

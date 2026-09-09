@@ -37,6 +37,7 @@ interface NextConfirmedEvent {
 }
 
 interface PaymentRow {
+  paymentId: string;
   applicationId: string;
   eventName: string;
   boothCode: string;
@@ -295,9 +296,14 @@ export function DashboardClient({
                         </div>
                         <div className="text-right">
                           <p className="font-heading text-brown">{formatAed(p.amountAedFils)}</p>
-                          <Link href={`/vendor/applications/${p.applicationId}`} className="text-xs underline text-brown-light">
-                            {t("vendorPayments.viewApplication")}
-                          </Link>
+                          <div className="flex items-center gap-3 justify-end mt-0.5">
+                            <Link href={`/vendor/applications/${p.applicationId}`} className="text-xs underline text-brown-light">
+                              {t("vendorPayments.viewApplication")}
+                            </Link>
+                            <a href={`/vendor/receipts/${p.paymentId}`} target="_blank" rel="noreferrer" className="text-xs underline text-brown-light">
+                              {locale === "ar" ? "الإيصال" : "Receipt"}
+                            </a>
+                          </div>
                         </div>
                       </div>
                     </div>
