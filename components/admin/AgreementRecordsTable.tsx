@@ -9,6 +9,7 @@ interface RecordRow {
   id: string;
   businessName: string;
   contactName: string;
+  username: string;
   representativeName: string | null;
   title: string;
   type: string;
@@ -18,9 +19,15 @@ interface RecordRow {
   boothCode: string | null;
 }
 
-export function AgreementRecordsTable() {
+/** Searchable, filterable, exportable list of signed agreement records.
+ *  Pass `lockType` to scope this instance to one agreement type (hides the
+ *  Type filter, since it would always be a no-op) — used by the Signup
+ *  Terms page (VENDOR_TERMS only). Pass `eventId` to scope to one event's
+ *  Event Terms records only — used by a per-event Agreements workspace, so
+ *  its export never includes any other event or Signup Terms records. */
+export function AgreementRecordsTable({ lockType, eventId }: { lockType?: "VENDOR_TERMS" | "EVENT_TERMS"; eventId?: string } = {}) {
   const [q, setQ] = useState("");
-  const [type, setType] = useState("");
+  const [type, setType] = useState(lockType ?? "");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [rows, setRows] = useState<RecordRow[]>([]);
@@ -30,6 +37,7 @@ export function AgreementRecordsTable() {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (type) params.set("type", type);
+    if (eventId) params.set("eventId", eventId);
     if (dateFrom) params.set("dateFrom", dateFrom);
     if (dateTo) params.set("dateTo", dateTo);
     return params;
@@ -62,22 +70,24 @@ export function AgreementRecordsTable() {
         className="flex flex-wrap items-end gap-3 mb-5"
       >
         <label className="flex flex-col gap-1 text-xs text-brown-light">
-          Business / contact / event
+          Business / contact / username / event
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search…"
-            className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft text-sm w-56"
+            className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft text-sm w-64"
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs text-brown-light">
-          Type
-          <select value={type} onChange={(e) => setType(e.target.value)} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft text-sm">
-            <option value="">All</option>
-            <option value="VENDOR_TERMS">Account</option>
-            <option value="EVENT_TERMS">Event</option>
-          </select>
-        </label>
+        {!lockType && (
+          <label className="flex flex-col gap-1 text-xs text-brown-light">
+            Type
+            <select value={type} onChange={(e) => setType(e.target.value)} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft text-sm">
+              <option value="">All</option>
+              <option value="VENDOR_TERMS">Account</option>
+              <option value="EVENT_TERMS">Event</option>
+            </select>
+          </label>
+        )}
         <label className="flex flex-col gap-1 text-xs text-brown-light">
           From
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft text-sm" />
@@ -94,6 +104,12 @@ export function AgreementRecordsTable() {
           className="px-4 py-2 rounded-full border border-brown/30 text-sm hover:bg-brown/5"
         >
           Export CSV
+        </a>
+        <a
+          href={`/api/admin/agreements/records?${buildQuery().toString()}&format=xlsx`}
+          className="px-4 py-2 rounded-full border border-brown/30 text-sm hover:bg-brown/5"
+        >
+          Export Excel
         </a>
       </form>
 
@@ -116,6 +132,7 @@ export function AgreementRecordsTable() {
                 </p>
                 <p className="text-xs text-brown-light">
                   {r.contactName}
+                  {r.username ? ` · @${r.username}` : ""}
                   {r.representativeName ? ` · Rep: ${r.representativeName}` : ""} · v{r.version} ·{" "}
                   {new Date(r.acceptedAt).toLocaleDateString()}
                   {r.boothCode ? ` · Booth ${r.boothCode}` : ""}

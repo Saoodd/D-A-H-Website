@@ -44,6 +44,7 @@ export default async function VendorProfilePage() {
     <ProfileClient
       vendor={{
         businessName: vendor.businessName,
+        username: vendor.username,
         contactName: vendor.contactName,
         email: vendor.email,
         phone: vendor.phone,

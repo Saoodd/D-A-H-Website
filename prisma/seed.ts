@@ -139,6 +139,8 @@ async function main() {
     vendor = await prisma.vendor.create({
       data: {
         email: demoEmail,
+        username: "demovendor",
+        usernameLower: "demovendor",
         passwordHash: await bcrypt.hash("password123", 10),
         businessName: "Demo Vendor Co.",
         contactName: "Demo Vendor",
@@ -174,6 +176,8 @@ async function main() {
     await prisma.vendor.create({
       data: {
         email: unverifiedEmail,
+        username: "pendingvendor",
+        usernameLower: "pendingvendor",
         passwordHash: await bcrypt.hash("password123", 10),
         businessName: "Pending Vendor Co.",
         contactName: "Pending Vendor",

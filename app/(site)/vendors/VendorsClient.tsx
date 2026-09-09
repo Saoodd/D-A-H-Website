@@ -102,6 +102,7 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
           businessName: form.get("businessName"),
           contactName: form.get("contactName"),
           email: form.get("email"),
+          username: form.get("username"),
           phone: form.get("phone"),
           category: finalCategory,
           instagram: instagramHandle.trim() ? `@${instagramHandle.trim().replace(/^@/, "")}` : "",
@@ -168,6 +169,28 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
             <Field name="businessName" label={t("form.businessName")} required />
             <Field name="contactName" label={t("form.contactName")} required />
             <Field name="email" type="email" label={t("form.email")} required />
+
+            <label className="flex flex-col gap-1 text-sm">
+              <span>
+                {locale === "ar" ? "اسم المستخدم" : "Username"}
+                <RequiredMark />
+              </span>
+              <input
+                name="username"
+                required
+                minLength={3}
+                maxLength={30}
+                pattern="[A-Za-z0-9_]+"
+                autoComplete="username"
+                className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
+              />
+              <span className="text-xs text-brown-light mt-0.5">
+                {locale === "ar"
+                  ? "يمكن استخدام اسم المستخدم لتسجيل الدخول إلى حسابك في دار الحي."
+                  : "Your username can be used to log in to your DAH account."}
+              </span>
+            </label>
+
             <PhoneField name="phone" label={t("form.phone")} required />
 
             <label className="flex flex-col gap-1 text-sm">

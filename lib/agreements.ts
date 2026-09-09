@@ -234,3 +234,153 @@ export async function eventHasPublishedTerms(eventId: string): Promise<boolean> 
   const published = await getPublishedAgreement("EVENT_TERMS", eventId);
   return !!published;
 }
+
+export interface EventTermsOverview {
+  eventId: string;
+  eventName: string;
+  eventSlug: string;
+  startDate: Date;
+  location: string;
+  eventStatus: string;
+  publishedVersion: number | null;
+  publishedTitle: string | null;
+  publishedAt: Date | null;
+  hasDraft: boolean;
+  relevantCount: number;
+  signedCount: number;
+}
+
+/** One row per event, for the Event Terms hub (Admin ▸ Agreements ▸ Event
+ *  Terms). "Relevant" vendors are applications that reached ACCEPTED —
+ *  the same status the event workspace's own Terms Status table already
+ *  uses — and "signed" is how many of those specific applications have an
+ *  acceptance tied to that event's CURRENTLY published version, using the
+ *  exact same distinct-signer-per-application logic as the rest of the
+ *  agreements system so every count surface agrees. */
+export async function getEventTermsOverview(): Promise<EventTermsOverview[]> {
+  const events = await prisma.event.findMany({
+    orderBy: { startDate: "desc" },
+    select: { id: true, name: true, slug: true, startDate: true, location: true, status: true },
+  });
+  if (events.length === 0) return [];
+
+  const eventIds = events.map((e) => e.id);
+
+  const [publishedAgreements, draftAgreements, relevantApplications] = await Promise.all([
+    prisma.agreement.findMany({ where: { type: "EVENT_TERMS", eventId: { in: eventIds }, status: "PUBLISHED" } }),
+    prisma.agreement.findMany({ where: { type: "EVENT_TERMS", eventId: { in: eventIds }, status: "DRAFT" }, select: { eventId: true } }),
+    prisma.application.findMany({ where: { eventId: { in: eventIds }, status: "ACCEPTED" }, select: { id: true, eventId: true } }),
+  ]);
+
+  const publishedByEvent = new Map(publishedAgreements.map((a) => [a.eventId as string, a]));
+  const draftEventIds = new Set(draftAgreements.map((d) => d.eventId as string));
+  const relevantByEvent = new Map<string, string[]>();
+  for (const app of relevantApplications) {
+    const list = relevantByEvent.get(app.eventId) ?? [];
+    list.push(app.id);
+    relevantByEvent.set(app.eventId, list);
+  }
+
+  const publishedAgreementIds = publishedAgreements.map((a) => a.id);
+  const signedAccs = publishedAgreementIds.length
+    ? await prisma.agreementAcceptance.findMany({
+        where: { agreementId: { in: publishedAgreementIds }, applicationId: { not: null } },
+        distinct: ["applicationId"],
+        select: { agreementId: true, applicationId: true },
+      })
+    : [];
+  const signedByAgreement = new Map<string, Set<string>>();
+  for (const acc of signedAccs) {
+    if (!acc.applicationId) continue;
+    const set = signedByAgreement.get(acc.agreementId) ?? new Set<string>();
+    set.add(acc.applicationId);
+    signedByAgreement.set(acc.agreementId, set);
+  }
+
+  return events.map((e) => {
+    const published = publishedByEvent.get(e.id) ?? null;
+    const relevantIds = relevantByEvent.get(e.id) ?? [];
+    const signedSet = published ? signedByAgreement.get(published.id) ?? new Set<string>() : new Set<string>();
+    const signedCount = relevantIds.filter((id) => signedSet.has(id)).length;
+    return {
+      eventId: e.id,
+      eventName: e.name,
+      eventSlug: e.slug,
+      startDate: e.startDate,
+      location: e.location,
+      eventStatus: e.status,
+      publishedVersion: published?.version ?? null,
+      publishedTitle: published?.title ?? null,
+      publishedAt: published?.publishedAt ?? null,
+      hasDraft: draftEventIds.has(e.id),
+      relevantCount: relevantIds.length,
+      signedCount,
+    };
+  });
+}
+
+export interface EventVendorAgreementRow {
+  applicationId: string;
+  businessName: string;
+  contactName: string;
+  username: string;
+  vendorId: string;
+  boothCode: string | null;
+  displayStatus: string;
+  agreementAccepted: boolean;
+  acceptedVersion: number | null;
+  acceptedBy: string | null;
+  acceptedAt: Date | null;
+  acceptanceRecordId: string | null;
+}
+
+/** Every ACCEPTED application for one event, with that application's
+ *  status against the event's CURRENTLY published Event Terms version —
+ *  the "Vendor Agreement Status" table in the per-event Agreements
+ *  workspace. Reuses the same relevant-vendor and distinct-signer
+ *  definitions as getEventTermsOverview so the two pages never disagree. */
+export async function getEventVendorAgreementStatus(eventId: string): Promise<EventVendorAgreementRow[]> {
+  const [applications, published] = await Promise.all([
+    prisma.application.findMany({
+      where: { eventId, status: "ACCEPTED" },
+      include: {
+        vendor: { select: { id: true, username: true } },
+        payments: { where: { status: "SUCCEEDED" } },
+      },
+      orderBy: { businessName: "asc" },
+    }),
+    getPublishedAgreement("EVENT_TERMS", eventId),
+  ]);
+
+  const applicationIds = applications.map((a) => a.id);
+  const [soldBooths, acceptances] = await Promise.all([
+    applicationIds.length
+      ? prisma.booth.findMany({ where: { assignedApplicationId: { in: applicationIds }, status: "SOLD" }, select: { code: true, assignedApplicationId: true } })
+      : Promise.resolve([]),
+    published && applicationIds.length
+      ? prisma.agreementAcceptance.findMany({ where: { agreementId: published.id, applicationId: { in: applicationIds } } })
+      : Promise.resolve([]),
+  ]);
+  const boothByApp = new Map(soldBooths.map((b) => [b.assignedApplicationId, b.code]));
+  const acceptanceByApp = new Map(acceptances.filter((a) => a.applicationId).map((a) => [a.applicationId as string, a]));
+
+  const { getDisplayStatus } = await import("./status");
+
+  return applications.map((a) => {
+    const acceptance = acceptanceByApp.get(a.id) ?? null;
+    return {
+      applicationId: a.id,
+      businessName: a.businessName,
+      contactName: a.contactName,
+      username: a.vendor.username,
+      vendorId: a.vendor.id,
+      boothCode: boothByApp.get(a.id) ?? null,
+      displayStatus: getDisplayStatus(a, a.payments.length > 0),
+      agreementAccepted: !!acceptance,
+      acceptedVersion: acceptance?.snapshotVersion ?? null,
+      acceptedBy: acceptance?.representativeName ?? null,
+      acceptedAt: acceptance?.acceptedAt ?? null,
+      acceptanceRecordId: acceptance?.id ?? null,
+    };
+  });
+}

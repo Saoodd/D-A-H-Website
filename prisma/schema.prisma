@@ -198,7 +198,15 @@ model Booth {
 model Vendor {
   id           String  @id @default(cuid())
   email        String  @unique
-  passwordHash String
+  // The vendor's chosen sign-in name, in the exact casing they typed —
+  // shown back to them everywhere. `usernameLower` is the real uniqueness
+  // and lookup key (trimmed + lowercased): "SaeedStore", "saeedstore" and
+  // " SaeedStore " are all the same account, enforced by the unique index
+  // below, not just app-level checks, so a race between two signups can
+  // never both succeed.
+  username      String
+  usernameLower String  @unique
+  passwordHash  String
   businessName String
   contactName  String
   phone        String

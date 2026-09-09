@@ -12,6 +12,7 @@ import { MetricCard, EmptyState } from "@/components/ui/Card";
 
 interface Vendor {
   businessName: string;
+  username: string;
   contactName: string;
   email: string;
   phone: string;
@@ -294,6 +295,10 @@ export function ProfileClient({
               <label className="flex flex-col gap-1 text-sm">
                 {t("form.email")}
                 <input value={vendor.email} disabled className="border border-brown/10 rounded-lg px-3 py-2 bg-brown/5 text-brown-light" />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                {locale === "ar" ? "اسم المستخدم" : "Username"}
+                <input value={vendor.username} disabled className="border border-brown/10 rounded-lg px-3 py-2 bg-brown/5 text-brown-light" />
               </label>
               <label className="flex flex-col gap-1 text-sm">
                 {t("form.category")}

@@ -1,7 +1,13 @@
 import { z } from "zod";
+import { isValidUsernameFormat, trimUsername, USERNAME_FORMAT_HINT } from "./username";
 
 // Server-side validation for every public form. Applied in the API route
 // handlers — never trust client-side validation alone.
+
+const usernameField = z
+  .string()
+  .transform(trimUsername)
+  .refine(isValidUsernameFormat, { message: `Please choose a username: ${USERNAME_FORMAT_HINT}` });
 
 // Honeypot: a hidden field real users never fill in. Any value = bot.
 export const honeypotSchema = z.object({
@@ -15,6 +21,7 @@ export const vendorRegisterSchema = honeypotSchema.extend({
   businessName: z.string().trim().min(2).max(150),
   contactName: z.string().trim().min(2).max(150),
   email: z.string().trim().email().max(200),
+  username: usernameField,
   phone: z.string().trim().min(5).max(30),
   category: z.string().trim().min(2).max(100),
   instagram: z.string().trim().max(150).optional().or(z.literal("")),
@@ -56,9 +63,19 @@ export const contactSchema = honeypotSchema.extend({
   message: z.string().trim().min(5).max(2000),
 });
 
+// `identifier` may be either an email or a username — the login route
+// decides which by shape, tries the matching lookup, and always returns
+// the same generic error either way (never reveals which one was wrong).
 export const vendorLoginSchema = z.object({
-  email: z.string().trim().email(),
+  identifier: z.string().trim().min(1),
   password: z.string().min(1),
+});
+
+// Step 1 of the two-step login: just checking the identifier is well-formed
+// before asking for a password. Never used to look anything up — the
+// actual login always re-validates via vendorLoginSchema.
+export const vendorIdentifierSchema = z.object({
+  identifier: z.string().trim().min(1),
 });
 
 export const adminLoginSchema = z.object({

@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { vendorRegisterSchema } from "@/lib/validation";
 import { hashPassword, createVendorSession, getVendorSession } from "@/lib/auth";
 import { sendAccountCreatedEmails } from "@/lib/email";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { getSettings } from "@/lib/settings";
+import { normalizeUsername } from "@/lib/username";
 import { ensureVendorTermsExist, getPublishedAgreement, recordAcceptance } from "@/lib/agreements";
 
 // Creates a DAH business account — not tied to any event. The vendor can
@@ -61,24 +63,46 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Friendly pre-check — the real, race-safe guarantee is the unique
+  // index on usernameLower caught below, since two people could submit
+  // the same username within the same instant.
+  const usernameLower = normalizeUsername(data.username);
+  const usernameTaken = await prisma.vendor.findUnique({ where: { usernameLower } });
+  if (usernameTaken) {
+    return NextResponse.json({ error: "That username is already taken. Please choose another." }, { status: 409 });
+  }
+
   await ensureVendorTermsExist();
   const publishedTerms = await getPublishedAgreement("VENDOR_TERMS", null);
 
-  const vendor = await prisma.vendor.create({
-    data: {
-      email,
-      passwordHash: await hashPassword(data.password),
-      businessName: data.businessName,
-      contactName: data.contactName,
-      phone: data.phone,
-      category: data.category,
-      description: data.description || "",
-      instagram: data.instagram || null,
-      logoUrl: data.logoUrl || null,
-      tradeLicenseFileUrl: data.tradeLicenseFileUrl || null,
-      verified: false,
-    },
-  });
+  let vendor;
+  try {
+    vendor = await prisma.vendor.create({
+      data: {
+        email,
+        username: data.username,
+        usernameLower,
+        passwordHash: await hashPassword(data.password),
+        businessName: data.businessName,
+        contactName: data.contactName,
+        phone: data.phone,
+        category: data.category,
+        description: data.description || "",
+        instagram: data.instagram || null,
+        logoUrl: data.logoUrl || null,
+        tradeLicenseFileUrl: data.tradeLicenseFileUrl || null,
+        verified: false,
+      },
+    });
+  } catch (err) {
+    // Two signups for the same username landed at nearly the same instant
+    // and both passed the pre-check above — the database's unique index is
+    // the real guarantee, so exactly one of them ends up here.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return NextResponse.json({ error: "That username is already taken. Please choose another." }, { status: 409 });
+    }
+    throw err;
+  }
 
   if (publishedTerms) {
     await recordAcceptance({
