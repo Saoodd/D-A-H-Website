@@ -20,6 +20,10 @@ export interface ApplicationView {
   status: string;
   displayStatus: DisplayStatus;
   acceptanceExpiresAt: string | null;
+  // The 2-minute booth-selection session — only meaningful while no booth
+  // is currently held (see BOOTH_SELECTION_SESSION_MINUTES). null once a
+  // booth is confirmed, expired, or never started.
+  boothSelectionExpiresAt: string | null;
   boothHold: {
     boothId: string;
     code: string;
@@ -106,6 +110,10 @@ export async function getApplicationView(
     status: fresh.status,
     displayStatus,
     acceptanceExpiresAt: fresh.acceptanceExpiresAt ? fresh.acceptanceExpiresAt.toISOString() : null,
+    boothSelectionExpiresAt:
+      !heldBooth && fresh.boothSelectionExpiresAt && fresh.boothSelectionExpiresAt > new Date()
+        ? fresh.boothSelectionExpiresAt.toISOString()
+        : null,
     boothHold: heldBooth
       ? {
           boothId: heldBooth.id,

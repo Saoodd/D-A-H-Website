@@ -51,9 +51,35 @@ export const VENDOR_CATEGORIES = [
 ] as const;
 export type VendorCategory = (typeof VENDOR_CATEGORIES)[number];
 
-// Timing rules (see build spec: "Booth reservation & holds")
-export const BOOTH_REVIEW_HOLD_MINUTES = 5;
+// Timing rules (see build spec: "Booth reservation & holds"). There are
+// three independent timers and only the shortest applicable one governs at
+// any moment — see lib/expiry.ts and the booth hold/checkout routes:
+//   A. Application.acceptanceExpiresAt — the absolute 3-hour (default)
+//      outer deadline for the whole booking process, set on admin accept.
+//   B. BOOTH_SELECTION_SESSION_MINUTES — a 2-minute session on the booth
+//      SELECTOR screen itself, before any booth is held. Browsing doesn't
+//      reserve anything; only an explicit Confirm Booth progresses into a
+//      hold. Never extends the acceptance deadline.
+//   C. BOOTH_PAYMENT_HOLD_MINUTES — once Event Terms are accepted and the
+//      vendor enters the payment stage, the booth is held exclusively for
+//      this shorter window. Never extends the acceptance deadline either.
+// Between a confirmed booth and reaching the payment stage (i.e. while
+// reviewing the booking / accepting Event Terms), the booth's hold is
+// bounded by the outer acceptance deadline only — see the hold route.
+export const BOOTH_SELECTION_SESSION_MINUTES = 2;
 export const BOOTH_PAYMENT_HOLD_MINUTES = 5;
+
+// UAE VAT rate, used only to back out a Booth Price / VAT / Total display
+// breakdown for a tier whose stored price already includes VAT — the
+// charged total is always the stored price itself, unaffected by this.
+export const VAT_RATE = 0.05;
+
+/** Splits a VAT-inclusive total (in fils) into its base price and VAT
+ *  portions, for display only. Never changes what gets charged. */
+export function splitVatInclusiveTotal(totalAedFils: number): { baseAedFils: number; vatAedFils: number } {
+  const baseAedFils = Math.round(totalAedFils / (1 + VAT_RATE));
+  return { baseAedFils, vatAedFils: totalAedFils - baseAedFils };
+}
 
 // "Display status" combines Application.status + booth/payment state into the
 // single filterable status the admin panel and vendor dashboard show:

@@ -1,6 +1,6 @@
 "use client";
 
-import { formatAed } from "@/lib/constants";
+import { formatAed, splitVatInclusiveTotal } from "@/lib/constants";
 import { Button } from "@/components/ui/Button";
 import { useLocale } from "@/lib/i18n/context";
 import type { FloorBooth } from "@/components/floorplan/types";
@@ -47,13 +47,23 @@ export function BoothConfirmModal({
         <div className="space-y-3 mb-6 text-sm">
           <Row label={locale === "ar" ? "رمز الكشك" : "Booth code"} value={booth.code} />
           <Row label={locale === "ar" ? "المساحة" : "Size"} value={sizeLabel} />
-          <Row
-            label={locale === "ar" ? "السعر" : "Price"}
-            value={resolvedPrice != null ? formatAed(resolvedPrice) : locale === "ar" ? "سيتم التأكيد" : "To be confirmed"}
-          />
-          {resolvedPrice != null && tier?.vatInclusive && (
-            <p className="text-xs text-brown-light -mt-1">{locale === "ar" ? "شامل ضريبة القيمة المضافة" : "VAT-inclusive"}</p>
+
+          {resolvedPrice != null && tier?.vatInclusive ? (
+            <>
+              <Row label={locale === "ar" ? "سعر الكشك" : "Booth Price"} value={formatAed(splitVatInclusiveTotal(resolvedPrice).baseAedFils)} />
+              <Row label={locale === "ar" ? "ضريبة القيمة المضافة" : "VAT"} value={formatAed(splitVatInclusiveTotal(resolvedPrice).vatAedFils)} />
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-brown/10">
+                <span className="text-brown-dark font-medium">{locale === "ar" ? "الإجمالي" : "Total"}</span>
+                <span className="text-brown-dark font-semibold text-base">{formatAed(resolvedPrice)}</span>
+              </div>
+            </>
+          ) : (
+            <Row
+              label={locale === "ar" ? "السعر" : "Price"}
+              value={resolvedPrice != null ? formatAed(resolvedPrice) : locale === "ar" ? "سيتم التأكيد" : "To be confirmed"}
+            />
           )}
+
           <Row label={locale === "ar" ? "الفعالية" : "Event"} value={eventName} />
         </div>
 

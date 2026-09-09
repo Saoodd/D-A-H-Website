@@ -34,7 +34,7 @@ interface Application {
 export function ApplicationDetailAdminClient({ application: a }: { application: Application }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const [extendHours, setExtendHours] = useState("24");
+  const [extendHours, setExtendHours] = useState("3");
   const [overrideHours, setOverrideHours] = useState("");
   const [adjAmount, setAdjAmount] = useState("");
   const [adjReason, setAdjReason] = useState("");

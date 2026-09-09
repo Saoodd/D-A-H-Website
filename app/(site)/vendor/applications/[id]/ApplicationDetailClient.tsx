@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useLocale } from "@/lib/i18n/context";
 import { Countdown } from "@/components/Countdown";
@@ -45,6 +45,11 @@ export function ApplicationDetailClient({
   // confirmation modal below. The hold request itself only fires once the
   // vendor explicitly confirms (see confirmPendingBooth).
   const [pendingBooth, setPendingBooth] = useState<FloorBooth | null>(null);
+  // Whether the 2-minute booth-selection session has run out client-side —
+  // blocks further clicks and prompts a restart. The server independently
+  // re-checks this at confirm time regardless of what the client believes.
+  const [selectionExpired, setSelectionExpired] = useState(false);
+  const startingSelectionRef = useRef(false);
 
   const refreshStatus = useCallback(async () => {
     const res = await fetch(`/api/applications/${applicationId}/status`);
@@ -68,6 +73,30 @@ export function ApplicationDetailClient({
     }
   }, [view.displayStatus, view.boothHold, loadFloorplan]);
 
+  const startBoothSelectionSession = useCallback(async () => {
+    if (startingSelectionRef.current) return;
+    startingSelectionRef.current = true;
+    try {
+      const res = await fetch(`/api/applications/${applicationId}/booth-selection/start`, { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        setSelectionExpired(false);
+        setView((v) => ({ ...v, boothSelectionExpiresAt: data.boothSelectionExpiresAt }));
+      }
+    } finally {
+      startingSelectionRef.current = false;
+    }
+  }, [applicationId]);
+
+  // Opening the booth selector (accepted, no active hold) starts — or
+  // idempotently resumes — the 2-minute selection session. A page refresh
+  // resumes the same server-tracked session rather than granting fresh time.
+  useEffect(() => {
+    if (view.displayStatus === "ACCEPTED_UNPAID" && !view.boothHold && !view.boothSelectionExpiresAt) {
+      startBoothSelectionSession();
+    }
+  }, [view.displayStatus, view.boothHold, view.boothSelectionExpiresAt, startBoothSelectionSession]);
+
   const heldBoothRaw = floorplan?.booths.find((b) => b.id === view.boothHold?.boothId);
   const heldBoothTier = floorplan?.tiers.find((tr) => tr.sizeKey === heldBoothRaw?.size);
 
@@ -88,6 +117,19 @@ export function ApplicationDetailClient({
         body: JSON.stringify({ applicationId }),
       });
       if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (body.code === "SELECTION_EXPIRED") {
+          // A distinct state from "someone else took it" — the vendor's own
+          // 2-minute focus window ran out before they confirmed anything.
+          setNotice(
+            locale === "ar"
+              ? "انتهت جلسة اختيار الكشك. يرجى البدء من جديد."
+              : "Your booth selection session has expired. Please start again."
+          );
+          setSelectionExpired(true);
+          setPendingBooth(null);
+          return;
+        }
         // The server is the sole authority on availability — this is a
         // specific, actionable message (not a generic error) for the one
         // real race: someone else claimed the booth between the vendor's
@@ -270,15 +312,38 @@ export function ApplicationDetailClient({
         <div className="mt-8">
           {view.acceptanceExpiresAt && (
             <div className="mb-6 rounded-xl bg-cream border border-brown/10 px-5 py-4 flex items-center justify-between flex-wrap gap-2">
-              <span className="text-sm text-brown-dark">{t("vendor.deadlineLabel")}</span>
-              <Countdown target={view.acceptanceExpiresAt} onExpire={refreshStatus} className="text-lg text-brown" />
+              <span className="text-sm text-brown-light">{t("vendor.deadlineLabel")}</span>
+              <Countdown target={view.acceptanceExpiresAt} onExpire={refreshStatus} variant="hm" className="text-sm text-brown-dark" />
             </div>
           )}
 
           {!view.boothHold && (
             <div>
-              <h2 className="font-heading text-xl text-brown-dark mb-3">{t("vendor.selectBooth")}</h2>
-              {floorplan ? (
+              <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+                <h2 className="font-heading text-xl text-brown-dark">{t("vendor.selectBooth")}</h2>
+                {!selectionExpired && view.boothSelectionExpiresAt && (
+                  <span className="text-sm">
+                    <span className="text-brown-light">{locale === "ar" ? "اختر كشكك خلال" : "Choose your booth within"}</span>{" "}
+                    <Countdown
+                      target={view.boothSelectionExpiresAt}
+                      variant="mmss"
+                      onExpire={() => setSelectionExpired(true)}
+                      className="font-semibold text-brown-dark text-base"
+                    />
+                  </span>
+                )}
+              </div>
+
+              {selectionExpired ? (
+                <div className="rounded-xl border border-brown/10 bg-cream p-8 text-center">
+                  <p className="text-brown-dark mb-4">
+                    {locale === "ar" ? "انتهت جلسة اختيار الكشك. يمكنك البدء من جديد." : "Your booth-selection session has expired. You can start again."}
+                  </p>
+                  <button onClick={startBoothSelectionSession} className="px-6 py-2.5 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark">
+                    {locale === "ar" ? "البدء من جديد" : "Start Again"}
+                  </button>
+                </div>
+              ) : floorplan ? (
                 <>
                   <FloorPlan
                     features={floorplan.features}
@@ -292,7 +357,7 @@ export function ApplicationDetailClient({
               ) : (
                 <p className="text-brown-light text-sm">{locale === "ar" ? "جارٍ التحميل…" : "Loading floor plan…"}</p>
               )}
-              {pendingBooth && (
+              {pendingBooth && !selectionExpired && (
                 <BoothConfirmModal
                   booth={pendingBooth}
                   tiers={floorplan?.tiers || []}
@@ -312,8 +377,6 @@ export function ApplicationDetailClient({
                 sizeLabel={heldBoothTier?.label}
                 priceAedFils={heldBoothRaw?.priceAedFils ?? heldBoothTier?.priceAedFils}
                 eventName={view.event.name}
-                holdExpiresAt={view.boothHold.holdExpiresAt}
-                onCountdownExpire={refreshStatus}
               />
               <div className="flex gap-3">
                 {view.eventTermsRequired && !view.eventTermsAccepted ? (
@@ -354,10 +417,17 @@ export function ApplicationDetailClient({
                 </span>
               </div>
               {view.boothHold.holdExpiresAt && (
-                <p className="text-sm text-brown-light mb-5">
-                  {locale === "ar" ? "أكمل الدفع خلال" : "Complete payment within"}{" "}
-                  <Countdown target={view.boothHold.holdExpiresAt} onExpire={refreshStatus} />
-                </p>
+                <div className="mb-5">
+                  <p className="text-sm text-brown-dark">
+                    {locale === "ar" ? `الكشك ${view.boothHold.code} محجوز للدفع` : `Booth ${view.boothHold.code} reserved for payment`}
+                  </p>
+                  <Countdown
+                    target={view.boothHold.holdExpiresAt}
+                    variant="mmss"
+                    onExpire={refreshStatus}
+                    className="font-semibold text-brown-dark text-lg"
+                  />
+                </div>
               )}
               <div className="flex flex-col gap-3">
                 <button

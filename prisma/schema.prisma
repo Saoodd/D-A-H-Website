@@ -35,7 +35,7 @@ datasource db {
 model Settings {
   id                             String  @id @default("singleton")
   mainCommunityWhatsappLink      String? // Main DAH Community Group — account-level, not tied to any event
-  defaultAcceptanceDeadlineHours Int     @default(24)
+  defaultAcceptanceDeadlineHours Int     @default(3)
 
   // Single source of truth for contact details shown across the public site
   // (Contact page, footer, emails) — never hardcode these in components.
@@ -353,6 +353,12 @@ model Application {
   acceptanceHoursUsed Int? // the hours value actually applied, for display/audit
   expiredAt           DateTime?
   rejectedAt          DateTime?
+
+  // Server-authoritative 2-minute booth-selection session: set when the
+  // vendor opens the booth selector (or resumed if still valid), consumed
+  // (cleared) once a booth is actually confirmed. Purely a UI-focus timer —
+  // never extends acceptanceExpiresAt, which remains the absolute deadline.
+  boothSelectionExpiresAt DateTime?
 
   cancellationRequests CancellationRequest[]
   adjustments          Adjustment[]
