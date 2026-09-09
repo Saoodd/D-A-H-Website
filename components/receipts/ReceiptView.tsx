@@ -2,6 +2,7 @@ import { Logo } from "@/components/Logo";
 import { formatAed } from "@/lib/constants";
 import type { ReceiptData } from "@/lib/receipts";
 import { PrintButton } from "@/components/agreements/PrintButton";
+import { AutoPrint } from "@/components/receipts/AutoPrint";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString("en-AE", {
@@ -27,9 +28,20 @@ const PROVIDER_LABEL: Record<string, string> = {
  *  computed from the same lib/receipts.ts data so the two can never
  *  disagree. "Payment Receipt", deliberately not "Tax Invoice" — DAH isn't
  *  configured to issue compliant tax invoices, and this never claims to. */
-export function ReceiptView({ receipt, backHref, backLabel }: { receipt: ReceiptData; backHref: string; backLabel: string }) {
+export function ReceiptView({
+  receipt,
+  backHref,
+  backLabel,
+  autoPrint,
+}: {
+  receipt: ReceiptData;
+  backHref: string;
+  backLabel: string;
+  autoPrint?: boolean;
+}) {
   return (
     <div className="container-page py-16 max-w-2xl">
+      {autoPrint && <AutoPrint />}
       <div className="print:hidden flex items-center justify-between mb-8">
         <a href={backHref} className="text-sm text-brown-light underline">
           &larr; {backLabel}

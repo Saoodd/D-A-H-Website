@@ -74,6 +74,7 @@ export default async function AdminVendorDetailPage({ params }: { params: Promis
           status: a.status,
           displayStatus: getDisplayStatus(a, succeeded),
           boothCode: soldBooth?.code || heldBooth?.code || null,
+          paymentId: succeeded ? a.payments[0].id : null,
         };
       })}
       notes={notes.map((n) => ({ id: n.id, note: n.note, createdAt: n.createdAt.toISOString() }))}

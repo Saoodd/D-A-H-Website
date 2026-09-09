@@ -33,6 +33,7 @@ interface AppRow {
   status: string;
   displayStatus: DisplayStatus;
   boothCode: string | null;
+  paymentId: string | null;
 }
 
 interface NoteRow {
@@ -307,20 +308,30 @@ export function VendorDetailClient({
             ) : (
               <div className="space-y-2">
                 {applications.map((a) => (
-                  <Link
+                  <div
                     key={a.id}
-                    href={`/admin/applications/${a.id}`}
                     className="flex items-center justify-between flex-wrap gap-3 rounded-[10px] border border-brown/10 bg-cream hover:border-brown/25 p-4 transition-colors"
                   >
-                    <div>
+                    <Link href={`/admin/applications/${a.id}`} className="min-w-0">
                       <p className="text-sm font-medium text-brown-dark">{a.eventName}</p>
                       <p className="text-xs text-brown-light">
                         {new Date(a.eventStartDate).toLocaleDateString()}
                         {a.boothCode ? ` · Booth ${a.boothCode}` : ""}
                       </p>
+                    </Link>
+                    <div className="flex items-center gap-3">
+                      {a.paymentId && (
+                        <Link
+                          href={`/admin/payments/receipts/${a.paymentId}`}
+                          target="_blank"
+                          className="text-xs text-brown-light underline underline-offset-2 hover:text-brown-dark"
+                        >
+                          Receipt
+                        </Link>
+                      )}
+                      <StatusBadge label={a.displayStatus} tone={displayStatusTone[a.displayStatus]} />
                     </div>
-                    <StatusBadge label={a.displayStatus} tone={displayStatusTone[a.displayStatus]} />
-                  </Link>
+                  </div>
                 ))}
               </div>
             )}

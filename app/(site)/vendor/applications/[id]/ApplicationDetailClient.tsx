@@ -464,7 +464,7 @@ export function ApplicationDetailClient({
 
           {view.receipt && (
             <a
-              href={`/vendor/receipts/${view.receipt.paymentId}`}
+              href={`/vendor/receipts/${view.receipt.paymentId}?mode=download`}
               target="_blank"
               rel="noreferrer"
               className="inline-block px-6 py-2.5 rounded-full border border-brown/30 text-sm text-brown-dark hover:bg-brown/10 transition-colors"
