@@ -101,7 +101,11 @@ export function EventDetailClient({ event, vendorState }: { event: EventDetail; 
   return (
     <div>
       <div
-        className="h-56 md:h-80 bg-cream-deep bg-cover bg-center"
+        className={`h-56 md:h-80 bg-cover bg-center ${
+          event.coverImage
+            ? ""
+            : "bg-cream-deep bg-[repeating-linear-gradient(45deg,rgba(107,68,41,0.04),rgba(107,68,41,0.04)_10px,transparent_10px,transparent_20px)]"
+        }`}
         style={event.coverImage ? { backgroundImage: `url(${event.coverImage})` } : undefined}
       />
       <Reveal className="container-page py-14 max-w-3xl">

@@ -37,7 +37,15 @@ export function PhoneField({
 
   return (
     <label className="flex flex-col gap-1 text-sm">
-      {label}
+      <span>
+        {label}
+        {required && (
+          <span className="text-brown/40" aria-hidden="true">
+            {" "}
+            *
+          </span>
+        )}
+      </span>
       <div className="flex gap-2">
         <select
           value={countryCode}

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getSettings } from "@/lib/settings";
+import { isValidHttpUrl } from "@/lib/url";
 import { ContactClient } from "./ContactClient";
 
 export const metadata: Metadata = {
@@ -11,7 +12,7 @@ export default async function ContactPage() {
   const settings = await getSettings();
   return (
     <ContactClient
-      communityLink={settings.mainCommunityWhatsappLink}
+      communityLink={isValidHttpUrl(settings.mainCommunityWhatsappLink) ? settings.mainCommunityWhatsappLink : null}
       contactEmail={settings.contactEmail}
       contactInstagramHandle={settings.contactInstagramHandle}
     />

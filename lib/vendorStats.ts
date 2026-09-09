@@ -53,9 +53,14 @@ export async function getVendorParticipation(vendorId: string) {
 }
 
 // Always required — these are the only fields that can ever keep a vendor
-// below 100%. `website` is deliberately excluded: it's a nice-to-have, never
-// counted, so leaving it blank can never cost completion percentage.
-const REQUIRED_FIELDS = ["businessName", "contactName", "phone", "category", "instagram", "logoUrl", "description"] as const;
+// below 100%. Kept in sync with the non-optional fields in
+// vendorRegisterSchema (lib/validation.ts): businessName, contactName,
+// phone and category are the only ones a vendor can't sign up without.
+// `website`, `instagram`, `logoUrl` and `description` are all genuinely
+// optional at signup and on the profile form (never marked required, no
+// server-side enforcement) — leaving any of them blank must never cost
+// completion percentage, so none of them belong in this list.
+const REQUIRED_FIELDS = ["businessName", "contactName", "phone", "category"] as const;
 
 /** Profile completion — recomputed live from only the fields that are
  *  CURRENTLY required, never a stored percentage (see brief §31/32).

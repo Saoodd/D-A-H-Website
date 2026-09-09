@@ -189,23 +189,59 @@ export function ApplicationDetailClient({
       )}
 
       {view.displayStatus === "PENDING" && (
-        <p className="mt-10 text-brown-light">
-          {locale === "ar" ? "طلبك قيد المراجعة. سنرسل بريداً إلكترونياً عند اتخاذ قرار." : "Your application is under review. We'll email you once a decision is made."}
-        </p>
+        <div className="mt-10 space-y-4">
+          <p className="text-brown-light">
+            {locale === "ar" ? "طلبك قيد المراجعة. سنرسل بريداً إلكترونياً عند اتخاذ قرار." : "Your application is under review. We'll email you once a decision is made."}
+          </p>
+          <div className="rounded-xl border border-brown/10 bg-cream p-6">
+            <p className="text-xs uppercase tracking-wide text-brown-light mb-2">
+              {locale === "ar" ? "ماذا يحدث بعد ذلك" : "What happens next"}
+            </p>
+            <p className="text-sm text-brown-dark leading-relaxed">
+              {locale === "ar"
+                ? "يراجع فريق دار الحي كل طلب يدوياً. عند اتخاذ قرار، ستصلك رسالة بريد إلكتروني وستُحدَّث حالة الطلب هنا تلقائياً — لا حاجة لإعادة التقديم أو المتابعة."
+                : "Our team reviews every application by hand. Once a decision is made, you'll get an email and this page will update automatically — no need to reapply or follow up."}
+            </p>
+          </div>
+        </div>
       )}
 
       {view.displayStatus === "REJECTED" && (
-        <p className="mt-10 text-brown-light">
-          {locale === "ar" ? "لم يتم قبول طلبك لهذه الفعالية." : "Your application wasn't accepted for this event."}
-        </p>
+        <div className="mt-10 space-y-5">
+          <p className="text-brown-light">
+            {locale === "ar" ? "لم يتم قبول طلبك لهذه الفعالية." : "Your application wasn't accepted for this event."}
+          </p>
+          <Link
+            href="/events"
+            className="inline-block px-6 py-2.5 rounded-full border border-brown/30 text-sm text-brown-dark hover:bg-brown/10 transition-colors"
+          >
+            {locale === "ar" ? "تصفح الفعاليات القادمة" : "Browse Upcoming Events"}
+          </Link>
+        </div>
       )}
 
       {view.displayStatus === "EXPIRED" && (
-        <p className="mt-10 text-brown-light">
-          {locale === "ar"
-            ? "انتهت مهلة القبول قبل إتمام الدفع. تواصل معنا إن كنت ترغب بإعادة القبول."
-            : "Your acceptance window expired before payment was completed. Contact us if you'd like to be re-accepted."}
-        </p>
+        <div className="mt-10 space-y-5">
+          <p className="text-brown-light">
+            {locale === "ar"
+              ? "انتهت مهلة القبول قبل إتمام الدفع، لذلك لم يعد بإمكانك إكمال هذا الحجز."
+              : "Your acceptance window closed before payment was completed, so this booking can no longer be finished."}
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <a
+              href="/contact"
+              className="inline-block px-6 py-2.5 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark transition-colors"
+            >
+              {locale === "ar" ? "تواصل معنا لإعادة القبول" : "Contact us about re-acceptance"}
+            </a>
+            <Link
+              href="/events"
+              className="inline-block px-6 py-2.5 rounded-full border border-brown/30 text-sm text-brown-dark hover:bg-brown/10 transition-colors"
+            >
+              {locale === "ar" ? "تصفح الفعاليات القادمة" : "Browse Upcoming Events"}
+            </Link>
+          </div>
+        </div>
       )}
 
       {view.displayStatus === "ACCEPTED_UNPAID" && (

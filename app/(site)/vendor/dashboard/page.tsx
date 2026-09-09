@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getVendorSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
+import { isValidHttpUrl } from "@/lib/url";
 import { runExpiryPass } from "@/lib/expiry";
 import { getDisplayStatus } from "@/lib/status";
 import { getVendorParticipation } from "@/lib/vendorStats";
@@ -23,7 +24,12 @@ export default async function VendorDashboardPage() {
   // community is open to every registered vendor, not just verified ones.
   if (!vendor.verified) {
     const settings = await getSettings();
-    return <PendingVerificationClient businessName={vendor.businessName} communityLink={settings.mainCommunityWhatsappLink} />;
+    return (
+      <PendingVerificationClient
+        businessName={vendor.businessName}
+        communityLink={isValidHttpUrl(settings.mainCommunityWhatsappLink) ? settings.mainCommunityWhatsappLink : null}
+      />
+    );
   }
 
   const applications = await prisma.application.findMany({
@@ -59,7 +65,7 @@ export default async function VendorDashboardPage() {
   return (
     <DashboardClient
       businessName={vendor.businessName}
-      communityLink={settings.mainCommunityWhatsappLink}
+      communityLink={isValidHttpUrl(settings.mainCommunityWhatsappLink) ? settings.mainCommunityWhatsappLink : null}
       applications={refreshed.map((a) => ({
         id: a.id,
         eventName: a.event.name,

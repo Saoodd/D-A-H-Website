@@ -171,7 +171,10 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
             <PhoneField name="phone" label={t("form.phone")} required />
 
             <label className="flex flex-col gap-1 text-sm">
-              {t("form.category")}
+              <span>
+                {t("form.category")}
+                <RequiredMark />
+              </span>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
@@ -196,7 +199,9 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
             </label>
 
             <label className="flex flex-col gap-1 text-sm">
-              {t("form.instagram")}
+              <span>
+                {t("form.instagram")} <span className="text-brown-light font-normal">— {locale === "ar" ? "اختياري" : "Optional"}</span>
+              </span>
               <div className="flex items-center border border-brown/20 rounded-lg bg-cream-soft overflow-hidden focus-within:ring-1 focus-within:ring-brown">
                 <span className="pl-3 pr-1 text-brown-light select-none">@</span>
                 <input
@@ -209,7 +214,10 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
             </label>
 
             <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-              {locale === "ar" ? "وصف قصير عن عملك" : "Short business description"}
+              <span>
+                {locale === "ar" ? "وصف قصير عن عملك" : "Short business description"}{" "}
+                <span className="text-brown-light font-normal">— {locale === "ar" ? "اختياري" : "Optional"}</span>
+              </span>
               <textarea
                 name="description"
                 rows={3}
@@ -235,8 +243,8 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
               </div>
             </div>
 
-            <Field name="password" type="password" label={t("form.password")} required minLength={8} />
-            <Field name="confirmPassword" type="password" label={t("form.confirmPassword")} required minLength={8} />
+            <PasswordField name="password" label={t("form.password")} autoComplete="new-password" />
+            <PasswordField name="confirmPassword" label={t("form.confirmPassword")} autoComplete="new-password" />
 
             <label className="flex flex-col gap-1 text-sm sm:col-span-2">
               {tradeLicenseRequired ? t("vendorInfo.tradeLicenseRequired") : t("vendorInfo.tradeLicenseOptional")}
@@ -322,6 +330,19 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
   );
 }
 
+// Subtle, muted required-field marker — deliberately not red, so a form
+// full of required fields never reads as an error state. The native
+// `required` attribute on each input already covers screen-reader
+// semantics; this is a visual cue only.
+function RequiredMark() {
+  return (
+    <span className="text-brown/40" aria-hidden="true">
+      {" "}
+      *
+    </span>
+  );
+}
+
 function Field({
   name,
   label,
@@ -337,7 +358,10 @@ function Field({
 }) {
   return (
     <label className="flex flex-col gap-1 text-sm">
-      {label}
+      <span>
+        {label}
+        {required && <RequiredMark />}
+      </span>
       <input
         name={name}
         type={type}
@@ -345,6 +369,39 @@ function Field({
         minLength={minLength}
         className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
       />
+    </label>
+  );
+}
+
+// Same show/hide behavior as the vendor login form's password field — each
+// instance keeps its own toggle state, so Password and Confirm password can
+// be shown/hidden independently.
+function PasswordField({ name, label, autoComplete }: { name: string; label: string; autoComplete: string }) {
+  const { t } = useLocale();
+  const [visible, setVisible] = useState(false);
+  return (
+    <label className="flex flex-col gap-1 text-sm">
+      <span>
+        {label}
+        <RequiredMark />
+      </span>
+      <span className="relative flex items-center">
+        <input
+          name={name}
+          type={visible ? "text" : "password"}
+          required
+          minLength={8}
+          autoComplete={autoComplete}
+          className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft w-full pe-16"
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          className="absolute end-3 text-xs text-brown-light hover:text-brown"
+        >
+          {visible ? t("form.hidePassword") : t("form.showPassword")}
+        </button>
+      </span>
     </label>
   );
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
-import { getPublishedAgreement, getDraftAgreement, getVersionHistory, ensureVendorTermsExist, type AgreementType } from "@/lib/agreements";
+import { getPublishedAgreement, getDraftAgreement, getVersionHistory, getAcceptanceCount, ensureVendorTermsExist, type AgreementType } from "@/lib/agreements";
 
 function parseScope(req: NextRequest): { type: AgreementType; eventId: string | null } | null {
   const type = req.nextUrl.searchParams.get("type");
@@ -34,8 +34,12 @@ export async function GET(req: NextRequest) {
     getVersionHistory(scope.type, scope.eventId),
   ]);
 
+  const publishedResponse = published
+    ? { ...published, acceptanceCount: await getAcceptanceCount(published.id, scope.type) }
+    : null;
+
   return NextResponse.json({
-    published,
+    published: publishedResponse,
     draft,
     history: history.map((h) => ({
       id: h.id,
@@ -45,7 +49,7 @@ export async function GET(req: NextRequest) {
       status: h.status,
       publishedAt: h.publishedAt,
       createdAt: h.createdAt,
-      acceptanceCount: h._count.acceptances,
+      acceptanceCount: h.acceptanceCount,
     })),
   });
 }

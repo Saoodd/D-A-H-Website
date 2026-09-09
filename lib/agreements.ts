@@ -47,13 +47,39 @@ export async function getDraftAgreement(type: AgreementType, eventId: string | n
   });
 }
 
+/** How many distinct vendors (VENDOR_TERMS) or applications (EVENT_TERMS)
+ *  have accepted this agreement version — the same "one signer, one count"
+ *  definition the Terms Status table already uses (it dedupes acceptances
+ *  by applicationId into a Set). A vendor can end up with more than one
+ *  AgreementAcceptance row for the same version (e.g. a retried request),
+ *  and those must never be double-counted here — every acceptance-count
+ *  surface in Admin is expected to agree, so they all need the same
+ *  distinct-signer definition, not a raw row count. */
+async function countDistinctAcceptances(agreementId: string, type: AgreementType): Promise<number> {
+  const distinctField = type === "EVENT_TERMS" ? "applicationId" : "vendorId";
+  const rows = await prisma.agreementAcceptance.findMany({
+    where: { agreementId },
+    distinct: [distinctField],
+    select: { [distinctField]: true },
+  });
+  return rows.length;
+}
+
+export async function getAcceptanceCount(agreementId: string, type: AgreementType): Promise<number> {
+  return countDistinctAcceptances(agreementId, type);
+}
+
 export async function getVersionHistory(type: AgreementType, eventId: string | null = null) {
   const versions = await prisma.agreement.findMany({
     where: { type, eventId },
     orderBy: { version: "desc" },
-    include: { _count: { select: { acceptances: true } } },
   });
-  return versions;
+  return Promise.all(
+    versions.map(async (v) => ({
+      ...v,
+      acceptanceCount: await countDistinctAcceptances(v.id, type),
+    }))
+  );
 }
 
 /** Returns the in-progress draft for this scope, creating one (starting

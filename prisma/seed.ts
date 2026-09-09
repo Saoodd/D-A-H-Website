@@ -20,7 +20,10 @@ async function main() {
     create: {
       id: "singleton",
       defaultAcceptanceDeadlineHours: 24,
-      mainCommunityWhatsappLink: "https://chat.whatsapp.com/REPLACE_WITH_REAL_COMMUNITY_LINK",
+      // Left blank on purpose: the WhatsApp community CTA hides itself
+      // sitewide until DAH enters a real link in Admin → Settings — never
+      // seed a fake placeholder URL that could go live by accident.
+      mainCommunityWhatsappLink: null,
     },
     update: {},
   });
@@ -48,8 +51,10 @@ async function main() {
     create: {
       slug: "dah-community-market",
       name: "DAH Community Market",
-      description:
-        "A warm, curated pop-up market giving young and emerging Dubai entrepreneurs an audience to grow with. Placeholder description — replace with real event copy.",
+      // Left blank on purpose: the description section hides itself on the
+      // public event page until DAH writes real copy in the event's
+      // Settings tab — never seed placeholder marketing text.
+      description: "",
       startDate: nextMonth,
       location: "Dubai (venue TBC)",
       categories: ["F&B", "Coffee", "Bakery", "Craft & lifestyle"],
@@ -63,7 +68,7 @@ async function main() {
     create: {
       slug: "dah-community-market-2",
       name: "DAH Community Market — Next Edition",
-      description: "Placeholder for next month's edition — duplicate a floor plan from Admin → Events to reuse the same layout.",
+      description: "",
       startDate: monthAfter,
       location: "Dubai (venue TBC)",
       categories: ["F&B", "Coffee", "Bakery", "Craft & lifestyle"],

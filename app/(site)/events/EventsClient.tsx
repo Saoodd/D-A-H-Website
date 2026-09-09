@@ -37,7 +37,11 @@ export function EventsClient({ events }: { events: EventCard[] }) {
                 className="group block rounded-[10px] overflow-hidden border border-brown/10 bg-cream hover:border-brown/25 transition-colors"
               >
                 <div
-                  className="h-40 bg-cream-deep bg-cover bg-center"
+                  className={`h-40 bg-cover bg-center ${
+                    e.coverImage
+                      ? ""
+                      : "bg-cream-deep bg-[repeating-linear-gradient(45deg,rgba(107,68,41,0.04),rgba(107,68,41,0.04)_10px,transparent_10px,transparent_20px)]"
+                  }`}
                   style={e.coverImage ? { backgroundImage: `url(${e.coverImage})` } : undefined}
                 />
                 <div className="p-6">
