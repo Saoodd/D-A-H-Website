@@ -460,6 +460,33 @@ export function ApplicationDetailClient({
             )}
           </div>
 
+          {/* The event-specific vendor group is the highest-priority action on
+              this page after seeing the booth itself — deliberately placed
+              above the receipt so it's never missed by a vendor who doesn't
+              scroll further. Server-side, view.event.whatsappVendorGroupLink
+              is only ever populated when this vendor's own application for
+              this event is PAID and the event has a link configured — never
+              exposed otherwise, and never confused with the separate,
+              account-level Main DAH Community link shown elsewhere. */}
+          {view.event.whatsappVendorGroupLink && (
+            <div className="rounded-[10px] border border-brown/10 bg-cream p-7 sm:p-8">
+              <p className="label-caps mb-2">{locale === "ar" ? "مجموعة بائعي الفعالية" : "Event Vendor Group"}</p>
+              <p className="text-sm text-brown-light mb-5">
+                {locale === "ar"
+                  ? `انضم إلى مجموعة واتساب الخاصة ببائعي ${view.event.name} لتصلك تعليمات الإعداد وتحديثات البائعين والإعلانات المهمة.`
+                  : `Join the private WhatsApp group for ${view.event.name} to receive setup instructions, vendor updates and important event announcements.`}
+              </p>
+              <a
+                href={view.event.whatsappVendorGroupLink}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-block px-7 py-3 rounded-full bg-brown text-cream-soft text-sm tracking-wide hover:bg-brown-dark transition-colors"
+              >
+                {locale === "ar" ? "انضم إلى مجموعة واتساب" : "Join WhatsApp Group"}
+              </a>
+            </div>
+          )}
+
           {view.receipt && <ReceiptSummaryCard receipt={view.receipt} />}
 
           {view.receipt && (
@@ -471,20 +498,6 @@ export function ApplicationDetailClient({
             >
               {locale === "ar" ? "تنزيل الإيصال" : "Download Receipt"}
             </a>
-          )}
-
-          {view.event.whatsappVendorGroupLink && (
-            <div className="rounded-[10px] border border-brown/10 bg-cream p-6 flex items-center justify-between flex-wrap gap-3">
-              <span className="text-sm text-brown-dark">{locale === "ar" ? "مجموعة واتساب لهذه الفعالية" : "This event's vendor WhatsApp group"}</span>
-              <a
-                href={view.event.whatsappVendorGroupLink}
-                target="_blank"
-                rel="noreferrer"
-                className="px-5 py-2 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark"
-              >
-                {locale === "ar" ? "انضم" : "Join"}
-              </a>
-            </div>
           )}
 
           {view.cancellationRequested ? (
