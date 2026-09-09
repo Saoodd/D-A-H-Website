@@ -79,9 +79,12 @@ export default async function VendorDashboardPage() {
       const application = appliedByEventId.get(e.id);
       return {
         id: e.id,
+        slug: e.slug,
         name: e.name,
         location: e.location,
+        coverImage: e.coverImage,
         startDate: e.startDate.toISOString(),
+        endDate: e.endDate ? e.endDate.toISOString() : null,
         minPriceAedFils: e.showPublicPricing ? await getMinPriceForEvent(e.id) : null,
         applicationId: application?.id ?? null,
         displayStatus: application ? getDisplayStatus(application, application.payments.length > 0) : null,

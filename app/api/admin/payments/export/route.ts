@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
   const payments = await prisma.payment.findMany({
     where,
     include: {
-      application: { select: { businessName: true, contactName: true, event: { select: { name: true } } } },
+      application: { select: { businessName: true, contactName: true, email: true, phone: true, event: { select: { name: true } } } },
       booth: { select: { code: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -51,6 +51,8 @@ export async function GET(req: NextRequest) {
     event: p.application.event.name,
     business: p.application.businessName,
     contact: p.application.contactName,
+    email: p.application.email,
+    phone: p.application.phone,
     booth: p.booth.code,
     amountAed: filsToAed(p.amountAedFils),
     status: p.status,

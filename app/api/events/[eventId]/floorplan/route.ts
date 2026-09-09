@@ -56,6 +56,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ even
         b.heldByApplicationId === applicationId && b.holdExpiresAt ? b.holdExpiresAt.toISOString() : null,
       holdStage: b.heldByApplicationId === applicationId ? b.holdStage : null,
     })),
-    tiers: tiers.map((t) => ({ sizeKey: t.sizeKey, label: t.label, priceAedFils: t.priceAedFils })),
+    tiers: tiers.map((t) => ({ sizeKey: t.sizeKey, label: t.label, priceAedFils: t.priceAedFils, vatInclusive: t.vatInclusive })),
   });
 }

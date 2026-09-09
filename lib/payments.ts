@@ -85,6 +85,8 @@ export interface EventPaymentsDetail {
     id: string;
     businessName: string;
     contactName: string;
+    email: string;
+    phone: string;
     boothCode: string;
     amountAedFils: number;
     status: string;
@@ -105,7 +107,7 @@ export async function getEventPaymentsDetail(eventId: string): Promise<EventPaym
   const [payments, adjustments, unresolvedCancellations] = await Promise.all([
     prisma.payment.findMany({
       where: { eventId },
-      include: { application: { select: { businessName: true, contactName: true, id: true } }, booth: { select: { code: true } } },
+      include: { application: { select: { businessName: true, contactName: true, email: true, phone: true, id: true } }, booth: { select: { code: true } } },
       orderBy: { createdAt: "desc" },
     }),
     prisma.adjustment.aggregate({ where: { application: { eventId } }, _sum: { amountAedFils: true } }),
@@ -130,6 +132,8 @@ export async function getEventPaymentsDetail(eventId: string): Promise<EventPaym
       id: p.id,
       businessName: p.application.businessName,
       contactName: p.application.contactName,
+      email: p.application.email,
+      phone: p.application.phone,
       boothCode: p.booth.code,
       amountAedFils: p.amountAedFils,
       status: p.status,

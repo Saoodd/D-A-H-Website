@@ -50,6 +50,8 @@ export default async function AdminEventPaymentsPage({ params }: { params: Promi
           id: t.id,
           businessName: t.businessName,
           contactName: t.contactName,
+          email: t.email,
+          phone: t.phone,
           boothCode: t.boothCode,
           amountAedFils: t.amountAedFils,
           status: t.status,

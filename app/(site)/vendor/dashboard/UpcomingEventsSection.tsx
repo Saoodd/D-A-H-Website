@@ -9,9 +9,12 @@ import { EmptyState } from "@/components/ui/Card";
 
 export interface UpcomingEventRow {
   id: string;
+  slug: string;
   name: string;
   location: string;
+  coverImage: string | null;
   startDate: string;
+  endDate: string | null;
   minPriceAedFils: number | null;
   applicationId: string | null;
   displayStatus: DisplayStatus | null;
@@ -25,12 +28,32 @@ const statusTone: Record<DisplayStatus, "neutral" | "positive" | "attention" | "
   EXPIRED: "neutral",
 };
 
-// Every upcoming published event, whether or not this vendor has applied
-// yet — so the dashboard Overview gives a useful snapshot immediately
-// instead of sending them hunting through the separate Events tab. CTA per
-// row: no application → Apply; PENDING → View Application; accepted-unpaid
-// → Continue Booking; paid → View Booking; rejected/expired → View
-// Application (so they can still see the outcome).
+// Same subtle diagonal-stripe DAH placeholder used on the public Events
+// page (app/(site)/events/EventsClient.tsx) when a cover image is missing
+// — never a stock photo, and never the same flat rectangle across both
+// surfaces.
+const PLACEHOLDER_CLASS = "bg-cream-deep bg-[repeating-linear-gradient(45deg,rgba(107,68,41,0.04),rgba(107,68,41,0.04)_10px,transparent_10px,transparent_20px)]";
+
+function formatDateRange(startIso: string, endIso: string | null, locale: string) {
+  const start = new Date(startIso);
+  const localeTag = locale === "ar" ? "ar-AE" : "en-AE";
+  if (!endIso) return start.toLocaleDateString(localeTag, { day: "numeric", month: "long", year: "numeric" });
+  const end = new Date(endIso);
+  const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
+  if (sameMonth) {
+    return `${start.getDate()}–${end.toLocaleDateString(localeTag, { day: "numeric", month: "long", year: "numeric" })}`;
+  }
+  return `${start.toLocaleDateString(localeTag, { day: "numeric", month: "long" })} – ${end.toLocaleDateString(localeTag, {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })}`;
+}
+
+// The main visual anchor of the Overview page — large, premium cards, not a
+// narrow row. Every event the vendor can act on shows here with a clear
+// status-aware CTA alongside a neutral "View Details" link to the public
+// event page.
 export function UpcomingEventsSection({
   events,
   onApply,
@@ -41,7 +64,6 @@ export function UpcomingEventsSection({
   applyingId: string | null;
 }) {
   const { t, locale } = useLocale();
-  const dateFmt = (iso: string) => new Date(iso).toLocaleDateString(locale === "ar" ? "ar-AE" : "en-AE");
 
   return (
     <div>
@@ -49,41 +71,54 @@ export function UpcomingEventsSection({
       {events.length === 0 ? (
         <EmptyState title={locale === "ar" ? "لا توجد فعاليات قادمة منشورة حالياً" : "No upcoming events published yet"} />
       ) : (
-        <div className="space-y-3">
+        <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
           {events.map((ev) => (
-            <div key={ev.id} className="flex items-center justify-between flex-wrap gap-3 rounded-[10px] border border-brown/10 bg-cream p-5">
-              <div>
-                <p className="font-heading text-brown-dark">{ev.name}</p>
-                <p className="text-xs text-brown-light mt-0.5">
-                  {dateFmt(ev.startDate)} · {ev.location}
-                  {ev.minPriceAedFils != null && ` · ${locale === "ar" ? "من" : "From"} ${formatAed(ev.minPriceAedFils)}`}
-                </p>
-                {ev.displayStatus && (
-                  <div className="mt-1.5">
-                    <StatusBadge label={t(`vendor.status.${ev.displayStatus}`)} tone={statusTone[ev.displayStatus]} />
-                  </div>
-                )}
-              </div>
+            <div key={ev.id} className="rounded-[10px] overflow-hidden border border-brown/10 bg-cream flex flex-col">
+              <div
+                className={`h-40 sm:h-48 bg-cover bg-center ${ev.coverImage ? "" : PLACEHOLDER_CLASS}`}
+                style={ev.coverImage ? { backgroundImage: `url(${ev.coverImage})` } : undefined}
+              />
+              <div className="p-6 flex flex-col flex-1">
+                <h3 className="font-heading text-xl text-brown-dark">{ev.name}</h3>
+                <p className="text-sm text-brown-light mt-1.5">{formatDateRange(ev.startDate, ev.endDate, locale)}</p>
+                <p className="text-sm text-brown-light">{ev.location}</p>
 
-              {ev.applicationId ? (
-                <Link href={`/vendor/applications/${ev.applicationId}`}>
-                  <Button size="md" variant="secondary">
-                    {ev.displayStatus === "ACCEPTED_UNPAID"
-                      ? locale === "ar"
-                        ? "متابعة الحجز"
-                        : "Continue Booking"
-                      : ev.displayStatus === "PAID"
-                      ? locale === "ar"
-                        ? "عرض الحجز"
-                        : "View Booking"
-                      : t("eventDetail.viewApplicationCta")}
-                  </Button>
-                </Link>
-              ) : (
-                <Button size="md" onClick={() => onApply(ev.id)} loading={applyingId === ev.id}>
-                  {applyingId === ev.id ? t("vendorOverview.applying") : t("vendorOverview.applyCta")}
-                </Button>
-              )}
+                <div className="mt-3 flex items-center gap-2 flex-wrap">
+                  {ev.minPriceAedFils != null && (
+                    <span className="text-sm text-brown font-medium">
+                      {locale === "ar" ? "من" : "From"} {formatAed(ev.minPriceAedFils)}
+                    </span>
+                  )}
+                  {ev.displayStatus && <StatusBadge label={t(`vendor.status.${ev.displayStatus}`)} tone={statusTone[ev.displayStatus]} />}
+                </div>
+
+                <div className="mt-5 pt-5 border-t border-brown/10 flex flex-wrap gap-2.5 mt-auto">
+                  <Link href={`/events/${ev.slug}`}>
+                    <Button size="md" variant="secondary">
+                      {locale === "ar" ? "التفاصيل" : "View Details"}
+                    </Button>
+                  </Link>
+                  {ev.applicationId ? (
+                    <Link href={`/vendor/applications/${ev.applicationId}`}>
+                      <Button size="md">
+                        {ev.displayStatus === "ACCEPTED_UNPAID"
+                          ? locale === "ar"
+                            ? "متابعة الحجز"
+                            : "Continue Booking"
+                          : ev.displayStatus === "PAID"
+                          ? locale === "ar"
+                            ? "عرض الحجز"
+                            : "View Booking"
+                          : t("eventDetail.viewApplicationCta")}
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Button size="md" onClick={() => onApply(ev.id)} loading={applyingId === ev.id}>
+                      {applyingId === ev.id ? t("vendorOverview.applying") : t("vendorOverview.applyCta")}
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
           ))}
         </div>

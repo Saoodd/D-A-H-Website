@@ -1,17 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { formatAed } from "@/lib/constants";
-import { PageHeader, EmptyState } from "@/components/ui/Card";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+import { PageHeader } from "@/components/ui/Card";
+import { TransactionsList } from "@/components/admin/TransactionsList";
 
 export const metadata: Metadata = { title: "All Transactions — Admin" };
-
-const statusTone: Record<string, "positive" | "attention" | "negative"> = {
-  SUCCEEDED: "positive",
-  PENDING: "attention",
-  FAILED: "negative",
-};
 
 export default async function AdminAllTransactionsPage({
   searchParams,
@@ -124,40 +117,24 @@ export default async function AdminAllTransactionsPage({
         </a>
       </form>
 
-      {payments.length === 0 ? (
-        <EmptyState title="No payments found" description="Try a different search or filter." />
-      ) : (
-        <div className="overflow-x-auto rounded-[10px] border border-brown/10">
-          <table className="min-w-full text-sm bg-cream">
-            <thead className="bg-cream-deep/40 text-brown-light text-xs uppercase">
-              <tr>
-                <th className="text-left px-4 py-3">Event</th>
-                <th className="text-left px-4 py-3">Vendor</th>
-                <th className="text-left px-4 py-3">Booth</th>
-                <th className="text-left px-4 py-3">Amount</th>
-                <th className="text-left px-4 py-3">Status</th>
-                <th className="text-left px-4 py-3">Provider</th>
-                <th className="text-left px-4 py-3">Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {payments.map((p) => (
-                <tr key={p.id} className="border-t border-brown/10">
-                  <td className="px-4 py-3">{p.application.event.name}</td>
-                  <td className="px-4 py-3">{p.application.businessName}</td>
-                  <td className="px-4 py-3">{p.booth.code}</td>
-                  <td className="px-4 py-3">{formatAed(p.amountAedFils)}</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge label={p.status} tone={statusTone[p.status] ?? "neutral"} />
-                  </td>
-                  <td className="px-4 py-3">{p.provider}</td>
-                  <td className="px-4 py-3 text-xs">{p.createdAt.toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <TransactionsList
+        showEventColumn
+        rows={payments.map((p) => ({
+          id: p.id,
+          eventName: p.application.event.name,
+          businessName: p.application.businessName,
+          contactName: p.application.contactName,
+          email: p.application.email,
+          phone: p.application.phone,
+          boothCode: p.booth.code,
+          amountAedFils: p.amountAedFils,
+          status: p.status,
+          provider: p.provider,
+          providerRef: p.providerRef,
+          createdAt: p.createdAt.toISOString(),
+          applicationId: p.application.id,
+        }))}
+      />
     </div>
   );
 }

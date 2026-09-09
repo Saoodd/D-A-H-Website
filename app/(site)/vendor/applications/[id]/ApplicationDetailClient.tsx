@@ -7,6 +7,8 @@ import { Countdown } from "@/components/Countdown";
 import { formatAed, DisplayStatus } from "@/lib/constants";
 import { FloorPlan } from "@/components/floorplan/FloorPlan";
 import { Legend } from "@/components/floorplan/Legend";
+import { BoothConfirmModal } from "@/components/vendor/BoothConfirmModal";
+import { SelectedBoothCard } from "@/components/vendor/SelectedBoothCard";
 import type { FloorBooth, FloorFeature, SizeStyle } from "@/components/floorplan/types";
 import type { ApplicationView } from "@/lib/applicationView";
 
@@ -32,13 +34,17 @@ export function ApplicationDetailClient({
   const [floorplan, setFloorplan] = useState<{
     features: FloorFeature[];
     booths: FloorBooth[];
-    tiers: { sizeKey: string; label: string; priceAedFils: number }[];
+    tiers: { sizeKey: string; label: string; priceAedFils: number; vatInclusive: boolean }[];
     floorPlanImageUrl: string | null;
   } | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [checkoutSession, setCheckoutSession] = useState<{ paymentId: string; amountAedFils: number } | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  // A booth click never holds it immediately — it only opens the
+  // confirmation modal below. The hold request itself only fires once the
+  // vendor explicitly confirms (see confirmPendingBooth).
+  const [pendingBooth, setPendingBooth] = useState<FloorBooth | null>(null);
 
   const refreshStatus = useCallback(async () => {
     const res = await fetch(`/api/applications/${applicationId}/status`);
@@ -62,12 +68,17 @@ export function ApplicationDetailClient({
     }
   }, [view.displayStatus, view.boothHold, loadFloorplan]);
 
+  const heldBoothRaw = floorplan?.booths.find((b) => b.id === view.boothHold?.boothId);
+  const heldBoothTier = floorplan?.tiers.find((tr) => tr.sizeKey === heldBoothRaw?.size);
+
   const sizeStyles: Record<string, SizeStyle> = {};
   (floorplan?.tiers || []).forEach((tr, i) => {
     sizeStyles[tr.sizeKey] = { color: SIZE_PALETTE[i % SIZE_PALETTE.length], label: `${tr.label} — ${formatAed(tr.priceAedFils)}` };
   });
 
-  async function selectBooth(booth: FloorBooth) {
+  async function confirmPendingBooth() {
+    if (!pendingBooth) return;
+    const booth = pendingBooth;
     setBusy(true);
     setNotice(null);
     try {
@@ -77,12 +88,23 @@ export function ApplicationDetailClient({
         body: JSON.stringify({ applicationId }),
       });
       if (!res.ok) {
-        const b = await res.json().catch(() => ({}));
-        throw new Error(b.error || "Could not hold that booth");
+        // The server is the sole authority on availability — this is a
+        // specific, actionable message (not a generic error) for the one
+        // real race: someone else claimed the booth between the vendor's
+        // click and their confirm.
+        setNotice(
+          locale === "ar"
+            ? `الكشك ${booth.code} لم يعد متاحاً. يرجى اختيار كشك آخر.`
+            : `Booth ${booth.code} is no longer available. Please choose another booth.`
+        );
+        setPendingBooth(null);
+        await loadFloorplan();
+        return;
       }
+      setPendingBooth(null);
       await refreshStatus();
-    } catch (e) {
-      setNotice(e instanceof Error ? e.message : "Something went wrong");
+    } catch {
+      setNotice(locale === "ar" ? "حدث خطأ ما" : "Something went wrong");
     } finally {
       setBusy(false);
     }
@@ -263,27 +285,37 @@ export function ApplicationDetailClient({
                     booths={floorplan.booths}
                     sizeStyles={sizeStyles}
                     backgroundImageUrl={floorplan.floorPlanImageUrl}
-                    onSelectBooth={selectBooth}
+                    onSelectBooth={setPendingBooth}
                   />
                   <Legend sizeStyles={sizeStyles} />
                 </>
               ) : (
                 <p className="text-brown-light text-sm">{locale === "ar" ? "جارٍ التحميل…" : "Loading floor plan…"}</p>
               )}
+              {pendingBooth && (
+                <BoothConfirmModal
+                  booth={pendingBooth}
+                  tiers={floorplan?.tiers || []}
+                  eventName={view.event.name}
+                  busy={busy}
+                  onConfirm={confirmPendingBooth}
+                  onCancel={() => setPendingBooth(null)}
+                />
+              )}
             </div>
           )}
 
           {view.boothHold && view.boothHold.holdStage === "REVIEW" && (
-            <div className="rounded-xl border border-brown/10 bg-cream p-6">
-              <p className="text-sm text-brown-light">{locale === "ar" ? "الكشك المختار" : "Selected booth"}</p>
-              <p className="font-heading text-2xl text-brown-dark">{view.boothHold.code}</p>
-              {view.boothHold.holdExpiresAt && (
-                <p className="mt-2 text-sm text-brown-light">
-                  {locale === "ar" ? "احجز خلال" : "Hold expires in"}{" "}
-                  <Countdown target={view.boothHold.holdExpiresAt} onExpire={refreshStatus} />
-                </p>
-              )}
-              <div className="mt-5 flex gap-3">
+            <div className="space-y-5">
+              <SelectedBoothCard
+                code={view.boothHold.code}
+                sizeLabel={heldBoothTier?.label}
+                priceAedFils={heldBoothRaw?.priceAedFils ?? heldBoothTier?.priceAedFils}
+                eventName={view.event.name}
+                holdExpiresAt={view.boothHold.holdExpiresAt}
+                onCountdownExpire={refreshStatus}
+              />
+              <div className="flex gap-3">
                 {view.eventTermsRequired && !view.eventTermsAccepted ? (
                   <Link
                     href={`/vendor/applications/${applicationId}/terms`}

@@ -210,9 +210,17 @@ export function AgreementEditor({
       </div>
 
       {!draft && (
-        <Button onClick={startDraft} loading={starting} variant="secondary">
-          {published ? "Edit — start a new draft" : "Write the first version"}
-        </Button>
+        <div>
+          <Button onClick={startDraft} loading={starting} variant="secondary">
+            {published ? "Edit Current Terms" : "Write the first version"}
+          </Button>
+          {published && (
+            <p className="text-xs text-brown-light mt-2 max-w-md">
+              Creates a new draft (v{published.version + 1}) starting from the current published text — v{published.version} stays live and
+              unchanged until you publish your edits.
+            </p>
+          )}
+        </div>
       )}
 
       {draft && (
