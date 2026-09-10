@@ -35,6 +35,7 @@ export async function getVendorParticipation(vendorId: string) {
     eventId: p.eventId,
     eventName: p.application.event.name,
     eventSlug: p.application.event.slug,
+    coverImage: p.application.event.coverImage,
     startDate: p.application.event.startDate,
     endDate: p.application.event.endDate,
     location: p.application.event.location,

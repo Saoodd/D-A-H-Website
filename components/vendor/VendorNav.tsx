@@ -8,6 +8,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 const links = [
   { href: "/vendor/dashboard", key: "vendorNav.overview" as const },
   { href: "/vendor/agreements", key: "vendorNav.agreements" as const },
+  { href: "/vendor/payments", key: "vendorNav.payments" as const },
   { href: "/vendor/profile", key: "vendorNav.profile" as const },
 ];
 
