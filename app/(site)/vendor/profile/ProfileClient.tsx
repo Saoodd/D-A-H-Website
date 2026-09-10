@@ -121,12 +121,13 @@ export function ProfileClient({
 
   const dateFmt = (iso: string) => new Date(iso).toLocaleDateString(locale === "ar" ? "ar-AE" : "en-AE");
 
-  async function upload(file: File, setUrl: (url: string) => void, setBusy: (b: boolean) => void) {
+  async function upload(file: File, setUrl: (url: string) => void, setBusy: (b: boolean) => void, purpose: "logo" | "trade-license") {
     setBusy(true);
     setNotice(null);
     try {
       const form = new FormData();
       form.append("file", file);
+      form.append("purpose", purpose);
       const res = await fetch("/api/vendor/upload", { method: "POST", body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Upload failed");
@@ -346,7 +347,7 @@ export function ProfileClient({
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
                     className="hidden"
-                    onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], setLogoUrl, setUploadingLogo)}
+                    onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], setLogoUrl, setUploadingLogo, "logo")}
                   />
                 </label>
               </div>
@@ -374,18 +375,25 @@ export function ProfileClient({
                 </label>
               </div>
               <div className="mt-4 flex items-center gap-3">
-                {tradeLicenseFileUrl && (
-                  <a href={tradeLicenseFileUrl} target="_blank" rel="noreferrer" className="text-sm underline text-brown">
+                {tradeLicenseFileUrl && tradeLicenseFileUrl === (vendor.tradeLicenseFileUrl || "") ? (
+                  // Trade licences are stored private — this links to our
+                  // own authenticated proxy route, never the raw Blob URL,
+                  // and only ever reflects what's actually saved.
+                  <a href="/api/vendor/documents/trade-license" target="_blank" rel="noreferrer" className="text-sm underline text-brown">
                     {t("vendorProfile.tradeLicenseFile")}
                   </a>
+                ) : (
+                  tradeLicenseFileUrl && (
+                    <span className="text-sm text-brown-light">{locale === "ar" ? "تم رفع ملف جديد — احفظ للتطبيق" : "New file uploaded — save to apply"}</span>
+                  )
                 )}
                 <label className="text-sm px-4 py-2 rounded-[6px] border border-brown/25 text-brown-dark hover:bg-brown/5 cursor-pointer">
                   {uploadingLicense ? t("vendorProfile.uploading") : t("vendorProfile.uploadFile")}
                   <input
                     type="file"
-                    accept="image/png,image/jpeg,image/webp,application/pdf"
+                    accept="image/png,image/jpeg,application/pdf"
                     className="hidden"
-                    onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], setTradeLicenseFileUrl, setUploadingLicense)}
+                    onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], setTradeLicenseFileUrl, setUploadingLicense, "trade-license")}
                   />
                 </label>
               </div>

@@ -1,10 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { getVendorSession } from "@/lib/auth";
-import { safeUploadFilename } from "@/lib/uploadSafety";
+import { safeUploadFilename, isBlobConfigured, BLOB_NOT_CONFIGURED_MESSAGE } from "@/lib/uploadSafety";
 
-const MAX_BYTES = 10 * 1024 * 1024; // 10MB — a logo image or a trade license scan
-const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "application/pdf"];
+const MAX_BYTES = 10 * 1024 * 1024; // 10MB
+
+// Trade licences carry personal/business documents and stay private
+// (require Blob auth to fetch — see /api/vendor/documents/trade-license,
+// the only route that ever reads one back); a logo is decorative and
+// public the same way it always has been. Webp is accepted for the logo
+// but deliberately not for a trade licence, matching the exact format
+// list DAH asked for.
+const PURPOSES = {
+  logo: { types: ["image/png", "image/jpeg", "image/webp"], access: "public" as const, label: "PNG, JPEG or WEBP image" },
+  "trade-license": { types: ["image/png", "image/jpeg", "application/pdf"], access: "private" as const, label: "PNG, JPEG image or PDF document" },
+};
+type Purpose = keyof typeof PURPOSES;
 
 // Vendor-facing file upload (logo, trade license document) — reuses the same
 // Vercel Blob store as the admin upload route, just scoped to the
@@ -18,23 +29,24 @@ export async function POST(req: NextRequest) {
   if (!file || !(file instanceof File)) {
     return NextResponse.json({ error: "No file provided." }, { status: 400 });
   }
-  if (!ALLOWED_TYPES.includes(file.type)) {
-    return NextResponse.json({ error: "Only PNG, JPEG, WEBP images or PDF documents are allowed." }, { status: 400 });
+  const purposeRaw = form?.get("purpose");
+  const purpose: Purpose = purposeRaw === "trade-license" ? "trade-license" : "logo";
+  const spec = PURPOSES[purpose];
+
+  if (!spec.types.includes(file.type)) {
+    return NextResponse.json({ error: `Only ${spec.label} files are allowed.` }, { status: 400 });
   }
   if (file.size > MAX_BYTES) {
     return NextResponse.json({ error: "File is too large (max 10MB)." }, { status: 400 });
   }
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return NextResponse.json(
-      { error: "File uploads aren't configured yet — please contact DAH." },
-      { status: 500 }
-    );
+  if (!isBlobConfigured()) {
+    return NextResponse.json({ error: BLOB_NOT_CONFIGURED_MESSAGE }, { status: 500 });
   }
 
   try {
     const blob = await put(`vendor-docs/${session.vendorId}/${safeUploadFilename(file.type)}`, file, {
-      access: "public",
+      access: spec.access,
       addRandomSuffix: true,
       contentType: file.type,
     });

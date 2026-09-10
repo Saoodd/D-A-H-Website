@@ -62,6 +62,7 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
     try {
       const body = new FormData();
       body.append("file", file);
+      body.append("purpose", "trade-license");
       const res = await fetch("/api/vendor/upload-signup", { method: "POST", body });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Upload failed");
@@ -83,6 +84,7 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
     try {
       const body = new FormData();
       body.append("file", file);
+      body.append("purpose", "logo");
       const res = await fetch("/api/vendor/upload-signup", { method: "POST", body });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Upload failed");

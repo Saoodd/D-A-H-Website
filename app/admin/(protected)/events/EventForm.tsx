@@ -43,6 +43,25 @@ export function EventForm({
   const [categories, setCategories] = useState<string[]>(initial?.categories || []);
   const [categoryDraft, setCategoryDraft] = useState("");
   const [showPublicPricing, setShowPublicPricing] = useState(initial?.showPublicPricing ?? true);
+  const [coverImage, setCoverImage] = useState(initial?.coverImage || "");
+  const [uploadingCover, setUploadingCover] = useState(false);
+
+  async function uploadCoverImage(file: File) {
+    setUploadingCover(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/admin/upload", { method: "POST", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      setCoverImage(data.url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadingCover(false);
+    }
+  }
 
   function addCategory() {
     const v = categoryDraft.trim();
@@ -67,7 +86,7 @@ export function EventForm({
       startDate: form.get("startDate"),
       endDate: form.get("endDate") || null,
       location: form.get("location"),
-      coverImage: form.get("coverImage") || null,
+      coverImage: coverImage || null,
       categories,
       floorPlanImageUrl: form.get("floorPlanImageUrl") || null,
       venueWidthM: form.get("venueWidthM") || null,
@@ -152,7 +171,35 @@ export function EventForm({
         </span>
       </div>
 
-      <Field name="coverImage" label="Cover image URL" defaultValue={initial?.coverImage ?? undefined} span2 />
+      <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+        Cover image
+        <div className="flex flex-wrap items-center gap-3">
+          {coverImage && (
+            // eslint-disable-next-line @next/next/no-img-element -- admin-uploaded cover image via Blob, not a local static asset
+            <img src={coverImage} alt="" className="w-20 h-14 rounded object-cover border border-brown/15" />
+          )}
+          <input
+            value={coverImage}
+            onChange={(e) => setCoverImage(e.target.value)}
+            placeholder="https://… or upload a photo"
+            className="flex-1 min-w-[180px] border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
+          />
+          <label className="text-sm px-4 py-2 rounded-[6px] border border-brown/25 text-brown-dark hover:bg-brown/5 cursor-pointer whitespace-nowrap">
+            {uploadingCover ? "Uploading…" : "Upload photo"}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              disabled={uploadingCover}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) uploadCoverImage(file);
+              }}
+            />
+          </label>
+        </div>
+      </label>
       <label className="flex flex-col gap-1 text-sm sm:col-span-2">
         Description
         <textarea name="description" rows={4} defaultValue={initial?.description} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft" />

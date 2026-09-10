@@ -292,7 +292,10 @@ export function VendorDetailClient({
                 {vendor.tradeLicenseFileUrl && (
                   <>
                     {" · "}
-                    <a href={vendor.tradeLicenseFileUrl} target="_blank" rel="noreferrer" className="underline text-brown">
+                    {/* Trade licences are stored private in Blob — this links to
+                        our own admin-authenticated proxy route, never the raw
+                        Blob URL. */}
+                    <a href={`/api/admin/vendors/${vendor.id}/trade-license`} target="_blank" rel="noreferrer" className="underline text-brown">
                       view document
                     </a>
                   </>
