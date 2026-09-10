@@ -235,6 +235,7 @@ model Vendor {
   agreementAcceptances AgreementAcceptance[]
   passwordResetTokens  PasswordResetToken[]
   emailChangeTokens    EmailChangeToken[]
+  sessions             VendorSession[]
 
   // Soft-delete: closing an account never deletes the row (agreements,
   // payments and bookings all reference vendorId and must stay readable),
@@ -248,6 +249,34 @@ model Vendor {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// One row per issued vendor login session — makes the session cookie
+// actually revocable, unlike a bare stateless JWT. The JWT carries this
+// row's id (`sid`); every request re-checks the row here, so logout (this
+// row only) and a password reset (every row for this vendor) both take
+// effect immediately, not just whenever the token happens to expire on its
+// own. `revokedAt` rather than deleting the row keeps a short audit trail.
+model VendorSession {
+  id        String    @id @default(cuid())
+  vendorId  String
+  vendor    Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  @@index([vendorId])
+}
+
+// Same revocable-session pattern for Admin. Admin has no per-user DB row
+// (a single shared password, see .env ADMIN_PASSWORD) so there's no vendorId
+// equivalent to scope by — logging out revokes just this session's row,
+// keeping other concurrently-open admin sessions valid.
+model AdminSession {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
 }
 
 // Single-use, expiring "forgot password" token. Only a hash is stored —

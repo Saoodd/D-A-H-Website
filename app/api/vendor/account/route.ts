@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
-import { getVendorSession, verifyPassword, destroyVendorSession, hashPassword } from "@/lib/auth";
+import { getVendorSession, verifyPassword, destroyVendorSession, hashPassword, invalidateAllVendorSessions } from "@/lib/auth";
 import { deleteAccountSchema } from "@/lib/validation";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { sendAccountClosedEmail } from "@/lib/email";
@@ -79,6 +79,10 @@ export async function DELETE(req: NextRequest) {
     },
   });
 
+  // Kill every session for this account, not just the one used to close
+  // it — a closed account shouldn't leave another open browser tab/device
+  // still authenticated.
+  await invalidateAllVendorSessions(vendor.id);
   await destroyVendorSession();
 
   await sendAccountClosedEmail({ vendorEmail: vendor.email, businessName: vendor.businessName });

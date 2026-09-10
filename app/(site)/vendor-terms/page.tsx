@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ensureVendorTermsExist, getPublishedAgreement } from "@/lib/agreements";
+import { sanitizeAgreementHtml } from "@/lib/sanitizeHtml";
 
 export const metadata: Metadata = { title: "Vendor Terms & Conditions" };
 
@@ -13,7 +14,7 @@ export default async function VendorTermsPage() {
       {agreement && <p className="text-xs text-brown-light mb-6">Version {agreement.version}</p>}
       <div
         className="prose prose-sm max-w-none"
-        dangerouslySetInnerHTML={{ __html: agreement?.bodyHtml ?? "" }}
+        dangerouslySetInnerHTML={{ __html: agreement ? sanitizeAgreementHtml(agreement.bodyHtml) : "" }}
       />
     </div>
   );

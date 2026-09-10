@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLocale } from "@/lib/i18n/context";
 import { LuxeCheckbox } from "@/components/ui/LuxeCheckbox";
+import { sanitizeAgreementHtml } from "@/lib/sanitizeHtml";
 
 export function EventTermsClient({
   applicationId,
@@ -131,7 +132,7 @@ export function EventTermsClient({
         onScroll={measureScroll}
         className="max-h-[56vh] overflow-y-auto rounded-2xl border border-brown/15 bg-cream shadow-sm px-6 py-8 md:px-12 md:py-10 prose prose-headings:font-heading prose-headings:text-brown-dark max-w-none"
       >
-        <div className="mx-auto max-w-[62ch]" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+        <div className="mx-auto max-w-[62ch]" dangerouslySetInnerHTML={{ __html: sanitizeAgreementHtml(bodyHtml) }} />
       </div>
 
       <div className="mt-3 flex items-center gap-3">

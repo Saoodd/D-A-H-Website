@@ -1,4 +1,5 @@
 import type { AgreementRecord } from "@/lib/agreementRecord";
+import { sanitizeAgreementHtml } from "@/lib/sanitizeHtml";
 import { PrintButton } from "./PrintButton";
 
 /** The printable/downloadable record of a single agreement acceptance —
@@ -40,7 +41,7 @@ export function AgreementRecordView({ record, backHref, backLabel }: { record: A
           {record.ipAddress && <RecordRow label="IP address" value={record.ipAddress} />}
         </dl>
 
-        <div className="border-t border-brown/10 pt-6 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: record.bodyHtml }} />
+        <div className="border-t border-brown/10 pt-6 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: sanitizeAgreementHtml(record.bodyHtml) }} />
       </div>
     </div>
   );

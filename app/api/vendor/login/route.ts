@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { vendorLoginSchema } from "@/lib/validation";
-import { verifyPassword, createVendorSession } from "@/lib/auth";
+import { verifyPasswordOrDummy, createVendorSession } from "@/lib/auth";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { normalizeUsername } from "@/lib/username";
 
@@ -25,11 +25,27 @@ export async function POST(req: NextRequest) {
   // lookup itself, and the error on failure, are identical either way —
   // never reveal which identifier type was tried or whether it exists.
   const identifier = parsed.data.identifier;
-  const vendor = identifier.includes("@")
-    ? await prisma.vendor.findUnique({ where: { email: identifier.toLowerCase() } })
-    : await prisma.vendor.findUnique({ where: { usernameLower: normalizeUsername(identifier) } });
+  const normalizedIdentifier = identifier.includes("@") ? identifier.toLowerCase() : normalizeUsername(identifier);
 
-  if (!vendor || vendor.accountStatus !== "ACTIVE" || !(await verifyPassword(parsed.data.password, vendor.passwordHash))) {
+  // Also rate limit per-identifier, independent of IP, so a distributed
+  // credential-stuffing attempt against one target account is still capped
+  // — matches the same dual-limit pattern already used on password reset,
+  // username recovery, email change and account deletion.
+  if (!rateLimit(`vendor-login-id:${normalizedIdentifier}`, 10, 10 * 60 * 1000)) {
+    return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
+  }
+
+  const vendor = identifier.includes("@")
+    ? await prisma.vendor.findUnique({ where: { email: normalizedIdentifier } })
+    : await prisma.vendor.findUnique({ where: { usernameLower: normalizedIdentifier } });
+
+  // verifyPasswordOrDummy always runs a real bcrypt.compare — against the
+  // real hash when the account exists, against a fixed dummy hash when it
+  // doesn't — so a nonexistent identifier takes the same time to reject as
+  // a wrong password, and the response can never be timed to enumerate
+  // registered accounts.
+  const passwordOk = await verifyPasswordOrDummy(parsed.data.password, vendor?.passwordHash ?? null);
+  if (!vendor || vendor.accountStatus !== "ACTIVE" || !passwordOk) {
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
   }
 

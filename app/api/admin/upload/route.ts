@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { requireAdmin } from "@/lib/adminGuard";
+import { safeUploadFilename } from "@/lib/uploadSafety";
 
 const MAX_BYTES = 15 * 1024 * 1024; // 15MB — a photo/scan of a venue floor plan
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
@@ -31,9 +32,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const blob = await put(`floorplans/${Date.now()}-${file.name}`, file, {
+    const blob = await put(`floorplans/${safeUploadFilename(file.type)}`, file, {
       access: "public",
       addRandomSuffix: true,
+      contentType: file.type,
     });
     return NextResponse.json({ ok: true, url: blob.url });
   } catch {

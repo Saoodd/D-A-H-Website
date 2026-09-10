@@ -5,6 +5,7 @@ import { RichTextEditor } from "./RichTextEditor";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/Card";
+import { sanitizeAgreementHtml } from "@/lib/sanitizeHtml";
 
 interface AgreementRow {
   id: string;
@@ -271,7 +272,7 @@ export function AgreementEditor({
           {previewingDraft && (
             <div className="rounded-[10px] border border-brown/20 bg-cream p-6">
               <p className="label-caps mb-3">Preview — Draft v{draft.version}</p>
-              <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+              <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: sanitizeAgreementHtml(bodyHtml) }} />
             </div>
           )}
         </div>
@@ -335,7 +336,7 @@ export function AgreementEditor({
               Close
             </button>
           </div>
-          <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: previewVersion.bodyHtml }} />
+          <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: sanitizeAgreementHtml(previewVersion.bodyHtml) }} />
         </div>
       )}
     </div>

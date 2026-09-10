@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
+import { safeUploadFilename } from "@/lib/uploadSafety";
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "application/pdf"];
@@ -37,9 +38,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const blob = await put(`vendor-docs/signup/${Date.now()}-${file.name}`, file, {
+    const blob = await put(`vendor-docs/signup/${safeUploadFilename(file.type)}`, file, {
       access: "public",
       addRandomSuffix: true,
+      contentType: file.type,
     });
     return NextResponse.json({ ok: true, url: blob.url });
   } catch {

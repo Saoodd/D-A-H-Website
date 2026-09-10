@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { resetPasswordSchema } from "@/lib/validation";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { hashToken, isExpired } from "@/lib/tokens";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword, invalidateAllVendorSessions } from "@/lib/auth";
 
 const INVALID_TOKEN_ERROR = "This reset link is invalid or has expired. Please request a new one.";
 
@@ -35,6 +35,12 @@ export async function POST(req: NextRequest) {
     prisma.vendor.update({ where: { id: vendor.id }, data: { passwordHash } }),
     prisma.passwordResetToken.update({ where: { id: tokenRow.id }, data: { usedAt: new Date() } }),
   ]);
+
+  // A password reset is often prompted by suspected compromise — every
+  // session issued before this point (including one an attacker may already
+  // hold) stops working immediately, not just whenever it would naturally
+  // expire.
+  await invalidateAllVendorSessions(vendor.id);
 
   return NextResponse.json({ ok: true });
 }
