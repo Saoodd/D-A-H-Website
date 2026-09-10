@@ -4,6 +4,7 @@ import { getVendorSession, destroyVendorSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { getVendorParticipation, computeProfileCompletion } from "@/lib/vendorStats";
+import { isEmailVerified, isPhoneVerified } from "@/lib/verification";
 import { ProfileClient } from "./ProfileClient";
 
 export const metadata: Metadata = { title: "My Profile" };
@@ -62,6 +63,8 @@ export default async function VendorProfilePage() {
         tradeLicenseNumber: vendor.tradeLicenseNumber,
         tradeLicenseFileUrl: vendor.tradeLicenseFileUrl,
         tradeLicenseExpiry: vendor.tradeLicenseExpiry ? vendor.tradeLicenseExpiry.toISOString().slice(0, 10) : null,
+        emailVerified: isEmailVerified(vendor),
+        phoneVerified: isPhoneVerified(vendor),
       }}
       stats={{
         eventsParticipated: participation.eventsParticipated,

@@ -4,6 +4,7 @@ import { getVendorSession } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
 import { vendorProfileUpdateSchema } from "@/lib/validation";
 import { getVendorParticipation, computeProfileCompletion } from "@/lib/vendorStats";
+import { normalizePhoneToE164 } from "@/lib/phone";
 
 // Always resolves the vendor from the authenticated session cookie — a
 // vendor can only ever read or write their OWN profile, never one supplied
@@ -55,7 +56,19 @@ export async function PATCH(req: NextRequest) {
   const update: Record<string, unknown> = {};
   if (data.businessName !== undefined) update.businessName = data.businessName;
   if (data.contactName !== undefined) update.contactName = data.contactName;
-  if (data.phone !== undefined) update.phone = data.phone;
+  if (data.phone !== undefined) {
+    // A proven parsing library, same as signup — never a handwritten
+    // regex. Storing the normalized E.164 form (rather than whatever the
+    // vendor typed) is also what lets isPhoneVerified() detect a real
+    // number change vs. the same number retyped/reformatted, so editing
+    // the phone here immediately falls back to Unverified only when it
+    // actually changed (PART 14).
+    const normalized = normalizePhoneToE164(data.phone);
+    if (!normalized) {
+      return NextResponse.json({ error: "Please enter a valid mobile number, including country code." }, { status: 400 });
+    }
+    update.phone = normalized;
+  }
   if (data.category !== undefined) update.category = data.category;
   if (data.instagram !== undefined) update.instagram = data.instagram || null;
   if (data.website !== undefined) update.website = data.website || null;

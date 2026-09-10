@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
   const vendor = await prisma.vendor.findUnique({ where: { email } });
   if (vendor && vendor.accountStatus === "ACTIVE") {
-    await sendUsernameReminderEmail({ vendorEmail: vendor.email, businessName: vendor.businessName, username: vendor.username });
+    await sendUsernameReminderEmail({ vendorId: vendor.id, vendorEmail: vendor.email, businessName: vendor.businessName, username: vendor.username });
   }
 
   return NextResponse.json({ message: GENERIC_MESSAGE });

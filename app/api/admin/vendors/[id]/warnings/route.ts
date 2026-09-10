@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
+import { sendWarningEmail } from "@/lib/email";
 
 const SEVERITIES = ["NOTICE", "WARNING", "FINAL_WARNING"];
 
@@ -48,6 +49,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       severity,
       adminNote: body.adminNote ? String(body.adminNote).trim() : null,
     },
+  });
+
+  // Only title/description/severity — exactly what's vendor-visible on
+  // this row — ever reach the email. adminNote never leaves this route.
+  // dedupeKey is the warning's own id, which is assigned exactly once at
+  // creation, so a retried request can never send this twice.
+  const event = eventId ? await prisma.event.findUnique({ where: { id: eventId }, select: { name: true } }) : null;
+  await sendWarningEmail({
+    vendorId: vendor.id,
+    vendorEmail: vendor.email,
+    businessName: vendor.businessName,
+    title,
+    description,
+    severity,
+    eventName: event?.name ?? null,
+    dedupeKey: `warning:${warning.id}`,
   });
 
   return NextResponse.json({ ok: true, warning });

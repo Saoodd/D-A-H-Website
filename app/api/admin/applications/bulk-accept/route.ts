@@ -76,10 +76,16 @@ export async function POST(req: NextRequest) {
     }
 
     await sendApplicationApprovedEmail({
+      vendorId: application.vendorId,
       vendorEmail: application.email,
       businessName: application.businessName,
+      eventId: application.eventId,
       eventName: application.event.name,
+      eventStartDate: application.event.startDate,
+      eventLocation: application.event.location,
       deadlineHours: hours,
+      acceptanceExpiresAt,
+      dedupeKey: `application_accepted:${application.id}:${acceptedAt.getTime()}`,
     });
 
     results.push({ applicationId, ok: true, businessName: application.businessName });

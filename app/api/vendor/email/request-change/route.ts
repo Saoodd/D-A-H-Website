@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
   }
 
   await sendEmailChangeVerifyEmail({
+    vendorId: vendor.id,
     newEmail,
     businessName: vendor.businessName,
     verifyUrl: `${siteUrl()}/vendor/profile/confirm-email?token=${raw}`,

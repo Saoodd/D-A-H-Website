@@ -45,9 +45,10 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
+    const rejectedAt = new Date();
     const claim = await prisma.application.updateMany({
       where: { id: applicationId, status: application.status },
-      data: { status: "REJECTED", rejectedAt: new Date(), acceptanceExpiresAt: null },
+      data: { status: "REJECTED", rejectedAt, acceptanceExpiresAt: null },
     });
     if (claim.count === 0) {
       results.push({ applicationId, ok: false, businessName: application.businessName, reason: "race_lost" });
@@ -55,9 +56,12 @@ export async function POST(req: NextRequest) {
     }
 
     await sendApplicationRejectedEmail({
+      vendorId: application.vendorId,
       vendorEmail: application.email,
       businessName: application.businessName,
+      eventId: application.eventId,
       eventName: application.event.name,
+      dedupeKey: `application_rejected:${application.id}:${rejectedAt.getTime()}`,
     });
 
     results.push({ applicationId, ok: true, businessName: application.businessName });

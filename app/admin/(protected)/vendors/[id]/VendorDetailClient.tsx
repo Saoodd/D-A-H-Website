@@ -24,6 +24,10 @@ interface VendorFull {
   tradeLicenseNumber: string | null;
   tradeLicenseFileUrl: string | null;
   tradeLicenseExpiry: string | null;
+  emailVerified: boolean;
+  emailVerifiedAt: string | null;
+  phoneVerified: boolean;
+  phoneVerifiedAt: string | null;
 }
 
 interface AppRow {
@@ -301,6 +305,30 @@ export function VendorDetailClient({
                   </>
                 )}
               </p>
+            </div>
+          </section>
+
+          <section>
+            <p className="label-caps mb-3">Contact verification</p>
+            <div className="rounded-[10px] border border-brown/10 bg-cream p-5 text-sm grid sm:grid-cols-2 gap-4">
+              <div>
+                <p className="text-brown-light text-xs uppercase tracking-widest mb-1">Email</p>
+                <div className="flex items-center gap-2">
+                  <StatusBadge label={vendor.emailVerified ? "Verified" : "Unverified"} tone={vendor.emailVerified ? "positive" : "neutral"} />
+                  {vendor.emailVerifiedAt && (
+                    <span className="text-xs text-brown-light">{new Date(vendor.emailVerifiedAt).toLocaleString()}</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <p className="text-brown-light text-xs uppercase tracking-widest mb-1">Mobile</p>
+                <div className="flex items-center gap-2">
+                  <StatusBadge label={vendor.phoneVerified ? "Verified" : "Unverified"} tone={vendor.phoneVerified ? "positive" : "neutral"} />
+                  {vendor.phoneVerifiedAt && (
+                    <span className="text-xs text-brown-light">{new Date(vendor.phoneVerifiedAt).toLocaleString()}</span>
+                  )}
+                </div>
+              </div>
             </div>
           </section>
 

@@ -58,9 +58,12 @@ export async function expireStaleAcceptances(eventId?: string) {
     ]);
 
     await sendAcceptanceExpiredEmail({
+      vendorId: app.vendorId,
       vendorEmail: app.vendor.email,
       businessName: app.businessName,
+      eventId: app.eventId,
       eventName: app.event.name,
+      dedupeKey: `application_expired:${app.id}:${now.getTime()}`,
     });
   }
 }

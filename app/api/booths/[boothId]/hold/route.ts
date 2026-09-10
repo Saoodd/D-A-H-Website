@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getVendorSession } from "@/lib/auth";
 import { runExpiryPass } from "@/lib/expiry";
+import { requireFullyVerifiedVendor } from "@/lib/verification";
 
 // Places a review hold on an AVAILABLE booth, once the vendor explicitly
 // confirms it — never on click alone. Enforced server-side — re-checks
@@ -17,6 +18,9 @@ import { runExpiryPass } from "@/lib/expiry";
 export async function POST(req: NextRequest, { params }: { params: Promise<{ boothId: string }> }) {
   const session = await getVendorSession();
   if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+
+  const gate = await requireFullyVerifiedVendor(session.vendorId);
+  if (!gate.ok) return gate.response;
 
   const { boothId } = await params;
   const body = await req.json().catch(() => ({}));

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useLocale } from "@/lib/i18n/context";
 import { PhoneField } from "@/components/PhoneField";
 import { Reveal } from "@/components/Reveal";
@@ -24,8 +25,8 @@ type FieldErrors = Partial<Record<FieldKey, string>>;
 
 export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: boolean }) {
   const { t, locale } = useLocale();
+  const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
@@ -153,7 +154,11 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
         }
         return;
       }
-      setDone(true);
+      // Account created — take them straight to the dedicated Verify Your
+      // Account page rather than showing an inline success panel here (PART
+      // 3/4: signup should stay a form, verification gets its own screen).
+      router.push("/vendor/verify");
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -177,22 +182,7 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
       </Reveal>
 
       <Reveal delayMs={100} id="apply" className="bg-cream rounded-2xl border border-brown/10 p-6 md:p-10">
-        {done ? (
-          <div className="text-center py-10">
-            <h3 className="font-heading text-xl text-brown-dark mb-2">
-              {locale === "ar" ? "تم إنشاء الحساب" : "Account created"}
-            </h3>
-            <p className="text-brown-light mb-6">
-              {locale === "ar"
-                ? "شكراً لك — سيقوم فريقنا بمراجعة عملك والتحقق منه. سجّل الدخول إلى لوحتك في أي وقت لمتابعة الحالة."
-                : "Thanks — our team will review and verify your business. Log into your dashboard any time to check the status."}
-            </p>
-            <Link href="/vendor/dashboard" className="underline text-brown">
-              {t("nav.myProfile")}
-            </Link>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} noValidate className="grid sm:grid-cols-2 gap-5">
+        <form onSubmit={handleSubmit} noValidate className="grid sm:grid-cols-2 gap-5">
             {/* Honeypot — hidden from real users, bots tend to fill every field */}
             <div className="hidden" aria-hidden="true">
               <label>
@@ -450,8 +440,7 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
                 {submitting ? "…" : t("vendorInfo.submit")}
               </button>
             </div>
-          </form>
-        )}
+        </form>
       </Reveal>
     </div>
   );

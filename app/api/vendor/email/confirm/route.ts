@@ -35,9 +35,13 @@ export async function POST(req: NextRequest) {
 
   try {
     await prisma.$transaction([
+      // Opening this link (which was only ever sent to the NEW address) is
+      // itself proof of control over it — the new email is both switched to
+      // and marked verified in the same step, so a vendor never has to
+      // separately re-verify an address they just proved they own.
       prisma.vendor.update({
         where: { id: vendor.id },
-        data: { email: tokenRow.newEmail, emailChangedAt: new Date() },
+        data: { email: tokenRow.newEmail, emailChangedAt: new Date(), emailVerifiedAt: new Date() },
       }),
       prisma.emailChangeToken.update({ where: { id: tokenRow.id }, data: { usedAt: new Date() } }),
     ]);
@@ -50,7 +54,7 @@ export async function POST(req: NextRequest) {
     throw err;
   }
 
-  await sendEmailChangedNotice({ oldEmail, businessName: vendor.businessName, newEmail: tokenRow.newEmail });
+  await sendEmailChangedNotice({ vendorId: vendor.id, oldEmail, businessName: vendor.businessName, newEmail: tokenRow.newEmail });
 
   return NextResponse.json({ ok: true, newEmail: tokenRow.newEmail });
 }

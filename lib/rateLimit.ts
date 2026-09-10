@@ -20,6 +20,20 @@ export function rateLimit(key: string, limit: number, windowMs: number): boolean
   return true;
 }
 
+/** Same sliding-window bucket, but for a single-slot "cooldown" (e.g. resend
+ *  verification email/SMS) rather than a count — returns how many seconds
+ *  remain when blocked, so the UI can show "Resend available in 45s"
+ *  instead of a generic rate-limit error. */
+export function cooldown(key: string, windowMs: number): { allowed: boolean; retryAfterSeconds?: number } {
+  const now = Date.now();
+  const bucket = buckets.get(key);
+  if (!bucket || bucket.resetAt < now) {
+    buckets.set(key, { count: 1, resetAt: now + windowMs });
+    return { allowed: true };
+  }
+  return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)) };
+}
+
 export function clientIp(headers: Headers): string {
   return (
     headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||

@@ -27,9 +27,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   ]);
 
   await sendAcceptanceExpiredEmail({
+    vendorId: application.vendorId,
     vendorEmail: application.email,
     businessName: application.businessName,
+    eventId: application.eventId,
     eventName: application.event.name,
+    dedupeKey: `application_expired:${application.id}:${now.getTime()}`,
   });
 
   return NextResponse.json({ ok: true });

@@ -4,6 +4,7 @@ import { getVendorSession } from "@/lib/auth";
 import { applyToEventSchema } from "@/lib/validation";
 import { sendAppliedToEventEmails } from "@/lib/email";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
+import { isEmailVerified, isPhoneVerified, VERIFICATION_REQUIRED_MESSAGE } from "@/lib/verification";
 
 // One-click "apply to this event" from a verified vendor's dashboard — no
 // form, since their business info is already on file. Unverified vendors
@@ -26,6 +27,15 @@ export async function POST(req: NextRequest) {
   if (!vendor.verified) {
     return NextResponse.json(
       { error: "Your business isn't verified yet — you'll be able to apply once DAH verifies your account." },
+      { status: 403 }
+    );
+  }
+
+  const emailVerified = isEmailVerified(vendor);
+  const phoneVerified = isPhoneVerified(vendor);
+  if (!emailVerified || !phoneVerified) {
+    return NextResponse.json(
+      { error: VERIFICATION_REQUIRED_MESSAGE, code: "VERIFICATION_REQUIRED", emailVerified, phoneVerified },
       { status: 403 }
     );
   }
@@ -60,8 +70,10 @@ export async function POST(req: NextRequest) {
   });
 
   await sendAppliedToEventEmails({
+    vendorId: vendor.id,
     vendorEmail: vendor.email,
     businessName: vendor.businessName,
+    eventId: event.id,
     eventName: event.name,
   });
 

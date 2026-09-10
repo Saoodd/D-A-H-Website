@@ -28,6 +28,8 @@ interface Vendor {
   tradeLicenseNumber: string | null;
   tradeLicenseFileUrl: string | null;
   tradeLicenseExpiry: string | null;
+  emailVerified: boolean;
+  phoneVerified: boolean;
 }
 
 interface HistoryEntry {
@@ -221,6 +223,41 @@ export function ProfileClient({
             <MetricCard label={t("vendorProfile.statsParticipated")} value={stats.eventsParticipated} />
             <MetricCard label={t("vendorProfile.statsUpcoming")} value={stats.upcomingConfirmedCount} />
             <MetricCard label={t("vendorProfile.statsApplications")} value={stats.applicationsCount} />
+          </div>
+
+          {/* Account Verification — a separate concept from Profile
+              Completion below: this is about proving control of the
+              contact details on file, not how filled-in the profile is. */}
+          <div className="rounded-[10px] border border-brown/10 bg-cream p-6">
+            <p className="label-caps mb-4">{locale === "ar" ? "التحقق من الحساب" : "Account Verification"}</p>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-brown-light">{locale === "ar" ? "البريد الإلكتروني" : "Email"}</p>
+                  <p className="text-sm text-brown-dark mt-0.5">{vendor.email}</p>
+                </div>
+                {vendor.emailVerified ? (
+                  <StatusBadge label={locale === "ar" ? "تم التحقق" : "Verified"} tone="positive" />
+                ) : (
+                  <Link href="/vendor/verify" className="text-sm px-4 py-2 rounded-[6px] border border-brown/25 text-brown-dark hover:bg-brown/5">
+                    {locale === "ar" ? "التحقق من البريد" : "Verify Email"}
+                  </Link>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-3 flex-wrap pt-4 border-t border-brown/10">
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-brown-light">{locale === "ar" ? "رقم الجوال" : "Mobile"}</p>
+                  <p className="text-sm text-brown-dark mt-0.5">{vendor.phone}</p>
+                </div>
+                {vendor.phoneVerified ? (
+                  <StatusBadge label={locale === "ar" ? "تم التحقق" : "Verified"} tone="positive" />
+                ) : (
+                  <Link href="/vendor/verify" className="text-sm px-4 py-2 rounded-[6px] border border-brown/25 text-brown-dark hover:bg-brown/5">
+                    {locale === "ar" ? "التحقق من الجوال" : "Verify Mobile"}
+                  </Link>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="rounded-[10px] border border-brown/10 bg-cream p-6">

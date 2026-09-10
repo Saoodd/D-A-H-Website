@@ -33,10 +33,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   await sendApplicationApprovedEmail({
+    vendorId: application.vendorId,
     vendorEmail: application.email,
     businessName: application.businessName,
+    eventId: application.eventId,
     eventName: application.event.name,
+    eventStartDate: application.event.startDate,
+    eventLocation: application.event.location,
     deadlineHours: hours,
+    acceptanceExpiresAt,
+    dedupeKey: `application_accepted:${application.id}:${acceptedAt.getTime()}`,
   });
 
   return NextResponse.json({ ok: true, application: updated });

@@ -38,6 +38,7 @@ export function EventTermsClient({
   const [error, setError] = useState<string | null>(null);
   const [accepted, setAccepted] = useState<{ representativeName: string; acceptedAt: string } | null>(null);
   const [continuing, setContinuing] = useState(false);
+  const [verificationRequired, setVerificationRequired] = useState(false);
 
   const scrolledToBottom = readProgress >= 100;
 
@@ -78,7 +79,13 @@ export function EventTermsClient({
         body: JSON.stringify({ representativeName: representativeName.trim() }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Could not record your acceptance");
+      if (!res.ok) {
+        if (data.code === "VERIFICATION_REQUIRED") {
+          setVerificationRequired(true);
+          return;
+        }
+        throw new Error(data.error || "Could not record your acceptance");
+      }
       setAccepted({ representativeName: data.representativeName ?? representativeName.trim(), acceptedAt: data.acceptedAt ?? new Date().toISOString() });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -157,7 +164,21 @@ export function EventTermsClient({
       <div className="mt-10 rounded-2xl border border-brown/15 bg-cream-soft/70 p-6 md:p-8">
         <p className="label-caps mb-1">{locale === "ar" ? "قبول الاتفاقية" : "Agreement Acceptance"}</p>
 
-        {accepted ? (
+        {verificationRequired ? (
+          <div className="mt-5 text-center py-4">
+            <p className="text-brown-dark mb-4">
+              {locale === "ar"
+                ? "يرجى التحقق من بيانات التواصل الخاصة بك قبل قبول الشروط."
+                : "Please verify your contact details before accepting the Terms."}
+            </p>
+            <Link
+              href="/vendor/verify"
+              className="inline-block px-6 py-2.5 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark transition-colors"
+            >
+              {locale === "ar" ? "إكمال التحقق" : "Complete Verification"}
+            </Link>
+          </div>
+        ) : accepted ? (
           <div className="mt-5">
             <div className="flex items-center gap-2.5 text-brown-dark">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">

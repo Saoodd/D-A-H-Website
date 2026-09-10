@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
     });
 
     await sendPasswordResetEmail({
+      vendorId: vendor.id,
       vendorEmail: vendor.email,
       businessName: vendor.businessName,
       resetUrl: `${siteUrl()}/vendor/reset-password?token=${raw}`,

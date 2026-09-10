@@ -4,7 +4,9 @@ import { getVendorSession } from "@/lib/auth";
 import { runExpiryPass } from "@/lib/expiry";
 import { getGateway, getSandboxGateway } from "@/payments/gateway";
 import { sendPaymentSuccessEmail, sendPaymentFailedEmail } from "@/lib/email";
-import { assignReceiptNumber } from "@/lib/receipts";
+import { assignReceiptNumber, getReceiptData } from "@/lib/receipts";
+import { trustedSiteUrl } from "@/lib/url";
+import { requireFullyVerifiedVendor } from "@/lib/verification";
 
 // TODO: once a live gateway is wired in, this route's "outcome" input goes
 // away — success/failure will instead be driven by that gateway's webhook
@@ -13,6 +15,9 @@ import { assignReceiptNumber } from "@/lib/receipts";
 export async function POST(req: NextRequest, { params }: { params: Promise<{ applicationId: string }> }) {
   const session = await getVendorSession();
   if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+
+  const gate = await requireFullyVerifiedVendor(session.vendorId);
+  if (!gate.ok) return gate.response;
 
   const { applicationId } = await params;
   const application = await prisma.application.findUnique({ where: { id: applicationId }, include: { event: true } });
@@ -85,26 +90,44 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
     await prisma.payment.update({ where: { id: paymentId }, data: { status: "SUCCEEDED", paidAt: soldAt } });
     await assignReceiptNumber(paymentId, soldAt);
 
-    await sendPaymentSuccessEmail({
-      vendorEmail: application.email,
-      businessName: application.businessName,
-      eventName: application.event.name,
-      boothCode: booth.code,
-      amountAedFils: payment.amountAedFils,
-      paidAt: soldAt,
-    });
+    // getReceiptData is the same authoritative source the vendor's own
+    // printable receipt uses — the email can never show different numbers
+    // than what the vendor sees when they click through.
+    const receipt = await getReceiptData(paymentId);
+    if (receipt) {
+      await sendPaymentSuccessEmail({
+        vendorId: session.vendorId,
+        vendorEmail: application.email,
+        businessName: application.businessName,
+        eventId: application.eventId,
+        eventName: application.event.name,
+        eventStartDate: application.event.startDate,
+        eventLocation: application.event.location,
+        boothCode: booth.code,
+        boothSizeLabel: receipt.boothSizeLabel,
+        subtotalAedFils: receipt.subtotalAedFils,
+        vatAedFils: receipt.vatAedFils,
+        vatApplicable: receipt.vatApplicable,
+        totalAedFils: receipt.totalAedFils,
+        receiptNumber: receipt.receiptNumber,
+        paidAt: soldAt,
+        receiptUrl: `${trustedSiteUrl()}/vendor/receipts/${paymentId}`,
+        viewBookingUrl: `${trustedSiteUrl()}/vendor/applications/${applicationId}`,
+        dedupeKey: `payment_receipt:${paymentId}`,
+      });
+    }
 
     return NextResponse.json({ ok: true, status: "SUCCEEDED" });
   }
 
   await prisma.payment.update({ where: { id: paymentId }, data: { status: "FAILED" } });
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
   await sendPaymentFailedEmail({
+    vendorId: session.vendorId,
     vendorEmail: application.email,
     businessName: application.businessName,
     eventName: application.event.name,
-    retryUrl: `${siteUrl}/vendor/applications/${applicationId}`,
+    retryUrl: `${trustedSiteUrl()}/vendor/applications/${applicationId}`,
   });
 
   return NextResponse.json({ ok: true, status: "FAILED" });

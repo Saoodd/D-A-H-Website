@@ -32,7 +32,13 @@ const groups: { label: string; links: { href: string; label: string }[] }[] = [
       { href: "/admin/agreements/events", label: "Event Terms" },
     ],
   },
-  { label: "Management", links: [{ href: "/admin/settings", label: "Settings" }] },
+  {
+    label: "Management",
+    links: [
+      { href: "/admin/emails", label: "Emails" },
+      { href: "/admin/settings", label: "Settings" },
+    ],
+  },
 ];
 
 function isActiveLink(pathname: string | null, href: string) {

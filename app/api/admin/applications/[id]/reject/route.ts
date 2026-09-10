@@ -10,15 +10,19 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const application = await prisma.application.findUnique({ where: { id }, include: { event: true } });
   if (!application) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const rejectedAt = new Date();
   const updated = await prisma.application.update({
     where: { id },
-    data: { status: "REJECTED", rejectedAt: new Date(), acceptanceExpiresAt: null },
+    data: { status: "REJECTED", rejectedAt, acceptanceExpiresAt: null },
   });
 
   await sendApplicationRejectedEmail({
+    vendorId: application.vendorId,
     vendorEmail: application.email,
     businessName: application.businessName,
+    eventId: application.eventId,
     eventName: application.event.name,
+    dedupeKey: `application_rejected:${application.id}:${rejectedAt.getTime()}`,
   });
 
   return NextResponse.json({ ok: true, application: updated });

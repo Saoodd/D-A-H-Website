@@ -3,11 +3,16 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { vendorRegisterSchema } from "@/lib/validation";
 import { hashPassword, createVendorSession, getVendorSession } from "@/lib/auth";
-import { sendAccountCreatedEmails } from "@/lib/email";
+import { sendAccountCreatedEmails, sendVerifyEmailEmail } from "@/lib/email";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { getSettings } from "@/lib/settings";
 import { normalizeUsername } from "@/lib/username";
+import { normalizePhoneToE164 } from "@/lib/phone";
+import { generateRawToken, hashToken } from "@/lib/tokens";
+import { trustedSiteUrl } from "@/lib/url";
 import { ensureVendorTermsExist, getPublishedAgreement, recordAcceptance } from "@/lib/agreements";
+
+const EMAIL_VERIFY_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
 // Creates a DAH business account — not tied to any event. The vendor can
 // log in immediately, but their dashboard shows nothing until DAH verifies
@@ -54,6 +59,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "A trade licence document is required." }, { status: 400 });
   }
 
+  // A proven parsing library, not a handwritten regex — rejects anything
+  // that isn't actually a dialable number up front, since an unparseable
+  // number could never receive an SMS verification code later anyway.
+  const normalizedPhone = normalizePhoneToE164(data.phone);
+  if (!normalizedPhone) {
+    return NextResponse.json({ error: "Please enter a valid mobile number, including country code." }, { status: 400 });
+  }
+
   const email = data.email.toLowerCase();
   const existing = await prisma.vendor.findUnique({ where: { email } });
   if (existing) {
@@ -85,7 +98,7 @@ export async function POST(req: NextRequest) {
         passwordHash: await hashPassword(data.password),
         businessName: data.businessName,
         contactName: data.contactName,
-        phone: data.phone,
+        phone: normalizedPhone,
         category: data.category,
         description: data.description || "",
         instagram: data.instagram || null,
@@ -117,7 +130,21 @@ export async function POST(req: NextRequest) {
 
   await createVendorSession(vendor.id);
 
-  await sendAccountCreatedEmails({ vendorEmail: email, businessName: data.businessName });
+  await sendAccountCreatedEmails({ vendorId: vendor.id, vendorEmail: email, businessName: data.businessName });
+
+  // Kick off email verification immediately — the vendor lands on
+  // /vendor/verify right after this, so the link should already be on its
+  // way before they get there.
+  const rawToken = generateRawToken();
+  await prisma.emailVerificationToken.create({
+    data: { vendorId: vendor.id, tokenHash: hashToken(rawToken), expiresAt: new Date(Date.now() + EMAIL_VERIFY_TOKEN_TTL_MS) },
+  });
+  await sendVerifyEmailEmail({
+    vendorId: vendor.id,
+    vendorEmail: email,
+    businessName: data.businessName,
+    verifyUrl: `${trustedSiteUrl()}/vendor/verify/email?token=${rawToken}`,
+  });
 
   return NextResponse.json({ ok: true, vendorId: vendor.id });
 }

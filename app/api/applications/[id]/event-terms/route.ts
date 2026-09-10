@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getVendorSession } from "@/lib/auth";
 import { getPublishedAgreement, recordAcceptance } from "@/lib/agreements";
 import { clientIp } from "@/lib/rateLimit";
+import { requireFullyVerifiedVendor } from "@/lib/verification";
 
 // Read the currently published Event Terms & Conditions for this
 // application's event — every event has its own independent agreement,
@@ -38,6 +39,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getVendorSession();
   if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+
+  const gate = await requireFullyVerifiedVendor(session.vendorId);
+  if (!gate.ok) return gate.response;
 
   const { id } = await params;
   const body = await req.json().catch(() => ({}));

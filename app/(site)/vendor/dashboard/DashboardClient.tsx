@@ -50,7 +50,15 @@ export function DashboardClient({
         body: JSON.stringify({ eventId }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Could not apply");
+      if (!res.ok) {
+        // Server-side verification gate (PART 17): send them to the actual
+        // verify page instead of surfacing a raw error here.
+        if (data.code === "VERIFICATION_REQUIRED") {
+          router.push("/vendor/verify");
+          return;
+        }
+        throw new Error(data.error || "Could not apply");
+      }
       router.refresh();
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Could not apply");

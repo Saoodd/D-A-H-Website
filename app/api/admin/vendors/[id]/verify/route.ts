@@ -16,7 +16,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const updated = await prisma.vendor.update({ where: { id }, data: { verified } });
 
   if (verified && !vendor.verified) {
-    await sendVendorVerifiedEmail({ vendorEmail: vendor.email, businessName: vendor.businessName });
+    await sendVendorVerifiedEmail({ vendorId: vendor.id, vendorEmail: vendor.email, businessName: vendor.businessName });
   }
 
   return NextResponse.json({ ok: true, vendor: updated });

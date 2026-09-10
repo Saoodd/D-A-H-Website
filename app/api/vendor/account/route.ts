@@ -85,7 +85,7 @@ export async function DELETE(req: NextRequest) {
   await invalidateAllVendorSessions(vendor.id);
   await destroyVendorSession();
 
-  await sendAccountClosedEmail({ vendorEmail: vendor.email, businessName: vendor.businessName });
+  await sendAccountClosedEmail({ vendorId: vendor.id, vendorEmail: vendor.email, businessName: vendor.businessName });
 
   return NextResponse.json({ ok: true });
 }

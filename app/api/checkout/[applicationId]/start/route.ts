@@ -6,12 +6,16 @@ import { getBoothPrice } from "@/lib/pricing";
 import { getGateway } from "@/payments/gateway";
 import { BOOTH_PAYMENT_HOLD_MINUTES } from "@/lib/constants";
 import { hasAcceptedCurrentEventTerms } from "@/lib/agreements";
+import { requireFullyVerifiedVendor } from "@/lib/verification";
 
 // Moves a booth from its 5-minute review hold into a fresh 5-minute payment
 // hold, and opens a charge with the (sandbox) payment gateway.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ applicationId: string }> }) {
   const session = await getVendorSession();
   if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+
+  const gate = await requireFullyVerifiedVendor(session.vendorId);
+  if (!gate.ok) return gate.response;
 
   const { applicationId } = await params;
   const application = await prisma.application.findUnique({ where: { id: applicationId } });

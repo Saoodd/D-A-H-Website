@@ -224,9 +224,22 @@ model Vendor {
   tradeLicenseFileUrl String? // uploaded via the existing Vercel Blob setup, same as floor plan images
   tradeLicenseExpiry  DateTime?
 
-  applications         Application[]
-  notes                VendorNote[]
-  warnings             VendorWarning[]
+  // Account verification (distinct from `verified` above, which is DAH's
+  // manual business-verification step) — both must be non-null before a
+  // vendor can apply/book, see lib/verification.ts. `phoneVerifiedNumber` is
+  // the exact E.164 number that was actually verified: if it no longer
+  // matches the current normalized `phone`, the phone is treated as
+  // unverified again automatically (see PHONE CHANGE requirement) without
+  // needing every phone-editing code path to remember to clear a flag.
+  emailVerifiedAt     DateTime?
+  phoneVerifiedAt     DateTime?
+  phoneVerifiedNumber String?
+
+  applications            Application[]
+  notes                   VendorNote[]
+  warnings                VendorWarning[]
+  emailVerificationTokens EmailVerificationToken[]
+  emailDeliveries         EmailDelivery[]
   // Every Agreement (VENDOR_TERMS at signup, EVENT_TERMS per booking) this
   // vendor has accepted — look up the VENDOR_TERMS one via
   // `agreementAcceptances.find(a => a.agreement.type === "VENDOR_TERMS")`
@@ -310,6 +323,53 @@ model EmailChangeToken {
   createdAt DateTime  @default(now())
 
   @@index([vendorId])
+}
+
+// Single-use, expiring token proving the vendor controls the email address
+// currently on file — used at signup (and any time the current address
+// needs re-confirming). Distinct from EmailChangeToken, which verifies a
+// NEW address before the login email switches to it. Only a hash is
+// stored, same pattern as PasswordResetToken/EmailChangeToken.
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  vendorId  String
+  vendor    Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([vendorId])
+}
+
+// Internal delivery log for every transactional email DAH sends — lets
+// Admin see sent/delivered/failed status and retry a genuinely failed send,
+// without ever storing the email body, tokens, or credentials here.
+// `dedupeKey`, when set, is a stable key for the underlying business event
+// (e.g. "application_accepted:<applicationId>:<acceptedAt>") — writing a
+// second row with the same key hits the unique constraint and is treated as
+// "already sent", so a retried request can never fire the same
+// notification twice. Rows without a natural one-shot business event (e.g.
+// a resendable verification email) simply leave this null.
+model EmailDelivery {
+  id                String    @id @default(cuid())
+  type              String // e.g. EMAIL_VERIFY, PASSWORD_RESET, APPLICATION_ACCEPTED, PAYMENT_RECEIPT, WARNING, ...
+  vendorId          String?
+  vendor            Vendor?   @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  eventId           String? // Event.id, unrelated (log-only, no FK) so a later event deletion never touches this history
+  toEmail           String
+  provider          String    @default("resend")
+  providerMessageId String?
+  status            String    @default("QUEUED") // QUEUED | SENT | DELIVERED | BOUNCED | FAILED
+  failReason        String?
+  dedupeKey         String?   @unique
+  queuedAt          DateTime  @default(now())
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+
+  @@index([vendorId])
+  @@index([type])
+  @@index([providerMessageId])
 }
 
 // Private DAH-internal notes about a vendor — never returned by any
