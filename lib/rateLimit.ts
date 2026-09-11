@@ -20,18 +20,23 @@ export function rateLimit(key: string, limit: number, windowMs: number): boolean
   return true;
 }
 
-/** Same sliding-window bucket, but for a single-slot "cooldown" (e.g. resend
- *  verification email/SMS) rather than a count — returns how many seconds
- *  remain when blocked, so the UI can show "Resend available in 45s"
- *  instead of a generic rate-limit error. */
-export function cooldown(key: string, windowMs: number): { allowed: boolean; retryAfterSeconds?: number } {
+/** Single-slot "cooldown" (e.g. resend verification email/SMS), split into a
+ *  read-only check and an explicit arm step — deliberately NOT one
+ *  check-and-set call. A cooldown must only start counting down after the
+ *  guarded action actually succeeded (e.g. Twilio accepted the SMS send);
+ *  arming it just because the action was ATTEMPTED would lock a vendor out
+ *  of retrying for the full window after a failure that never sent
+ *  anything (invalid number, Twilio outage, etc.). Callers: peek before
+ *  attempting, armCooldown only once the attempt has actually succeeded. */
+export function peekCooldown(key: string): { onCooldown: boolean; retryAfterSeconds?: number } {
   const now = Date.now();
   const bucket = buckets.get(key);
-  if (!bucket || bucket.resetAt < now) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
-    return { allowed: true };
-  }
-  return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)) };
+  if (!bucket || bucket.resetAt < now) return { onCooldown: false };
+  return { onCooldown: true, retryAfterSeconds: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)) };
+}
+
+export function armCooldown(key: string, windowMs: number): void {
+  buckets.set(key, { count: 1, resetAt: Date.now() + windowMs });
 }
 
 export function clientIp(headers: Headers): string {

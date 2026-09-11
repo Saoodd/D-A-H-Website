@@ -1,5 +1,6 @@
 import "server-only";
 import Twilio from "twilio";
+import { maskPhoneForDisplay } from "@/lib/phone";
 
 // Twilio Verify owns the actual OTP: generating it, storing it, expiring it,
 // and rate limiting/blocking abuse (Fraud Guard) — we never generate or
@@ -27,7 +28,14 @@ export function isSmsConfigured(): boolean {
 
 export const SMS_NOT_CONFIGURED_MESSAGE = "Mobile verification isn't configured yet — please contact DAH.";
 
-export type SendOtpResult = { ok: true } | { ok: false; error: string };
+// A structured failure reason lets the API route (and the frontend, via the
+// API route's `code` field) tell a rate limit apart from a bad number apart
+// from a provider outage — instead of the frontend having to pattern-match
+// human-readable error text. Never conflate these: only RATE_LIMITED should
+// ever start a resend countdown.
+export type SmsFailureCode = "CONFIG_MISSING" | "INVALID_NUMBER" | "RATE_LIMITED" | "PROVIDER_FAILURE";
+
+export type SendOtpResult = { ok: true } | { ok: false; code: SmsFailureCode; error: string };
 
 /** Starts a Twilio Verify SMS check for this number. Twilio itself enforces
  *  a resend cooldown and per-number send limits (Fraud Guard) — a caller
@@ -36,13 +44,18 @@ export async function sendPhoneOtp(phoneE164: string): Promise<SendOtpResult> {
   const ctx = getClient();
   if (!ctx) {
     console.error("[sms] Twilio not configured — cannot send OTP");
-    return { ok: false, error: SMS_NOT_CONFIGURED_MESSAGE };
+    return { ok: false, code: "CONFIG_MISSING", error: SMS_NOT_CONFIGURED_MESSAGE };
   }
+  // Masked-only log of exactly what's being sent to Twilio's API — lets a
+  // real production failure be diagnosed (e.g. confirming the UAE leading
+  // "0" was stripped before the request left the server) without ever
+  // writing a full phone number to the logs.
+  console.log(`[sms] sending OTP via Twilio to ${maskPhoneForDisplay(phoneE164)}`);
   try {
     await ctx.client.verify.v2.services(ctx.serviceSid).verifications.create({ to: phoneE164, channel: "sms" });
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: mapTwilioError(err) };
+    return { ok: false, ...mapTwilioError(err) };
   }
 }
 
@@ -58,35 +71,36 @@ export async function checkPhoneOtp(phoneE164: string, code: string): Promise<Ch
     const check = await ctx.client.verify.v2.services(ctx.serviceSid).verificationChecks.create({ to: phoneE164, code });
     return { ok: true, approved: check.status === "approved" };
   } catch (err) {
-    return { ok: false, error: mapTwilioError(err) };
+    return { ok: false, error: mapTwilioError(err).error };
   }
 }
 
-// Converts Twilio's own error codes into clean, non-technical DAH copy —
-// never surfaces a raw Twilio error/status to a vendor.
+// Converts Twilio's own error codes into a structured failure category plus
+// clean, non-technical DAH copy — never surfaces a raw Twilio error/status
+// to a vendor. The raw Twilio error code is logged server-side only.
 // https://www.twilio.com/docs/api/errors
-function mapTwilioError(err: unknown): string {
-  const code = (err as { code?: number } | null)?.code;
-  switch (code) {
+function mapTwilioError(err: unknown): { code: SmsFailureCode; error: string } {
+  const twilioCode = (err as { code?: number } | null)?.code;
+  console.error("[sms] Twilio error", { twilioCode });
+  switch (twilioCode) {
     case 60200:
-      return "That doesn't look like a valid phone number.";
+      return { code: "INVALID_NUMBER", error: "That doesn't look like a valid phone number." };
     case 60203:
-      return "Please wait a moment before requesting another code.";
+      return { code: "RATE_LIMITED", error: "Please wait a moment before requesting another code." };
     case 60202:
-      return "Too many incorrect attempts. Please request a new code.";
+      return { code: "RATE_LIMITED", error: "Too many incorrect attempts. Please request a new code." };
     case 60212:
     case 60410:
     case 60605:
-      return "Too many requests for this number. Please try again later.";
+      return { code: "RATE_LIMITED", error: "Too many requests for this number. Please try again later." };
     case 60223:
     case 60226:
-      return "This number can't receive an SMS code right now. Please try a different number or contact DAH.";
+      return { code: "INVALID_NUMBER", error: "This number can't receive an SMS code right now. Please try a different number or contact DAH." };
     case 20404:
-      return "That code has expired or is no longer valid. Please request a new one.";
+      return { code: "PROVIDER_FAILURE", error: "That code has expired or is no longer valid. Please request a new one." };
     case 60598:
-      return "This phone number has been temporarily blocked from verification due to unusual activity. Please contact DAH.";
+      return { code: "RATE_LIMITED", error: "This phone number has been temporarily blocked from verification due to unusual activity. Please contact DAH." };
     default:
-      console.error("[sms] Twilio error", err);
-      return "We couldn't process your verification right now. Please try again shortly.";
+      return { code: "PROVIDER_FAILURE", error: "We couldn't process your verification right now. Please try again shortly." };
   }
 }

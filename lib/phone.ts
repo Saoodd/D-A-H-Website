@@ -22,11 +22,17 @@ export function normalizePhoneToE164(raw: string): string | null {
 
 /** Masks all but the country code and last 4 digits — "+971 50 *** 1234" —
  *  for display on the Verify Your Account / Profile pages, so the full
- *  number is never shown back in a way that invites shoulder-surfing. */
+ *  number is never shown back in a way that invites shoulder-surfing.
+ *
+ *  Uses `nationalNumber` (the raw significant digits, e.g. "561234800"),
+ *  never `formatNational()` — the latter deliberately re-adds the UAE
+ *  domestic trunk prefix "0" for local-dialing display ("056 123 4800"),
+ *  which reads as a bogus extra zero right after "+971" here and is NOT
+ *  part of the actual E.164 number that gets stored or sent to Twilio. */
 export function maskPhoneForDisplay(e164: string): string {
   const parsed = parsePhoneNumberFromString(e164);
   if (!parsed) return e164;
-  const national = parsed.formatNational().replace(/\D/g, "");
+  const national = parsed.nationalNumber;
   if (national.length <= 4) return `+${parsed.countryCallingCode} ${national}`;
   const last4 = national.slice(-4);
   const visiblePrefix = national.slice(0, Math.max(0, national.length - 4 - 3));

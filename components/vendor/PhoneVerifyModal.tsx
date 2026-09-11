@@ -98,9 +98,17 @@ export function PhoneVerifyModal({ onVerified, onClose }: { onVerified: () => vo
     try {
       const res = await fetch("/api/vendor/phone-verification/send", { method: "POST" });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        if (data.retryAfterSeconds) setCooldown(data.retryAfterSeconds);
-        setPhoneUsable(data.code !== "PHONE_INVALID");
+      if (!res.ok || data.code !== "SENT") {
+        // Never advance to the code-entry step and never start a resend
+        // countdown unless Twilio actually accepted the request — a failed
+        // send (bad number, Twilio/provider outage, our own abuse cap)
+        // must never look like "a code is on its way".
+        const invalidNumber = data.code === "PHONE_INVALID" || data.code === "INVALID_NUMBER";
+        setPhoneUsable(!invalidNumber);
+        // Only a genuine RATE_LIMITED response with a real countdown starts
+        // the timer — every other failure leaves Send Code immediately
+        // retryable, with a plain error message instead of a fake wait.
+        setCooldown(data.code === "RATE_LIMITED" && data.retryAfterSeconds ? data.retryAfterSeconds : 0);
         setNotice(data.error || (isAr ? "تعذر إرسال الرمز" : "Couldn't send a code — please try again."));
         return;
       }
@@ -108,6 +116,11 @@ export function PhoneVerifyModal({ onVerified, onClose }: { onVerified: () => vo
       setCooldown(data.cooldownSeconds || 45);
       setCode("");
       setStep("code");
+    } catch {
+      // A network-level failure (fetch itself threw) is exactly the same
+      // "nothing was sent" case — never fake progress here either.
+      setCooldown(0);
+      setNotice(isAr ? "تعذر إرسال الرمز" : "Couldn't send a code — please try again.");
     } finally {
       setBusy(false);
     }
