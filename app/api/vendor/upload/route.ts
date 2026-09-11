@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { getVendorSession } from "@/lib/auth";
-import { safeUploadFilename, isBlobConfigured, BLOB_NOT_CONFIGURED_MESSAGE } from "@/lib/uploadSafety";
+import { safeUploadFilename, isBlobConfigured, BLOB_NOT_CONFIGURED_MESSAGE, fileMatchesDeclaredType } from "@/lib/uploadSafety";
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10MB
 
@@ -38,6 +38,9 @@ export async function POST(req: NextRequest) {
   }
   if (file.size > MAX_BYTES) {
     return NextResponse.json({ error: "File is too large (max 10MB)." }, { status: 400 });
+  }
+  if (!(await fileMatchesDeclaredType(file, file.type))) {
+    return NextResponse.json({ error: `That file doesn't look like a real ${spec.label.toLowerCase()}.` }, { status: 400 });
   }
 
   if (!isBlobConfigured()) {

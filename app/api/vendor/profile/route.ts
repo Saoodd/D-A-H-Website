@@ -5,6 +5,7 @@ import { getSettings } from "@/lib/settings";
 import { vendorProfileUpdateSchema } from "@/lib/validation";
 import { getVendorParticipation, computeProfileCompletion } from "@/lib/vendorStats";
 import { normalizePhoneToE164 } from "@/lib/phone";
+import { deleteBlobIfOwned } from "@/lib/uploadSafety";
 
 // Always resolves the vendor from the authenticated session cookie — a
 // vendor can only ever read or write their OWN profile, never one supplied
@@ -80,9 +81,24 @@ export async function PATCH(req: NextRequest) {
     update.tradeLicenseExpiry = data.tradeLicenseExpiry ? new Date(data.tradeLicenseExpiry) : null;
   }
 
+  const previous = await prisma.vendor.findUnique({
+    where: { id: session.vendorId },
+    select: { logoUrl: true, tradeLicenseFileUrl: true },
+  });
+
   const vendor = await prisma.vendor.update({ where: { id: session.vendorId }, data: update });
   const { passwordHash: _passwordHash, ...safeVendor } = vendor;
   void _passwordHash;
+
+  // Clean up the old Blob object whenever it's actually being replaced or
+  // cleared — never when the value is unchanged (e.g. saving the rest of
+  // the form without touching the file).
+  if (previous && "logoUrl" in update && previous.logoUrl && previous.logoUrl !== update.logoUrl) {
+    await deleteBlobIfOwned(previous.logoUrl);
+  }
+  if (previous && "tradeLicenseFileUrl" in update && previous.tradeLicenseFileUrl && previous.tradeLicenseFileUrl !== update.tradeLicenseFileUrl) {
+    await deleteBlobIfOwned(previous.tradeLicenseFileUrl);
+  }
 
   return NextResponse.json({ ok: true, vendor: safeVendor });
 }

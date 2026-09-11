@@ -59,7 +59,7 @@ export function PhoneVerifyModal({ onVerified, onClose }: { onVerified: () => vo
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/vendor/email-verification/status");
+        const res = await fetch("/api/vendor/phone-verification/status");
         const data = await res.json().catch(() => ({}));
         if (cancelled) return;
         if (res.ok && data.phoneVerified) {
@@ -172,7 +172,7 @@ export function PhoneVerifyModal({ onVerified, onClose }: { onVerified: () => vo
       setCooldown(0);
       // Re-fetch the fresh masked number, then go straight to sending a
       // code to it — that's the whole point of changing it mid-flow.
-      const statusRes = await fetch("/api/vendor/email-verification/status");
+      const statusRes = await fetch("/api/vendor/phone-verification/status");
       const statusData = await statusRes.json().catch(() => ({}));
       setPhoneMasked(statusData.phoneMasked || "");
       setStep("send");

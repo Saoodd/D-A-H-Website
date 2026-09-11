@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
 import { getPublishedAgreement } from "@/lib/agreements";
+import { deleteBlobIfOwned } from "@/lib/uploadSafety";
+
+// Duplicating an event can carry the SAME floorPlanImageUrl into a new
+// Event row (see POST /api/admin/events) — so before deleting a blob this
+// route must confirm no OTHER event still points at that exact URL.
+async function deleteEventImageIfUnshared(url: string | null | undefined, excludeEventId: string) {
+  if (!url) return;
+  const stillReferenced = await prisma.event.count({
+    where: { id: { not: excludeEventId }, OR: [{ coverImage: url }, { floorPlanImageUrl: url }] },
+  });
+  if (stillReferenced === 0) await deleteBlobIfOwned(url);
+}
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -43,7 +55,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     data.acceptanceDeadlineHours = body.acceptanceDeadlineHours ? Number(body.acceptanceDeadlineHours) : null;
   }
 
+  const previous = data.coverImage !== undefined || data.floorPlanImageUrl !== undefined
+    ? await prisma.event.findUnique({ where: { id }, select: { coverImage: true, floorPlanImageUrl: true } })
+    : null;
+
   const event = await prisma.event.update({ where: { id }, data });
+
+  if (previous) {
+    if ("coverImage" in data && previous.coverImage && previous.coverImage !== data.coverImage) {
+      await deleteEventImageIfUnshared(previous.coverImage, id);
+    }
+    if ("floorPlanImageUrl" in data && previous.floorPlanImageUrl && previous.floorPlanImageUrl !== data.floorPlanImageUrl) {
+      await deleteEventImageIfUnshared(previous.floorPlanImageUrl, id);
+    }
+  }
+
   return NextResponse.json({ ok: true, event });
 }
 
@@ -64,6 +90,14 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     );
   }
 
+  const event = await prisma.event.findUnique({ where: { id }, select: { coverImage: true, floorPlanImageUrl: true } });
+
   await prisma.event.delete({ where: { id } });
+
+  if (event) {
+    await deleteEventImageIfUnshared(event.coverImage, id);
+    await deleteEventImageIfUnshared(event.floorPlanImageUrl, id);
+  }
+
   return NextResponse.json({ ok: true });
 }

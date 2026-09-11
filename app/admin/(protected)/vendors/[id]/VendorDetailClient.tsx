@@ -24,10 +24,9 @@ interface VendorFull {
   tradeLicenseNumber: string | null;
   tradeLicenseFileUrl: string | null;
   tradeLicenseExpiry: string | null;
-  emailVerified: boolean;
-  emailVerifiedAt: string | null;
   phoneVerified: boolean;
   phoneVerifiedAt: string | null;
+  phoneVerifiedMethod: string | null;
 }
 
 interface AppRow {
@@ -108,6 +107,9 @@ export function VendorDetailClient({
   const router = useRouter();
   const [verifyBusy, setVerifyBusy] = useState(false);
 
+  const [phoneVerifyConfirmOpen, setPhoneVerifyConfirmOpen] = useState(false);
+  const [phoneVerifyBusy, setPhoneVerifyBusy] = useState(false);
+
   const [noteText, setNoteText] = useState("");
   const [noteBusy, setNoteBusy] = useState(false);
 
@@ -138,6 +140,19 @@ export function VendorDetailClient({
       router.refresh();
     } finally {
       setVerifyBusy(false);
+    }
+  }
+
+  async function verifyPhoneManually() {
+    setPhoneVerifyBusy(true);
+    try {
+      const res = await fetch(`/api/admin/vendors/${vendor.id}/verify-phone`, { method: "POST" });
+      if (res.ok) {
+        setPhoneVerifyConfirmOpen(false);
+        router.refresh();
+      }
+    } finally {
+      setPhoneVerifyBusy(false);
     }
   }
 
@@ -309,25 +324,63 @@ export function VendorDetailClient({
           </section>
 
           <section>
-            <p className="label-caps mb-3">Contact verification</p>
+            {/* Email is a normal account field now (login, receipts,
+                notifications) — never a gate, so it's shown plainly here,
+                not as a verification status. Phone is the one real
+                eligibility requirement, so it gets the badge, timestamp,
+                method, and (when unverified) the manual-override action. */}
+            <p className="label-caps mb-3">Contact</p>
             <div className="rounded-[10px] border border-brown/10 bg-cream p-5 text-sm grid sm:grid-cols-2 gap-4">
               <div>
                 <p className="text-brown-light text-xs uppercase tracking-widest mb-1">Email</p>
-                <div className="flex items-center gap-2">
-                  <StatusBadge label={vendor.emailVerified ? "Verified" : "Unverified"} tone={vendor.emailVerified ? "positive" : "neutral"} />
-                  {vendor.emailVerifiedAt && (
-                    <span className="text-xs text-brown-light">{new Date(vendor.emailVerifiedAt).toLocaleString()}</span>
-                  )}
-                </div>
+                <p className="text-brown-dark">{vendor.email}</p>
               </div>
               <div>
                 <p className="text-brown-light text-xs uppercase tracking-widest mb-1">Mobile</p>
-                <div className="flex items-center gap-2">
-                  <StatusBadge label={vendor.phoneVerified ? "Verified" : "Unverified"} tone={vendor.phoneVerified ? "positive" : "neutral"} />
-                  {vendor.phoneVerifiedAt && (
-                    <span className="text-xs text-brown-light">{new Date(vendor.phoneVerifiedAt).toLocaleString()}</span>
+                <p className="text-brown-dark mb-1.5">{vendor.phone}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <StatusBadge label={vendor.phoneVerified ? "Verified" : "Not Verified"} tone={vendor.phoneVerified ? "positive" : "neutral"} />
+                  {vendor.phoneVerified && vendor.phoneVerifiedAt && (
+                    <span className="text-xs text-brown-light">
+                      {vendor.phoneVerifiedMethod === "ADMIN" ? "Verified manually" : "Verified"} — {new Date(vendor.phoneVerifiedAt).toLocaleString()}
+                    </span>
+                  )}
+                  {!vendor.phoneVerified && !phoneVerifyConfirmOpen && (
+                    <button
+                      type="button"
+                      onClick={() => setPhoneVerifyConfirmOpen(true)}
+                      className="text-xs px-3 py-1.5 rounded-[6px] border border-brown/25 text-brown-dark hover:bg-brown/5"
+                    >
+                      Verify Manually
+                    </button>
                   )}
                 </div>
+
+                {!vendor.phoneVerified && phoneVerifyConfirmOpen && (
+                  <div className="mt-3 rounded-[8px] border border-amber-300/60 bg-amber-50 p-3">
+                    <p className="text-xs text-amber-900 mb-3">
+                      Manually verify this vendor&apos;s phone number? This bypasses SMS OTP verification and immediately makes them eligible to apply to events.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={verifyPhoneManually}
+                        disabled={phoneVerifyBusy}
+                        className="text-xs px-3 py-1.5 rounded-[6px] bg-brown text-cream-soft hover:bg-brown-dark disabled:opacity-50"
+                      >
+                        {phoneVerifyBusy ? "…" : "Verify Phone"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPhoneVerifyConfirmOpen(false)}
+                        disabled={phoneVerifyBusy}
+                        className="text-xs px-3 py-1.5 rounded-[6px] border border-brown/25 text-brown-dark"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </section>

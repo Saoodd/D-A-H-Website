@@ -14,7 +14,10 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: https:",
+  // blob: is only for local, client-side file previews (URL.createObjectURL
+  // on a picked-but-not-yet-uploaded image, e.g. Admin Gallery) — never
+  // added to script-src/object-src/frame-src, which stay strict.
+  "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
   "connect-src 'self'",
   "frame-ancestors 'none'",

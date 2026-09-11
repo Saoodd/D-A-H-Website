@@ -29,7 +29,6 @@ interface Vendor {
   tradeLicenseNumber: string | null;
   tradeLicenseFileUrl: string | null;
   tradeLicenseExpiry: string | null;
-  emailVerified: boolean;
   phoneVerified: boolean;
 }
 
@@ -258,18 +257,12 @@ export function ProfileClient({
                   </button>
                 )}
               </div>
-              <div className="flex items-center justify-between gap-3 flex-wrap pt-4 border-t border-brown/10">
-                <div>
-                  <p className="text-xs uppercase tracking-widest text-brown-light">{locale === "ar" ? "البريد الإلكتروني" : "Email"}</p>
-                  <p className="text-sm text-brown-dark mt-0.5">{vendor.email}</p>
-                </div>
-                {vendor.emailVerified ? (
-                  <StatusBadge label={locale === "ar" ? "تم التحقق" : "Verified"} tone="neutral" />
-                ) : (
-                  <Link href="/vendor/verify" className="text-xs text-brown-light underline hover:text-brown-dark">
-                    {locale === "ar" ? "التحقق من البريد" : "Verify Email"}
-                  </Link>
-                )}
+              {/* Email is a normal account field — used for login, receipts
+                  and notifications, never a gate — so it's shown plainly
+                  with no status badge or action, unlike Mobile above. */}
+              <div className="pt-4 border-t border-brown/10">
+                <p className="text-xs uppercase tracking-widest text-brown-light">{locale === "ar" ? "البريد الإلكتروني" : "Email"}</p>
+                <p className="text-sm text-brown-dark mt-0.5">{vendor.email}</p>
               </div>
             </div>
           </div>

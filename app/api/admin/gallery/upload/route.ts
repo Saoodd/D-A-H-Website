@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
-import { safeUploadFilename, isBlobConfigured, BLOB_NOT_CONFIGURED_MESSAGE, GALLERY_MAX_FILE_BYTES } from "@/lib/uploadSafety";
+import { safeUploadFilename, isBlobConfigured, BLOB_NOT_CONFIGURED_MESSAGE, GALLERY_MAX_FILE_BYTES, fileMatchesDeclaredType } from "@/lib/uploadSafety";
 
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
@@ -52,6 +52,9 @@ export async function POST(req: NextRequest) {
   }
   if (file.size > GALLERY_MAX_FILE_BYTES) {
     return NextResponse.json({ error: `File is too large (max ${GALLERY_MAX_FILE_BYTES / (1024 * 1024)}MB).` }, { status: 400 });
+  }
+  if (!(await fileMatchesDeclaredType(file, file.type))) {
+    return NextResponse.json({ error: "That file doesn't look like a real image of the type it claims to be." }, { status: 400 });
   }
   if (!isBlobConfigured()) {
     return NextResponse.json({ error: BLOB_NOT_CONFIGURED_MESSAGE }, { status: 500 });

@@ -20,10 +20,10 @@ export async function sendAccountCreatedEmails(opts: { vendorId: string; vendorE
     subject: "Welcome to Dar Al Hay",
     html: emailShell(
       `${emailHeading(`Welcome, ${opts.businessName}`)}
-      ${emailParagraph("Your Dar Al Hay business account has been created. Next, confirm your email and mobile number to finish activating your account.")}
-      ${emailParagraph("Once your business is verified by our team, you'll be able to apply to upcoming DAH events from your dashboard.")}
-      ${emailButton("Verify my account", `${site()}/vendor/verify`)}`,
-      { preheader: "Confirm your email and mobile to activate your DAH account." }
+      ${emailParagraph("Your Dar Al Hay business account has been created.")}
+      ${emailParagraph("Once your business is verified by our team, you'll be able to apply to upcoming DAH events from your dashboard — you'll just need to verify your mobile number first, which only takes a moment from your Profile.")}
+      ${emailButton("Go to my dashboard", `${site()}/vendor/dashboard`)}`,
+      { preheader: "Your DAH business account is ready." }
     ),
   });
   if (ADMIN_NOTIFY_EMAIL) {
@@ -49,24 +49,6 @@ export async function sendVendorVerifiedEmail(opts: { vendorId: string; vendorEm
       `${emailHeading(`You're verified, ${opts.businessName}`)}
       ${emailParagraph("Your business account has been verified. You can now apply to upcoming DAH events from your dashboard.")}
       ${emailButton("Go to my dashboard", `${site()}/vendor/dashboard`)}`
-    ),
-  });
-}
-
-// --- Email verification -------------------------------------------------------
-
-export async function sendVerifyEmailEmail(opts: { vendorId: string; vendorEmail: string; businessName: string; verifyUrl: string }) {
-  await sendEmail({
-    to: opts.vendorEmail,
-    type: "EMAIL_VERIFY",
-    vendorId: opts.vendorId,
-    subject: "Verify your email",
-    html: emailShell(
-      `${emailHeading("Verify your email")}
-      ${emailParagraph(`Welcome to Dar Al Hay. Confirm your email address to finish setting up your business account, ${opts.businessName}.`)}
-      ${emailButton("Verify email", opts.verifyUrl)}
-      ${emailMuted("This link expires in 24 hours. If you didn't create a Dar Al Hay account, you can ignore this email.")}`,
-      { preheader: "Confirm your email address to finish setting up your DAH account." }
     ),
   });
 }

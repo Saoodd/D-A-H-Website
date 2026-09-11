@@ -4,14 +4,12 @@ import { prisma } from "./prisma";
 import { normalizePhoneToE164 } from "./phone";
 import type { Vendor } from "@prisma/client";
 
-// Account verification (email + mobile) is a separate concept from
-// Vendor.verified (DAH's manual business-verification step) and from
-// profile completion — see PART 19/20 of the spec. Both of the checks below
-// must be true before a vendor can apply/book.
-
-export function isEmailVerified(vendor: Pick<Vendor, "emailVerifiedAt">): boolean {
-  return !!vendor.emailVerifiedAt;
-}
+// Phone verification is the one real eligibility gate before a vendor can
+// apply/book (see requirePhoneVerifiedVendor below) — distinct from
+// Vendor.verified (DAH's manual business-verification step). Email is a
+// normal account field (login, password reset, receipts) with no
+// verification concept at all anymore; Vendor.emailVerifiedAt still exists
+// for historical/audit purposes but nothing gates on it.
 
 /** True only when the vendor has a verified phone AND that verification
  *  still matches their CURRENT phone number — editing the phone (profile

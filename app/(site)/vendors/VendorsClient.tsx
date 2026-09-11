@@ -154,10 +154,10 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
         }
         return;
       }
-      // Account created — take them straight to the dedicated Verify Your
-      // Account page rather than showing an inline success panel here (PART
-      // 3/4: signup should stay a form, verification gets its own screen).
-      router.push("/vendor/verify");
+      // Account created — take them straight to Profile, where the phone
+      // verification prompt is front and center (email needs no
+      // verification step at all anymore).
+      router.push("/vendor/profile");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");

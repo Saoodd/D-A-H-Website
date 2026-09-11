@@ -224,22 +224,32 @@ model Vendor {
   tradeLicenseFileUrl String? // uploaded via the existing Vercel Blob setup, same as floor plan images
   tradeLicenseExpiry  DateTime?
 
-  // Account verification (distinct from `verified` above, which is DAH's
-  // manual business-verification step) — both must be non-null before a
-  // vendor can apply/book, see lib/verification.ts. `phoneVerifiedNumber` is
-  // the exact E.164 number that was actually verified: if it no longer
+  // `emailVerifiedAt` is set immediately at account creation (and again on a
+  // confirmed secure email change) — email is a normal account-communication
+  // channel (login, password reset, receipts), never a gate on anything, so
+  // this field is purely informational/audit now, not a requirement anyone
+  // has to clear.
+  //
+  // Phone verification is the one real eligibility gate — see
+  // lib/verification.ts requirePhoneVerifiedVendor(). `phoneVerifiedNumber`
+  // is the exact E.164 number that was actually verified: if it no longer
   // matches the current normalized `phone`, the phone is treated as
   // unverified again automatically (see PHONE CHANGE requirement) without
   // needing every phone-editing code path to remember to clear a flag.
+  // `phoneVerifiedMethod` records how the CURRENT verification happened
+  // ("SMS" via Twilio Verify, or "ADMIN" via manual admin override) — full
+  // history of every verification event (including ones since superseded by
+  // a phone change) lives in VendorPhoneVerificationLog below.
   emailVerifiedAt     DateTime?
   phoneVerifiedAt     DateTime?
   phoneVerifiedNumber String?
+  phoneVerifiedMethod String?
 
-  applications            Application[]
-  notes                   VendorNote[]
-  warnings                VendorWarning[]
-  emailVerificationTokens EmailVerificationToken[]
-  emailDeliveries         EmailDelivery[]
+  applications          Application[]
+  notes                 VendorNote[]
+  warnings              VendorWarning[]
+  phoneVerificationLogs VendorPhoneVerificationLog[]
+  emailDeliveries       EmailDelivery[]
   // Every Agreement (VENDOR_TERMS at signup, EVENT_TERMS per booking) this
   // vendor has accepted — look up the VENDOR_TERMS one via
   // `agreementAcceptances.find(a => a.agreement.type === "VENDOR_TERMS")`
@@ -325,23 +335,6 @@ model EmailChangeToken {
   @@index([vendorId])
 }
 
-// Single-use, expiring token proving the vendor controls the email address
-// currently on file — used at signup (and any time the current address
-// needs re-confirming). Distinct from EmailChangeToken, which verifies a
-// NEW address before the login email switches to it. Only a hash is
-// stored, same pattern as PasswordResetToken/EmailChangeToken.
-model EmailVerificationToken {
-  id        String    @id @default(cuid())
-  vendorId  String
-  vendor    Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
-  tokenHash String    @unique
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  @@index([vendorId])
-}
-
 // Internal delivery log for every transactional email DAH sends — lets
 // Admin see sent/delivered/failed status and retry a genuinely failed send,
 // without ever storing the email body, tokens, or credentials here.
@@ -370,6 +363,25 @@ model EmailDelivery {
   @@index([vendorId])
   @@index([type])
   @@index([providerMessageId])
+}
+
+// Append-only history of every phone-verification event for a vendor — an
+// audit trail distinct from Vendor.phoneVerifiedAt/phoneVerifiedNumber/
+// phoneVerifiedMethod (the CURRENT state only). Written on both a real
+// Twilio Verify success (method "SMS") and an admin manual override
+// (method "ADMIN") — Admin has no per-admin-user identity in this system
+// (a single shared password, see AdminSession), so "who" can only ever be
+// recorded generically as "ADMIN", not a named person.
+model VendorPhoneVerificationLog {
+  id       String @id @default(cuid())
+  vendorId String
+  vendor   Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  phone    String // the E.164 number verified at this moment
+  method   String // SMS | ADMIN
+
+  createdAt DateTime @default(now())
+
+  @@index([vendorId])
 }
 
 // Private DAH-internal notes about a vendor — never returned by any

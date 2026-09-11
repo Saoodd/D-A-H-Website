@@ -43,7 +43,16 @@ export async function POST(req: NextRequest) {
   // lib/verification.ts isPhoneVerified for why this, rather than a bare
   // boolean, is what makes a later phone change fall back to unverified
   // automatically.
-  await prisma.vendor.update({ where: { id: vendor.id }, data: { phoneVerifiedAt: new Date(), phoneVerifiedNumber: normalizedPhone } });
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.vendor.update({
+      where: { id: vendor.id },
+      data: { phoneVerifiedAt: now, phoneVerifiedNumber: normalizedPhone, phoneVerifiedMethod: "SMS" },
+    }),
+    prisma.vendorPhoneVerificationLog.create({
+      data: { vendorId: vendor.id, phone: normalizedPhone, method: "SMS" },
+    }),
+  ]);
 
   return NextResponse.json({ ok: true, alreadyVerified: false });
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { requireAdmin } from "@/lib/adminGuard";
-import { safeUploadFilename, isBlobConfigured, BLOB_NOT_CONFIGURED_MESSAGE } from "@/lib/uploadSafety";
+import { safeUploadFilename, isBlobConfigured, BLOB_NOT_CONFIGURED_MESSAGE, fileMatchesDeclaredType } from "@/lib/uploadSafety";
 
 const MAX_BYTES = 15 * 1024 * 1024; // 15MB — a photo/scan of a venue floor plan
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
@@ -25,6 +25,9 @@ export async function POST(req: NextRequest) {
   }
   if (file.size > MAX_BYTES) {
     return NextResponse.json({ error: "Image is too large (max 15MB)." }, { status: 400 });
+  }
+  if (!(await fileMatchesDeclaredType(file, file.type))) {
+    return NextResponse.json({ error: "That file doesn't look like a real image of the type it claims to be." }, { status: 400 });
   }
 
   if (!isBlobConfigured()) {

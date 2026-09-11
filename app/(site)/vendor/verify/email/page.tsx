@@ -1,9 +1,8 @@
-import type { Metadata } from "next";
-import { ConfirmEmailVerificationClient } from "./ConfirmEmailVerificationClient";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Verify Email" };
-
-export default async function VerifyEmailLinkPage({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
-  const { token } = await searchParams;
-  return <ConfirmEmailVerificationClient token={token || ""} />;
+// Email verification no longer exists — this route only remains so a
+// previously-sent "Verify email" link (already delivered before this
+// change) doesn't 404. Any ?token= is simply ignored.
+export default function VerifyEmailLinkPage() {
+  redirect("/vendor/profile");
 }
