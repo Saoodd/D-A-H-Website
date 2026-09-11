@@ -6,9 +6,9 @@ import { emailChangeRequestSchema } from "@/lib/validation";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { generateRawToken, hashToken } from "@/lib/tokens";
 import { sendEmailChangeVerifyEmail } from "@/lib/email";
+import { trustedSiteUrl } from "@/lib/url";
 
 const EMAIL_CHANGE_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
-const siteUrl = () => process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
 // Step 1 of changing the account email: re-authenticate with the current
 // password, then send a verification link to the NEW address. The login
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     vendorId: vendor.id,
     newEmail,
     businessName: vendor.businessName,
-    verifyUrl: `${siteUrl()}/vendor/profile/confirm-email?token=${raw}`,
+    verifyUrl: `${trustedSiteUrl()}/vendor/profile/confirm-email?token=${raw}`,
   });
 
   return NextResponse.json({ ok: true });

@@ -4,11 +4,10 @@ import { forgotPasswordSchema } from "@/lib/validation";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { generateRawToken, hashToken } from "@/lib/tokens";
 import { sendPasswordResetEmail } from "@/lib/email";
+import { trustedSiteUrl } from "@/lib/url";
 
 const GENERIC_MESSAGE = "If an account exists with that email, we've sent password reset instructions.";
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
-
-const siteUrl = () => process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
 // Deliberately always returns the same 200 + generic message, whether or
 // not the email matches an account — never let a "forgot password" request
@@ -51,7 +50,7 @@ export async function POST(req: NextRequest) {
       vendorId: vendor.id,
       vendorEmail: vendor.email,
       businessName: vendor.businessName,
-      resetUrl: `${siteUrl()}/vendor/reset-password?token=${raw}`,
+      resetUrl: `${trustedSiteUrl()}/vendor/reset-password?token=${raw}`,
     });
   }
 
