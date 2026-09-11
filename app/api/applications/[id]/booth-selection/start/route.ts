@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getVendorSession } from "@/lib/auth";
 import { runExpiryPass } from "@/lib/expiry";
 import { BOOTH_SELECTION_SESSION_MINUTES } from "@/lib/constants";
-import { requireFullyVerifiedVendor } from "@/lib/verification";
+import { requirePhoneVerifiedVendor } from "@/lib/verification";
 
 // Starts (or resumes) the 2-minute booth-selection session shown on the
 // booth-selector screen. Idempotent: an already-active session is returned
@@ -14,7 +14,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const session = await getVendorSession();
   if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
-  const gate = await requireFullyVerifiedVendor(session.vendorId);
+  const gate = await requirePhoneVerifiedVendor(session.vendorId);
   if (!gate.ok) return gate.response;
 
   const { id } = await params;

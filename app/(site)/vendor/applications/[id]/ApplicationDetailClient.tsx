@@ -10,6 +10,7 @@ import { Legend } from "@/components/floorplan/Legend";
 import { BoothConfirmModal } from "@/components/vendor/BoothConfirmModal";
 import { SelectedBoothCard } from "@/components/vendor/SelectedBoothCard";
 import { ReceiptSummaryCard } from "@/components/vendor/ReceiptSummaryCard";
+import { PhoneVerifyModal } from "@/components/vendor/PhoneVerifyModal";
 import type { FloorBooth, FloorFeature, SizeStyle } from "@/components/floorplan/types";
 import type { ApplicationView } from "@/lib/applicationView";
 
@@ -49,11 +50,11 @@ export function ApplicationDetailClient({
   // blocks further clicks and prompts a restart. The server independently
   // re-checks this at confirm time regardless of what the client believes.
   const [selectionExpired, setSelectionExpired] = useState(false);
-  // Server-side verification gate (PART 16/17) — set when starting a booth
-  // selection session or confirming a booth is refused because the vendor's
-  // email/mobile aren't both verified yet. Shown as a clear prompt instead
-  // of leaving the booth selector silently empty or surfacing a raw error.
-  const [verificationRequired, setVerificationRequired] = useState(false);
+  // Server-side phone-verification gate — set when starting a booth
+  // selection session, confirming a booth, or starting checkout is refused
+  // because the vendor's mobile number isn't verified yet. Opens the inline
+  // PhoneVerifyModal; on success, resumes whichever action was blocked.
+  const [verifyIntent, setVerifyIntent] = useState<"start-selection" | "confirm-booth" | "checkout" | null>(null);
   const startingSelectionRef = useRef(false);
 
   const refreshStatus = useCallback(async () => {
@@ -89,7 +90,7 @@ export function ApplicationDetailClient({
         setView((v) => ({ ...v, boothSelectionExpiresAt: data.boothSelectionExpiresAt }));
       } else {
         const body = await res.json().catch(() => ({}));
-        if (body.code === "VERIFICATION_REQUIRED") setVerificationRequired(true);
+        if (body.code === "VERIFICATION_REQUIRED") setVerifyIntent("start-selection");
       }
     } finally {
       startingSelectionRef.current = false;
@@ -127,8 +128,9 @@ export function ApplicationDetailClient({
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         if (body.code === "VERIFICATION_REQUIRED") {
-          setVerificationRequired(true);
-          setPendingBooth(null);
+          // Keep pendingBooth set — once verified, we re-confirm this exact
+          // booth rather than sending the vendor back to pick again.
+          setVerifyIntent("confirm-booth");
           return;
         }
         if (body.code === "SELECTION_EXPIRED") {
@@ -190,12 +192,7 @@ export function ApplicationDetailClient({
       if (!res.ok) {
         const b = await res.json().catch(() => ({}));
         if (b.code === "VERIFICATION_REQUIRED") {
-          setVerificationRequired(true);
-          setNotice(
-            locale === "ar"
-              ? "يرجى التحقق من بيانات التواصل الخاصة بك قبل المتابعة للدفع."
-              : "Please verify your contact details before continuing to payment."
-          );
+          setVerifyIntent("checkout");
           return;
         }
         throw new Error(b.error || "Could not start checkout");
@@ -322,25 +319,7 @@ export function ApplicationDetailClient({
             </div>
           )}
 
-          {verificationRequired ? (
-            <div className="rounded-xl border border-brown/10 bg-cream p-8 text-center">
-              <h2 className="font-heading text-xl text-brown-dark mb-2">
-                {locale === "ar" ? "تحقق من حسابك" : "Verify Your Account"}
-              </h2>
-              <p className="text-sm text-brown-light mb-5">
-                {locale === "ar"
-                  ? "قبل اختيار كشكك، يرجى التحقق من بيانات التواصل الخاصة بك."
-                  : "Before selecting your booth, please verify your contact details."}
-              </p>
-              <Link
-                href="/vendor/verify"
-                className="inline-block px-6 py-2.5 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark transition-colors"
-              >
-                {locale === "ar" ? "إكمال التحقق" : "Complete Verification"}
-              </Link>
-            </div>
-          ) : (
-            !view.boothHold && (
+          {!view.boothHold && (
             <div>
               <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
                 <h2 className="font-heading text-xl text-brown-dark">{t("vendor.selectBooth")}</h2>
@@ -391,7 +370,6 @@ export function ApplicationDetailClient({
                 />
               )}
             </div>
-            )
           )}
 
           {view.boothHold && view.boothHold.holdStage === "REVIEW" && (
@@ -554,6 +532,19 @@ export function ApplicationDetailClient({
             </p>
           )}
         </div>
+      )}
+
+      {verifyIntent && (
+        <PhoneVerifyModal
+          onClose={() => setVerifyIntent(null)}
+          onVerified={() => {
+            const intent = verifyIntent;
+            setVerifyIntent(null);
+            if (intent === "start-selection") startBoothSelectionSession();
+            else if (intent === "confirm-booth") confirmPendingBooth();
+            else if (intent === "checkout") proceedToPayment();
+          }}
+        />
       )}
     </div>
   );

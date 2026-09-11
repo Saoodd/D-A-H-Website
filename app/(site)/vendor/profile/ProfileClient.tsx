@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { MetricCard, EmptyState } from "@/components/ui/Card";
 import { ChangeEmailCard } from "@/components/vendor/ChangeEmailCard";
 import { DeleteAccountCard } from "@/components/vendor/DeleteAccountCard";
+import { PhoneVerifyModal } from "@/components/vendor/PhoneVerifyModal";
 
 interface Vendor {
   businessName: string;
@@ -120,6 +121,7 @@ export function ProfileClient({
   const [uploadingLicense, setUploadingLicense] = useState(false);
   const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [ackBusyId, setAckBusyId] = useState<string | null>(null);
+  const [verifyingPhone, setVerifyingPhone] = useState(false);
 
   const dateFmt = (iso: string) => new Date(iso).toLocaleDateString(locale === "ar" ? "ar-AE" : "en-AE");
 
@@ -225,35 +227,47 @@ export function ProfileClient({
             <MetricCard label={t("vendorProfile.statsApplications")} value={stats.applicationsCount} />
           </div>
 
-          {/* Account Verification — a separate concept from Profile
-              Completion below: this is about proving control of the
-              contact details on file, not how filled-in the profile is. */}
+          {/* Mobile verification is the eligibility gate for applying to
+              events (server-enforced in the apply/booth/checkout routes) —
+              this card leads with it and calls it out clearly when missing.
+              Email verification is a normal account detail (used for login
+              and receipts, never a gate), shown underneath with a lighter
+              touch so it doesn't read as equally mandatory. */}
           <div className="rounded-[10px] border border-brown/10 bg-cream p-6">
             <p className="label-caps mb-4">{locale === "ar" ? "التحقق من الحساب" : "Account Verification"}</p>
             <div className="space-y-4">
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div>
-                  <p className="text-xs uppercase tracking-widest text-brown-light">{locale === "ar" ? "البريد الإلكتروني" : "Email"}</p>
-                  <p className="text-sm text-brown-dark mt-0.5">{vendor.email}</p>
-                </div>
-                {vendor.emailVerified ? (
-                  <StatusBadge label={locale === "ar" ? "تم التحقق" : "Verified"} tone="positive" />
-                ) : (
-                  <Link href="/vendor/verify" className="text-sm px-4 py-2 rounded-[6px] border border-brown/25 text-brown-dark hover:bg-brown/5">
-                    {locale === "ar" ? "التحقق من البريد" : "Verify Email"}
-                  </Link>
-                )}
-              </div>
-              <div className="flex items-center justify-between gap-3 flex-wrap pt-4 border-t border-brown/10">
-                <div>
                   <p className="text-xs uppercase tracking-widest text-brown-light">{locale === "ar" ? "رقم الجوال" : "Mobile"}</p>
                   <p className="text-sm text-brown-dark mt-0.5">{vendor.phone}</p>
+                  {!vendor.phoneVerified && (
+                    <p className="text-xs text-amber-800 dark:text-amber-400 mt-1">
+                      {locale === "ar" ? "مطلوب للتقديم على الفعاليات" : "Required to apply to events"}
+                    </p>
+                  )}
                 </div>
                 {vendor.phoneVerified ? (
                   <StatusBadge label={locale === "ar" ? "تم التحقق" : "Verified"} tone="positive" />
                 ) : (
-                  <Link href="/vendor/verify" className="text-sm px-4 py-2 rounded-[6px] border border-brown/25 text-brown-dark hover:bg-brown/5">
+                  <button
+                    type="button"
+                    onClick={() => setVerifyingPhone(true)}
+                    className="text-sm px-4 py-2 rounded-[6px] bg-brown text-cream-soft hover:bg-brown-dark transition-colors"
+                  >
                     {locale === "ar" ? "التحقق من الجوال" : "Verify Mobile"}
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-3 flex-wrap pt-4 border-t border-brown/10">
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-brown-light">{locale === "ar" ? "البريد الإلكتروني" : "Email"}</p>
+                  <p className="text-sm text-brown-dark mt-0.5">{vendor.email}</p>
+                </div>
+                {vendor.emailVerified ? (
+                  <StatusBadge label={locale === "ar" ? "تم التحقق" : "Verified"} tone="neutral" />
+                ) : (
+                  <Link href="/vendor/verify" className="text-xs text-brown-light underline hover:text-brown-dark">
+                    {locale === "ar" ? "التحقق من البريد" : "Verify Email"}
                   </Link>
                 )}
               </div>
@@ -499,6 +513,16 @@ export function ProfileClient({
           </div>
         </div>
       </div>
+
+      {verifyingPhone && (
+        <PhoneVerifyModal
+          onClose={() => setVerifyingPhone(false)}
+          onVerified={() => {
+            setVerifyingPhone(false);
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { getGateway, getSandboxGateway } from "@/payments/gateway";
 import { sendPaymentSuccessEmail, sendPaymentFailedEmail } from "@/lib/email";
 import { assignReceiptNumber, getReceiptData } from "@/lib/receipts";
 import { trustedSiteUrl } from "@/lib/url";
-import { requireFullyVerifiedVendor } from "@/lib/verification";
+import { requirePhoneVerifiedVendor } from "@/lib/verification";
 
 // TODO: once a live gateway is wired in, this route's "outcome" input goes
 // away — success/failure will instead be driven by that gateway's webhook
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
   const session = await getVendorSession();
   if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
-  const gate = await requireFullyVerifiedVendor(session.vendorId);
+  const gate = await requirePhoneVerifiedVendor(session.vendorId);
   if (!gate.ok) return gate.response;
 
   const { applicationId } = await params;

@@ -25,7 +25,10 @@ export async function POST(req: NextRequest) {
 
   const normalizedPhone = normalizePhoneToE164(vendor.phone);
   if (!normalizedPhone) {
-    return NextResponse.json({ error: "Please update your mobile number in Profile before verifying it." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Please update your mobile number in Profile before verifying it.", code: "PHONE_INVALID" },
+      { status: 400 }
+    );
   }
 
   const ip = clientIp(req.headers);

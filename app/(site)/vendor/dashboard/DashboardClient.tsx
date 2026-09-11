@@ -10,6 +10,7 @@ import { ConfirmedEventsSection, type ConfirmedEventRow } from "./ConfirmedEvent
 import { ApplicationsOverviewSection, type OverviewAppRow } from "./ApplicationsOverviewSection";
 import { VendorNav } from "@/components/vendor/VendorNav";
 import { Button } from "@/components/ui/Button";
+import { PhoneVerifyModal } from "@/components/vendor/PhoneVerifyModal";
 
 /** The vendor dashboard's Overview — the main control center, per the
  *  navigation restructure: no more top tab row (Overview/Applications/
@@ -36,6 +37,10 @@ export function DashboardClient({
   const router = useRouter();
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Set only when an apply attempt is blocked on phone verification — the
+  // modal resumes this exact application once verification succeeds,
+  // rather than sending the vendor away to find the event again.
+  const [verifyForEventId, setVerifyForEventId] = useState<string | null>(null);
 
   const nearDeadline = recentApplications.filter((a) => a.displayStatus === "ACCEPTED_UNPAID" && a.acceptanceExpiresAt);
   const hasActionItems = unviewedWarnings.length > 0 || nearDeadline.length > 0;
@@ -51,10 +56,10 @@ export function DashboardClient({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // Server-side verification gate (PART 17): send them to the actual
-        // verify page instead of surfacing a raw error here.
+        // Server-side verification gate — open the inline phone-verify
+        // modal right here instead of sending them to a separate page.
         if (data.code === "VERIFICATION_REQUIRED") {
-          router.push("/vendor/verify");
+          setVerifyForEventId(eventId);
           return;
         }
         throw new Error(data.error || "Could not apply");
@@ -133,6 +138,17 @@ export function DashboardClient({
           </div>
         </div>
       </div>
+
+      {verifyForEventId && (
+        <PhoneVerifyModal
+          onClose={() => setVerifyForEventId(null)}
+          onVerified={() => {
+            const eventId = verifyForEventId;
+            setVerifyForEventId(null);
+            if (eventId) applyToEvent(eventId);
+          }}
+        />
+      )}
     </div>
   );
 }

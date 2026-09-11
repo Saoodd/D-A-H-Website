@@ -24,35 +24,34 @@ export function isPhoneVerified(vendor: Pick<Vendor, "phone" | "phoneVerifiedAt"
   return currentNormalized !== null && currentNormalized === vendor.phoneVerifiedNumber;
 }
 
-export function isFullyVerified(vendor: Pick<Vendor, "phone" | "emailVerifiedAt" | "phoneVerifiedAt" | "phoneVerifiedNumber">): boolean {
-  return isEmailVerified(vendor) && isPhoneVerified(vendor);
-}
-
-export const VERIFICATION_REQUIRED_MESSAGE = "Before applying to DAH events, please verify your contact details.";
+export const VERIFICATION_REQUIRED_MESSAGE = "Please verify your mobile number before continuing.";
 
 type VerificationGateResult =
   | { ok: true; vendor: Vendor }
   | { ok: false; response: NextResponse };
 
-/** Shared server-side gate for every action PART 16 restricts to fully
- *  verified vendors (submit application, select/confirm a booth, accept
- *  event terms, start/complete payment). Always re-reads the vendor fresh
- *  from the DB — never trusts a session or a client-supplied flag — and
- *  returns a structured 403 (not a bare "Unauthorized") so the client can
- *  render the premium "Verify your account" prompt instead of a raw error. */
-export async function requireFullyVerifiedVendor(vendorId: string): Promise<VerificationGateResult> {
+/** Shared server-side gate for every action that requires a verified
+ *  vendor (submit application, select/confirm a booth, accept event terms,
+ *  start/complete payment). Phone verification is the eligibility
+ *  requirement — email verification is intentionally NOT checked here: an
+ *  account's email is a normal account-communication channel (login,
+ *  password reset, receipts) and never blocks event participation. Always
+ *  re-reads the vendor fresh from the DB — never trusts a session or a
+ *  client-supplied flag — and returns a structured 403 (not a bare
+ *  "Unauthorized") so the client can render an inline verification prompt
+ *  instead of a raw error. */
+export async function requirePhoneVerifiedVendor(vendorId: string): Promise<VerificationGateResult> {
   const vendor = await prisma.vendor.findUnique({ where: { id: vendorId } });
   if (!vendor || vendor.accountStatus !== "ACTIVE") {
     return { ok: false, response: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
   }
 
-  const emailVerified = isEmailVerified(vendor);
   const phoneVerified = isPhoneVerified(vendor);
-  if (!emailVerified || !phoneVerified) {
+  if (!phoneVerified) {
     return {
       ok: false,
       response: NextResponse.json(
-        { error: VERIFICATION_REQUIRED_MESSAGE, code: "VERIFICATION_REQUIRED", emailVerified, phoneVerified },
+        { error: VERIFICATION_REQUIRED_MESSAGE, code: "VERIFICATION_REQUIRED", phoneVerified: false },
         { status: 403 }
       ),
     };

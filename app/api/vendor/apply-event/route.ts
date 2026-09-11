@@ -4,7 +4,7 @@ import { getVendorSession } from "@/lib/auth";
 import { applyToEventSchema } from "@/lib/validation";
 import { sendAppliedToEventEmails } from "@/lib/email";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
-import { isEmailVerified, isPhoneVerified, VERIFICATION_REQUIRED_MESSAGE } from "@/lib/verification";
+import { isPhoneVerified, VERIFICATION_REQUIRED_MESSAGE } from "@/lib/verification";
 
 // One-click "apply to this event" from a verified vendor's dashboard — no
 // form, since their business info is already on file. Unverified vendors
@@ -31,11 +31,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const emailVerified = isEmailVerified(vendor);
-  const phoneVerified = isPhoneVerified(vendor);
-  if (!emailVerified || !phoneVerified) {
+  // Phone verification is the eligibility requirement to apply — email
+  // verification is intentionally NOT checked here (it's a normal account
+  // channel: login, password reset, receipts — never a gate on event
+  // participation).
+  if (!isPhoneVerified(vendor)) {
     return NextResponse.json(
-      { error: VERIFICATION_REQUIRED_MESSAGE, code: "VERIFICATION_REQUIRED", emailVerified, phoneVerified },
+      { error: VERIFICATION_REQUIRED_MESSAGE, code: "VERIFICATION_REQUIRED", phoneVerified: false },
       { status: 403 }
     );
   }
