@@ -20,10 +20,10 @@ export async function sendAccountCreatedEmails(opts: { vendorId: string; vendorE
     subject: "Welcome to Dar Al Hay",
     html: emailShell(
       `${emailHeading(`Welcome, ${opts.businessName}`)}
-      ${emailParagraph("Your Dar Al Hay business account has been created.")}
+      ${emailParagraph("Your Dar Al Hay business account has been created. We've sent a separate email with a link to confirm your email address.")}
       ${emailParagraph("Once your business is verified by our team, you'll be able to apply to upcoming DAH events from your dashboard — you'll just need to verify your mobile number first, which only takes a moment from your Profile.")}
-      ${emailButton("Go to my dashboard", `${site()}/vendor/dashboard`)}`,
-      { preheader: "Your DAH business account is ready." }
+      ${emailButton("Go to my profile", `${site()}/vendor/profile`)}`,
+      { preheader: "Confirm your email and set up your DAH account." }
     ),
   });
   if (ADMIN_NOTIFY_EMAIL) {
@@ -37,6 +37,24 @@ export async function sendAccountCreatedEmails(opts: { vendorId: string; vendorE
       ),
     });
   }
+}
+
+// --- Email verification -------------------------------------------------------
+
+export async function sendVerifyEmailEmail(opts: { vendorId: string; vendorEmail: string; businessName: string; verifyUrl: string }) {
+  await sendEmail({
+    to: opts.vendorEmail,
+    type: "EMAIL_VERIFY",
+    vendorId: opts.vendorId,
+    subject: "Verify your email",
+    html: emailShell(
+      `${emailHeading("Verify your email")}
+      ${emailParagraph(`Welcome to Dar Al Hay. Confirm your email address to finish setting up your business account, ${opts.businessName}.`)}
+      ${emailButton("Verify email", opts.verifyUrl)}
+      ${emailMuted("This link expires in 24 hours. If you didn't create a Dar Al Hay account, you can ignore this email.")}`,
+      { preheader: "Confirm your email address to finish setting up your DAH account." }
+    ),
+  });
 }
 
 export async function sendVendorVerifiedEmail(opts: { vendorId: string; vendorEmail: string; businessName: string }) {

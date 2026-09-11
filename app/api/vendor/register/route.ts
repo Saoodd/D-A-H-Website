@@ -3,12 +3,16 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { vendorRegisterSchema } from "@/lib/validation";
 import { hashPassword, createVendorSession, getVendorSession } from "@/lib/auth";
-import { sendAccountCreatedEmails } from "@/lib/email";
+import { sendAccountCreatedEmails, sendVerifyEmailEmail } from "@/lib/email";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { getSettings } from "@/lib/settings";
 import { normalizeUsername } from "@/lib/username";
 import { normalizePhoneToE164 } from "@/lib/phone";
+import { generateRawToken, hashToken } from "@/lib/tokens";
+import { trustedSiteUrl } from "@/lib/url";
 import { ensureVendorTermsExist, getPublishedAgreement, recordAcceptance } from "@/lib/agreements";
+
+const EMAIL_VERIFY_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
 // Creates a DAH business account — not tied to any event. The vendor can
 // log in immediately, but their dashboard shows nothing until DAH verifies
@@ -101,10 +105,6 @@ export async function POST(req: NextRequest) {
         logoUrl: data.logoUrl || null,
         tradeLicenseFileUrl: data.tradeLicenseFileUrl || null,
         verified: false,
-        // Email is a normal account-communication channel, never a gate —
-        // treated as accepted the moment the vendor enters it. No
-        // verification link, no separate "confirm your email" step.
-        emailVerifiedAt: new Date(),
       },
     });
   } catch (err) {
@@ -131,6 +131,22 @@ export async function POST(req: NextRequest) {
   await createVendorSession(vendor.id);
 
   await sendAccountCreatedEmails({ vendorId: vendor.id, vendorEmail: email, businessName: data.businessName });
+
+  // Kick off email verification immediately — the vendor lands on their
+  // Profile right after this, so the link should already be on its way
+  // before they get there. Never sets emailVerifiedAt itself: that only
+  // happens once this token is actually confirmed (see
+  // /api/vendor/email-verification/confirm).
+  const rawToken = generateRawToken();
+  await prisma.emailVerificationToken.create({
+    data: { vendorId: vendor.id, tokenHash: hashToken(rawToken), expiresAt: new Date(Date.now() + EMAIL_VERIFY_TOKEN_TTL_MS) },
+  });
+  await sendVerifyEmailEmail({
+    vendorId: vendor.id,
+    vendorEmail: email,
+    businessName: data.businessName,
+    verifyUrl: `${trustedSiteUrl()}/vendor/verify/email?token=${rawToken}`,
+  });
 
   return NextResponse.json({ ok: true, vendorId: vendor.id });
 }

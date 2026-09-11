@@ -224,11 +224,12 @@ model Vendor {
   tradeLicenseFileUrl String? // uploaded via the existing Vercel Blob setup, same as floor plan images
   tradeLicenseExpiry  DateTime?
 
-  // `emailVerifiedAt` is set immediately at account creation (and again on a
-  // confirmed secure email change) — email is a normal account-communication
-  // channel (login, password reset, receipts), never a gate on anything, so
-  // this field is purely informational/audit now, not a requirement anyone
-  // has to clear.
+  // `emailVerifiedAt` is a REAL verification flag — set only when the vendor
+  // actually clicks and successfully confirms the link sent to their email
+  // (see EmailVerificationToken below), never automatically at signup. It is
+  // never checked as a gate anywhere (see lib/verification.ts): email is a
+  // normal account-communication channel (login, password reset, receipts),
+  // shown on Profile/Admin for informational purposes only.
   //
   // Phone verification is the one real eligibility gate — see
   // lib/verification.ts requirePhoneVerifiedVendor(). `phoneVerifiedNumber`
@@ -245,11 +246,12 @@ model Vendor {
   phoneVerifiedNumber String?
   phoneVerifiedMethod String?
 
-  applications          Application[]
-  notes                 VendorNote[]
-  warnings              VendorWarning[]
-  phoneVerificationLogs VendorPhoneVerificationLog[]
-  emailDeliveries       EmailDelivery[]
+  applications            Application[]
+  notes                   VendorNote[]
+  warnings                VendorWarning[]
+  emailVerificationTokens EmailVerificationToken[]
+  phoneVerificationLogs   VendorPhoneVerificationLog[]
+  emailDeliveries         EmailDelivery[]
   // Every Agreement (VENDOR_TERMS at signup, EVENT_TERMS per booking) this
   // vendor has accepted — look up the VENDOR_TERMS one via
   // `agreementAcceptances.find(a => a.agreement.type === "VENDOR_TERMS")`
@@ -363,6 +365,23 @@ model EmailDelivery {
   @@index([vendorId])
   @@index([type])
   @@index([providerMessageId])
+}
+
+// Single-use, expiring token proving the vendor controls the email address
+// currently on file — used at signup (and any time the current address
+// needs re-confirming). Distinct from EmailChangeToken, which verifies a
+// NEW address before the login email switches to it. Only a hash is
+// stored, same pattern as PasswordResetToken/EmailChangeToken.
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  vendorId  String
+  vendor    Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([vendorId])
 }
 
 // Append-only history of every phone-verification event for a vendor — an

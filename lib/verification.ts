@@ -6,10 +6,15 @@ import type { Vendor } from "@prisma/client";
 
 // Phone verification is the one real eligibility gate before a vendor can
 // apply/book (see requirePhoneVerifiedVendor below) — distinct from
-// Vendor.verified (DAH's manual business-verification step). Email is a
-// normal account field (login, password reset, receipts) with no
-// verification concept at all anymore; Vendor.emailVerifiedAt still exists
-// for historical/audit purposes but nothing gates on it.
+// Vendor.verified (DAH's manual business-verification step). Email
+// verification is a genuine, real flow (a clicked confirmation link sets
+// emailVerifiedAt — see EmailVerificationToken / the email-verification
+// API routes) used for account-communication trust (login, password reset,
+// receipts), but it is intentionally never checked as a gate here.
+
+export function isEmailVerified(vendor: Pick<Vendor, "emailVerifiedAt">): boolean {
+  return !!vendor.emailVerifiedAt;
+}
 
 /** True only when the vendor has a verified phone AND that verification
  *  still matches their CURRENT phone number — editing the phone (profile

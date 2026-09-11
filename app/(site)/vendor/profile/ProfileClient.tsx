@@ -29,6 +29,7 @@ interface Vendor {
   tradeLicenseNumber: string | null;
   tradeLicenseFileUrl: string | null;
   tradeLicenseExpiry: string | null;
+  emailVerified: boolean;
   phoneVerified: boolean;
 }
 
@@ -121,8 +122,26 @@ export function ProfileClient({
   const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [ackBusyId, setAckBusyId] = useState<string | null>(null);
   const [verifyingPhone, setVerifyingPhone] = useState(false);
+  const [emailResendBusy, setEmailResendBusy] = useState(false);
+  const [emailResendNotice, setEmailResendNotice] = useState<string | null>(null);
 
   const dateFmt = (iso: string) => new Date(iso).toLocaleDateString(locale === "ar" ? "ar-AE" : "en-AE");
+
+  async function resendVerificationEmail() {
+    setEmailResendBusy(true);
+    setEmailResendNotice(null);
+    try {
+      const res = await fetch("/api/vendor/email-verification/send", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setEmailResendNotice(locale === "ar" ? "تم إرسال رابط التحقق." : "Verification email sent.");
+      } else {
+        setEmailResendNotice(data.error || (locale === "ar" ? "تعذر الإرسال. حاول مرة أخرى." : "Couldn't send — please try again."));
+      }
+    } finally {
+      setEmailResendBusy(false);
+    }
+  }
 
   async function upload(file: File, setUrl: (url: string) => void, setBusy: (b: boolean) => void, purpose: "logo" | "trade-license") {
     setBusy(true);
@@ -257,12 +276,32 @@ export function ProfileClient({
                   </button>
                 )}
               </div>
-              {/* Email is a normal account field — used for login, receipts
-                  and notifications, never a gate — so it's shown plainly
-                  with no status badge or action, unlike Mobile above. */}
-              <div className="pt-4 border-t border-brown/10">
-                <p className="text-xs uppercase tracking-widest text-brown-light">{locale === "ar" ? "البريد الإلكتروني" : "Email"}</p>
-                <p className="text-sm text-brown-dark mt-0.5">{vendor.email}</p>
+              {/* Email verification is real (a clicked confirmation link)
+                  but never gates anything — used for login, receipts and
+                  notifications. Shown with a lighter touch than Mobile
+                  above (no "required" language, no primary button) so it
+                  never reads as equally mandatory. */}
+              <div className="flex items-center justify-between gap-3 flex-wrap pt-4 border-t border-brown/10">
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-brown-light">{locale === "ar" ? "البريد الإلكتروني" : "Email"}</p>
+                  <p className="text-sm text-brown-dark mt-0.5">{vendor.email}</p>
+                </div>
+                {vendor.emailVerified ? (
+                  <StatusBadge label={locale === "ar" ? "تم التحقق" : "Verified"} tone="neutral" />
+                ) : (
+                  <div className="flex flex-col items-end gap-1.5">
+                    <StatusBadge label={locale === "ar" ? "لم يتم التحقق" : "Not verified"} tone="neutral" />
+                    <button
+                      type="button"
+                      onClick={resendVerificationEmail}
+                      disabled={emailResendBusy}
+                      className="text-xs text-brown-light underline hover:text-brown-dark disabled:opacity-50"
+                    >
+                      {emailResendBusy ? "…" : locale === "ar" ? "إعادة إرسال رابط التحقق" : "Resend Verification Email"}
+                    </button>
+                    {emailResendNotice && <span className="text-[11px] text-brown-light">{emailResendNotice}</span>}
+                  </div>
+                )}
               </div>
             </div>
           </div>
