@@ -28,7 +28,7 @@ export function normalizePhoneToE164(raw: string): string | null {
  *  never `formatNational()` — the latter deliberately re-adds the UAE
  *  domestic trunk prefix "0" for local-dialing display ("056 123 4800"),
  *  which reads as a bogus extra zero right after "+971" here and is NOT
- *  part of the actual E.164 number that gets stored or sent to Twilio. */
+ *  part of the actual E.164 number that gets stored or sent to Infobip. */
 export function maskPhoneForDisplay(e164: string): string {
   const parsed = parsePhoneNumberFromString(e164);
   if (!parsed) return e164;

@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/adminGuard";
 import { normalizePhoneToE164 } from "@/lib/phone";
 import { isPhoneVerified } from "@/lib/verification";
 
-// Admin-only manual phone verification — bypasses Twilio Verify entirely
+// Admin-only manual phone verification — bypasses Infobip 2FA entirely
 // for cases where SMS genuinely can't reach a vendor. Gated by
 // requireAdmin() alone: a vendor's own session cookie is a completely
 // different, unrelated auth mechanism (getVendorSession()), so there is no

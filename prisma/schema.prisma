@@ -238,13 +238,23 @@ model Vendor {
   // unverified again automatically (see PHONE CHANGE requirement) without
   // needing every phone-editing code path to remember to clear a flag.
   // `phoneVerifiedMethod` records how the CURRENT verification happened
-  // ("SMS" via Twilio Verify, or "ADMIN" via manual admin override) — full
+  // ("SMS" via Infobip 2FA, or "ADMIN" via manual admin override) — full
   // history of every verification event (including ones since superseded by
   // a phone change) lives in VendorPhoneVerificationLog below.
   emailVerifiedAt     DateTime?
   phoneVerifiedAt     DateTime?
   phoneVerifiedNumber String?
   phoneVerifiedMethod String?
+
+  // Transient state for the CURRENT in-flight Infobip OTP attempt only —
+  // unrelated to the settled phoneVerified* fields above. Set together each
+  // time a code is sent (send or resend both overwrite these, invalidating
+  // any prior attempt); cleared on successful verification. `phoneOtpPhone`
+  // guards against verifying a stale pinId against a number the vendor has
+  // since changed (see PHONE CHANGE requirement) — see
+  // app/api/vendor/phone-verification/confirm/route.ts.
+  phoneOtpPinId String?
+  phoneOtpPhone String?
 
   applications            Application[]
   notes                   VendorNote[]

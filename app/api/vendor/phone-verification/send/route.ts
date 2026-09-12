@@ -3,20 +3,20 @@ import { prisma } from "@/lib/prisma";
 import { getVendorSession } from "@/lib/auth";
 import { rateLimit, peekCooldown, armCooldown, clientIp } from "@/lib/rateLimit";
 import { normalizePhoneToE164, maskPhoneForDisplay } from "@/lib/phone";
-import { sendPhoneOtp } from "@/lib/sms/twilio";
+import { sendPhoneOtp } from "@/lib/sms/infobip";
 import { isPhoneVerified } from "@/lib/verification";
 
 const RESEND_COOLDOWN_MS = 45 * 1000;
 
 // Sends an SMS OTP to the SESSION vendor's current phone number, via
-// Twilio Verify — never accepts a phone number from the request body, so
+// Infobip 2FA — never accepts a phone number from the request body, so
 // this can only ever target your own account's own current number
 // (PART 12: "unauthorized verification requests").
 //
-// The resend cooldown is only ARMED after Twilio actually accepts the send
+// The resend cooldown is only ARMED after Infobip actually accepts the send
 // (see armCooldown() below) — never at the top of the request. Arming it
 // unconditionally (the old behavior) meant a failed send — bad number,
-// Twilio outage, our own rate limit — left the vendor locked out of
+// provider outage, our own rate limit — left the vendor locked out of
 // retrying for the full cooldown window even though no code was ever sent,
 // with the frontend showing a resend countdown and no OTP box: exactly the
 // "SMS silently fails but the UI acts like it worked" bug.
@@ -69,13 +69,21 @@ export async function POST(req: NextRequest) {
   const result = await sendPhoneOtp(normalizedPhone);
   if (!result.ok) {
     // result.code is one of INVALID_NUMBER / RATE_LIMITED / PROVIDER_FAILURE
-    // / CONFIG_MISSING — the raw Twilio error is already logged server-side
+    // / CONFIG_MISSING — the raw Infobip error is already logged server-side
     // inside sendPhoneOtp, never returned to the client.
     const status = result.code === "INVALID_NUMBER" ? 400 : result.code === "RATE_LIMITED" ? 429 : 503;
     return NextResponse.json({ error: result.error, code: result.code }, { status });
   }
 
-  // Only now — after Twilio actually accepted the request — does the
+  // Persist the pinId this attempt must be checked against — a fresh
+  // send/resend always overwrites it, invalidating whatever was active
+  // before. Kept server-side only; the frontend never sees it.
+  await prisma.vendor.update({
+    where: { id: vendor.id },
+    data: { phoneOtpPinId: result.pinId, phoneOtpPhone: normalizedPhone },
+  });
+
+  // Only now — after Infobip actually accepted the request — does the
   // vendor's resend window start counting down.
   armCooldown(cooldownKey, RESEND_COOLDOWN_MS);
 

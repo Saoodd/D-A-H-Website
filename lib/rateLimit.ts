@@ -23,11 +23,12 @@ export function rateLimit(key: string, limit: number, windowMs: number): boolean
 /** Single-slot "cooldown" (e.g. resend verification email/SMS), split into a
  *  read-only check and an explicit arm step — deliberately NOT one
  *  check-and-set call. A cooldown must only start counting down after the
- *  guarded action actually succeeded (e.g. Twilio accepted the SMS send);
- *  arming it just because the action was ATTEMPTED would lock a vendor out
- *  of retrying for the full window after a failure that never sent
- *  anything (invalid number, Twilio outage, etc.). Callers: peek before
- *  attempting, armCooldown only once the attempt has actually succeeded. */
+ *  guarded action actually succeeded (e.g. the SMS provider accepted the
+ *  send); arming it just because the action was ATTEMPTED would lock a
+ *  vendor out of retrying for the full window after a failure that never
+ *  sent anything (invalid number, provider outage, etc.). Callers: peek
+ *  before attempting, armCooldown only once the attempt has actually
+ *  succeeded. */
 export function peekCooldown(key: string): { onCooldown: boolean; retryAfterSeconds?: number } {
   const now = Date.now();
   const bucket = buckets.get(key);
