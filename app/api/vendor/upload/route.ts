@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { getVendorSession } from "@/lib/auth";
-import { safeUploadFilename, isBlobConfigured, BLOB_NOT_CONFIGURED_MESSAGE, fileMatchesDeclaredType } from "@/lib/uploadSafety";
+import { safeUploadFilename, isBlobConfigError, BLOB_NOT_CONFIGURED_MESSAGE, fileMatchesDeclaredType } from "@/lib/uploadSafety";
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10MB
 
@@ -43,10 +43,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `That file doesn't look like a real ${spec.label.toLowerCase()}.` }, { status: 400 });
   }
 
-  if (!isBlobConfigured()) {
-    return NextResponse.json({ error: BLOB_NOT_CONFIGURED_MESSAGE }, { status: 500 });
-  }
-
   try {
     const blob = await put(`vendor-docs/${session.vendorId}/${safeUploadFilename(file.type)}`, file, {
       access: spec.access,
@@ -54,7 +50,12 @@ export async function POST(req: NextRequest) {
       contentType: file.type,
     });
     return NextResponse.json({ ok: true, url: blob.url });
-  } catch {
+  } catch (err) {
+    if (isBlobConfigError(err)) {
+      console.error("[vendor upload] Blob not configured", { message: (err as Error).message });
+      return NextResponse.json({ error: BLOB_NOT_CONFIGURED_MESSAGE, code: "BLOB_NOT_CONFIGURED" }, { status: 503 });
+    }
+    console.error("[vendor upload] failed", { message: err instanceof Error ? err.message : String(err) });
     return NextResponse.json({ error: "Upload failed. Please try again." }, { status: 500 });
   }
 }

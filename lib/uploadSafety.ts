@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "crypto";
-import { del } from "@vercel/blob";
+import { del, BlobError } from "@vercel/blob";
 
 // The client-supplied filename (and its MIME type) are both attacker
 // controlled — a request can declare any `type` and `name` it likes
@@ -25,19 +25,27 @@ export function safeUploadFilename(mimeType: string): string {
   return `${randomUUID()}.${ext}`;
 }
 
-// @vercel/blob resolves credentials itself, in this priority order: an
-// explicit `token`/`oidcToken` option (never passed anywhere in this app),
-// then `VERCEL_OIDC_TOKEN` + `BLOB_STORE_ID` (short-lived, auto-rotated by
-// Vercel when the connected store has OIDC enabled — no static secret in
-// this app at all), then the static `BLOB_READ_WRITE_TOKEN`. This just
-// mirrors that same priority so a pre-flight "is Blob even configured"
-// check doesn't wrongly report "not configured" when only the OIDC pair is
-// present.
-export function isBlobConfigured(): boolean {
-  return !!((process.env.VERCEL_OIDC_TOKEN && process.env.BLOB_STORE_ID) || process.env.BLOB_READ_WRITE_TOKEN);
-}
-
+// @vercel/blob resolves credentials itself: an explicit `token`/`oidcToken`
+// option (never passed anywhere in this app), then the Vercel-issued OIDC
+// token (delivered per-request via an `x-vercel-oidc-token` header that
+// @vercel/blob's own SDK reads internally — NOT reliably mirrored into
+// `process.env.VERCEL_OIDC_TOKEN`, so checking that env var directly here
+// is not a valid way to predict whether OIDC auth will actually work) with
+// `BLOB_STORE_ID`, then the static `BLOB_READ_WRITE_TOKEN`. Rather than
+// guess at credential availability ahead of time, every upload route below
+// just attempts the real `put()` call and uses isBlobConfigError() on the
+// result — the SDK itself is the only reliable source of truth here.
 export const BLOB_NOT_CONFIGURED_MESSAGE = "File uploads aren't configured yet — please contact DAH.";
+
+/** True when `err` is @vercel/blob reporting that it found no usable
+ *  credentials at all (no token option, no OIDC token + store ID, no
+ *  BLOB_READ_WRITE_TOKEN) — a genuine configuration problem, as opposed to
+ *  a transient provider/network failure. Callers should log the real
+ *  message (safe — it's the SDK's own generic text, never a secret) and
+ *  show BLOB_NOT_CONFIGURED_MESSAGE to the user only in this case. */
+export function isBlobConfigError(err: unknown): boolean {
+  return err instanceof BlobError && /no blob credentials found/i.test(err.message);
+}
 
 // Sensible, conservative defaults for a batch gallery upload — shown in the
 // admin UI and enforced server-side identically, so the two can never

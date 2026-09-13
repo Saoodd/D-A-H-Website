@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { requireAdmin } from "@/lib/adminGuard";
-import { safeUploadFilename, isBlobConfigured, BLOB_NOT_CONFIGURED_MESSAGE, fileMatchesDeclaredType } from "@/lib/uploadSafety";
+import { safeUploadFilename, isBlobConfigError, BLOB_NOT_CONFIGURED_MESSAGE, fileMatchesDeclaredType } from "@/lib/uploadSafety";
 
 const MAX_BYTES = 15 * 1024 * 1024; // 15MB — a photo/scan of a venue floor plan
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
@@ -30,10 +30,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "That file doesn't look like a real image of the type it claims to be." }, { status: 400 });
   }
 
-  if (!isBlobConfigured()) {
-    return NextResponse.json({ error: BLOB_NOT_CONFIGURED_MESSAGE }, { status: 500 });
-  }
-
   try {
     const blob = await put(`floorplans/${safeUploadFilename(file.type)}`, file, {
       access: "public",
@@ -41,7 +37,12 @@ export async function POST(req: NextRequest) {
       contentType: file.type,
     });
     return NextResponse.json({ ok: true, url: blob.url });
-  } catch {
+  } catch (err) {
+    if (isBlobConfigError(err)) {
+      console.error("[admin upload] Blob not configured", { message: (err as Error).message });
+      return NextResponse.json({ error: BLOB_NOT_CONFIGURED_MESSAGE, code: "BLOB_NOT_CONFIGURED" }, { status: 503 });
+    }
+    console.error("[admin upload] failed", { message: err instanceof Error ? err.message : String(err) });
     return NextResponse.json({ error: "Upload failed. Please try again." }, { status: 500 });
   }
 }
