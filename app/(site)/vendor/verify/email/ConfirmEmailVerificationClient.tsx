@@ -72,11 +72,13 @@ export function ConfirmEmailVerificationClient({ token }: { token: string }) {
           <div>
             <h1 className="font-heading text-3xl text-brown-dark mb-3">{isAr ? "انتهت صلاحية الرابط" : "Link expired"}</h1>
             <p className="text-sm text-brown-light leading-relaxed">
-              {isAr ? "لقد انتهت صلاحية رابط التحقق هذا." : "This verification link has expired."}
+              {isAr
+                ? "لقد انتهت صلاحية رابط التحقق هذا. تأكيد بريدك الإلكتروني اختياري وليس مطلوباً لاستخدام حسابك."
+                : "This verification link has expired. Confirming your email is optional and isn't required to use your account."}
             </p>
             <div className="mt-6">
               <LinkButton href="/vendor/profile" size="md">
-                {isAr ? "إرسال بريد تحقق جديد" : "Send a New Verification Email"}
+                {isAr ? "الذهاب إلى الملف الشخصي" : "Go to Profile"}
               </LinkButton>
             </div>
           </div>

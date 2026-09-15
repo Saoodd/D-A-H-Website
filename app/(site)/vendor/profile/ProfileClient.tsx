@@ -29,7 +29,6 @@ interface Vendor {
   tradeLicenseNumber: string | null;
   tradeLicenseFileUrl: string | null;
   tradeLicenseExpiry: string | null;
-  emailVerified: boolean;
   phoneVerified: boolean;
 }
 
@@ -122,26 +121,8 @@ export function ProfileClient({
   const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [ackBusyId, setAckBusyId] = useState<string | null>(null);
   const [verifyingPhone, setVerifyingPhone] = useState(false);
-  const [emailResendBusy, setEmailResendBusy] = useState(false);
-  const [emailResendNotice, setEmailResendNotice] = useState<string | null>(null);
 
   const dateFmt = (iso: string) => new Date(iso).toLocaleDateString(locale === "ar" ? "ar-AE" : "en-AE");
-
-  async function resendVerificationEmail() {
-    setEmailResendBusy(true);
-    setEmailResendNotice(null);
-    try {
-      const res = await fetch("/api/vendor/email-verification/send", { method: "POST" });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setEmailResendNotice(locale === "ar" ? "تم إرسال رابط التحقق." : "Verification email sent.");
-      } else {
-        setEmailResendNotice(data.error || (locale === "ar" ? "تعذر الإرسال. حاول مرة أخرى." : "Couldn't send — please try again."));
-      }
-    } finally {
-      setEmailResendBusy(false);
-    }
-  }
 
   async function upload(file: File, setUrl: (url: string) => void, setBusy: (b: boolean) => void, purpose: "logo" | "trade-license") {
     setBusy(true);
@@ -245,67 +226,6 @@ export function ProfileClient({
             <MetricCard label={t("vendorProfile.statsApplications")} value={stats.applicationsCount} />
           </div>
 
-          {/* Mobile verification is the eligibility gate for applying to
-              events (server-enforced in the apply/booth/checkout routes) —
-              this card leads with it and calls it out clearly when missing.
-              Email verification is a normal account detail (used for login
-              and receipts, never a gate), shown underneath with a lighter
-              touch so it doesn't read as equally mandatory. */}
-          <div className="rounded-[10px] border border-brown/10 bg-cream p-6">
-            <p className="label-caps mb-4">{locale === "ar" ? "التحقق من الحساب" : "Account Verification"}</p>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div>
-                  <p className="text-xs uppercase tracking-widest text-brown-light">{locale === "ar" ? "رقم الجوال" : "Mobile"}</p>
-                  <p className="text-sm text-brown-dark mt-0.5">{vendor.phone}</p>
-                  {!vendor.phoneVerified && (
-                    <p className="text-xs text-amber-800 dark:text-amber-400 mt-1">
-                      {locale === "ar" ? "مطلوب للتقديم على الفعاليات" : "Required to apply to events"}
-                    </p>
-                  )}
-                </div>
-                {vendor.phoneVerified ? (
-                  <StatusBadge label={locale === "ar" ? "تم التحقق" : "Verified"} tone="positive" />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setVerifyingPhone(true)}
-                    className="text-sm px-4 py-2 rounded-[6px] bg-brown text-cream-soft hover:bg-brown-dark transition-colors"
-                  >
-                    {locale === "ar" ? "التحقق من الجوال" : "Verify Mobile"}
-                  </button>
-                )}
-              </div>
-              {/* Email verification is real (a clicked confirmation link)
-                  but never gates anything — used for login, receipts and
-                  notifications. Shown with a lighter touch than Mobile
-                  above (no "required" language, no primary button) so it
-                  never reads as equally mandatory. */}
-              <div className="flex items-center justify-between gap-3 flex-wrap pt-4 border-t border-brown/10">
-                <div>
-                  <p className="text-xs uppercase tracking-widest text-brown-light">{locale === "ar" ? "البريد الإلكتروني" : "Email"}</p>
-                  <p className="text-sm text-brown-dark mt-0.5">{vendor.email}</p>
-                </div>
-                {vendor.emailVerified ? (
-                  <StatusBadge label={locale === "ar" ? "تم التحقق" : "Verified"} tone="neutral" />
-                ) : (
-                  <div className="flex flex-col items-end gap-1.5">
-                    <StatusBadge label={locale === "ar" ? "لم يتم التحقق" : "Not verified"} tone="neutral" />
-                    <button
-                      type="button"
-                      onClick={resendVerificationEmail}
-                      disabled={emailResendBusy}
-                      className="text-xs text-brown-light underline hover:text-brown-dark disabled:opacity-50"
-                    >
-                      {emailResendBusy ? "…" : locale === "ar" ? "إعادة إرسال رابط التحقق" : "Resend Verification Email"}
-                    </button>
-                    {emailResendNotice && <span className="text-[11px] text-brown-light">{emailResendNotice}</span>}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
           <div className="rounded-[10px] border border-brown/10 bg-cream p-6">
             <div className="flex items-center justify-between mb-2">
               <p className="label-caps">{t("vendorProfile.completionLabel")}</p>
@@ -375,8 +295,29 @@ export function ProfileClient({
                 <input value={contactName} onChange={(e) => setContactName(e.target.value)} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft" />
               </label>
               <label className="flex flex-col gap-1 text-sm">
-                {t("form.phone")}
+                <span className="flex items-center justify-between gap-2">
+                  <span>{t("form.phone")}</span>
+                  {vendor.phoneVerified ? (
+                    <StatusBadge label={locale === "ar" ? "تم التحقق" : "Verified"} tone="positive" />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setVerifyingPhone(true)}
+                      className="text-xs text-brown underline underline-offset-2 hover:text-brown-dark shrink-0"
+                    >
+                      {locale === "ar" ? "التحقق من الجوال" : "Verify Mobile"}
+                    </button>
+                  )}
+                </span>
                 <input value={phone} onChange={(e) => setPhone(e.target.value)} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft" />
+                {/* Phone is the one real eligibility gate before a vendor can
+                    apply/book (server-enforced) — profile completion above
+                    is a separate concept and stays 100% regardless of this. */}
+                {!vendor.phoneVerified && (
+                  <span className="text-xs text-amber-800 dark:text-amber-400">
+                    {locale === "ar" ? "التحقق مطلوب للتقديم على الفعاليات" : "Verification required to apply to events"}
+                  </span>
+                )}
               </label>
               <label className="flex flex-col gap-1 text-sm">
                 {locale === "ar" ? "اسم المستخدم" : "Username"}

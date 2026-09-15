@@ -24,8 +24,6 @@ interface VendorFull {
   tradeLicenseNumber: string | null;
   tradeLicenseFileUrl: string | null;
   tradeLicenseExpiry: string | null;
-  emailVerified: boolean;
-  emailVerifiedAt: string | null;
   phoneVerified: boolean;
   phoneVerifiedAt: string | null;
   phoneVerifiedMethod: string | null;
@@ -326,21 +324,16 @@ export function VendorDetailClient({
           </section>
 
           <section>
-            {/* Email verification is real (a clicked confirmation link) but
-                never a gate — shown read-only here, no admin override.
-                Phone is the one real eligibility requirement, so it gets
-                the manual-override action too. */}
+            {/* Phone is the one real eligibility requirement for a vendor to
+                apply/book, so it's the only status shown here with an admin
+                override action. Email is a normal contact detail — DAH does
+                not require vendors to verify it, so it's shown plainly with
+                no verification status. */}
             <p className="label-caps mb-3">Contact verification</p>
             <div className="rounded-[10px] border border-brown/10 bg-cream p-5 text-sm grid sm:grid-cols-2 gap-4">
               <div>
                 <p className="text-brown-light text-xs uppercase tracking-widest mb-1">Email</p>
-                <p className="text-brown-dark mb-1.5">{vendor.email}</p>
-                <div className="flex items-center gap-2">
-                  <StatusBadge label={vendor.emailVerified ? "Verified" : "Unverified"} tone={vendor.emailVerified ? "positive" : "neutral"} />
-                  {vendor.emailVerifiedAt && (
-                    <span className="text-xs text-brown-light">{new Date(vendor.emailVerifiedAt).toLocaleString()}</span>
-                  )}
-                </div>
+                <p className="text-brown-dark">{vendor.email}</p>
               </div>
               <div>
                 <p className="text-brown-light text-xs uppercase tracking-widest mb-1">Mobile</p>

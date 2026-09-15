@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getDisplayStatus } from "@/lib/status";
 import { getVendorParticipation } from "@/lib/vendorStats";
-import { isEmailVerified, isPhoneVerified } from "@/lib/verification";
+import { isPhoneVerified } from "@/lib/verification";
 import { VendorDetailClient } from "./VendorDetailClient";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -57,8 +57,6 @@ export default async function AdminVendorDetailPage({ params }: { params: Promis
         tradeLicenseNumber: vendor.tradeLicenseNumber,
         tradeLicenseFileUrl: vendor.tradeLicenseFileUrl,
         tradeLicenseExpiry: vendor.tradeLicenseExpiry ? vendor.tradeLicenseExpiry.toISOString().slice(0, 10) : null,
-        emailVerified: isEmailVerified(vendor),
-        emailVerifiedAt: vendor.emailVerifiedAt ? vendor.emailVerifiedAt.toISOString() : null,
         phoneVerified: isPhoneVerified(vendor),
         phoneVerifiedAt: vendor.phoneVerifiedAt ? vendor.phoneVerifiedAt.toISOString() : null,
         phoneVerifiedMethod: vendor.phoneVerifiedMethod,

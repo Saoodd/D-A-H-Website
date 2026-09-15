@@ -49,10 +49,10 @@ export async function sendVerifyEmailEmail(opts: { vendorId: string; vendorEmail
     subject: "Verify your email",
     html: emailShell(
       `${emailHeading("Verify your email")}
-      ${emailParagraph(`Welcome to Dar Al Hay. Confirm your email address to finish setting up your business account, ${opts.businessName}.`)}
+      ${emailParagraph(`Welcome to Dar Al Hay. You can confirm your email address for your business account, ${opts.businessName}, as an added security measure — it isn't required to use your account.`)}
       ${emailButton("Verify email", opts.verifyUrl)}
       ${emailMuted("This link expires in 24 hours. If you didn't create a Dar Al Hay account, you can ignore this email.")}`,
-      { preheader: "Confirm your email address to finish setting up your DAH account." }
+      { preheader: "Optionally confirm your email address for your DAH account." }
     ),
   });
 }
