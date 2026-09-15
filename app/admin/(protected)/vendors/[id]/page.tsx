@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getDisplayStatus } from "@/lib/status";
+import { formatBoothCodes } from "@/lib/constants";
 import { getVendorParticipation } from "@/lib/vendorStats";
 import { isPhoneVerified } from "@/lib/verification";
 import { VendorDetailClient } from "./VendorDetailClient";
@@ -72,15 +73,16 @@ export default async function AdminVendorDetailPage({ params }: { params: Promis
       }}
       applications={applications.map((a) => {
         const succeeded = a.payments[0]?.status === "SUCCEEDED";
-        const heldBooth = a.heldBooths.find((b) => b.status === "HELD") || null;
-        const soldBooth = a.assignedBooths.find((b) => b.status === "SOLD") || null;
+        const heldCodes = a.heldBooths.filter((b) => b.status === "HELD").map((b) => b.code);
+        const soldCodes = a.assignedBooths.filter((b) => b.status === "SOLD").map((b) => b.code);
+        const codes = soldCodes.length ? soldCodes : heldCodes;
         return {
           id: a.id,
           eventName: a.event.name,
           eventStartDate: a.event.startDate.toISOString(),
           status: a.status,
           displayStatus: getDisplayStatus(a, succeeded),
-          boothCode: soldBooth?.code || heldBooth?.code || null,
+          boothCode: codes.length ? formatBoothCodes(codes) : null,
           paymentId: succeeded ? a.payments[0].id : null,
         };
       })}

@@ -66,9 +66,28 @@ export function ReceiptView({
           <Row label="Event" value={receipt.eventName} />
           <Row label="Event Date" value={formatEventDate(receipt.eventStartDate)} />
           <Row label="Venue" value={receipt.eventLocation} />
-          <Row label="Booth" value={receipt.boothCode} />
-          <Row label="Booth Size" value={receipt.boothSizeLabel} />
+          {receipt.booths.length <= 1 ? (
+            <>
+              <Row label="Booth" value={receipt.boothCode} />
+              <Row label="Booth Size" value={receipt.boothSizeLabel} />
+            </>
+          ) : null}
         </dl>
+
+        {receipt.booths.length > 1 && (
+          <div className="border-t border-brown/10 pt-5 mb-6">
+            <dl className="text-sm space-y-1.5">
+              {receipt.booths.map((b) => (
+                <div key={b.code} className="flex gap-2">
+                  <dt className="text-brown-light shrink-0 w-44">
+                    Booth {b.code} — {b.sizeLabel}
+                  </dt>
+                  <dd className="text-brown-dark">{formatAed(b.priceAedFils)}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
 
         <div className="border-t border-brown/10 pt-5 mb-6">
           <dl className="text-sm space-y-1.5">

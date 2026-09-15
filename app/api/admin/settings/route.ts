@@ -20,6 +20,7 @@ export async function PATCH(req: NextRequest) {
     data.contactInstagramHandle = body.contactInstagramHandle ? String(body.contactInstagramHandle).replace(/^@/, "") : null;
   }
   if ("tradeLicenseRequired" in body) data.tradeLicenseRequired = Boolean(body.tradeLicenseRequired);
+  if ("allowMultipleBoothsDefault" in body) data.allowMultipleBoothsDefault = Boolean(body.allowMultipleBoothsDefault);
 
   const settings = await prisma.settings.update({ where: { id: "singleton" }, data });
   return NextResponse.json({ ok: true, settings });

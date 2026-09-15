@@ -67,7 +67,7 @@ export default async function EventDetailPage({
           ? {
               id: view.id,
               displayStatus: view.displayStatus,
-              holdStage: view.boothHold?.holdStage ?? null,
+              holdStage: view.boothHolds[0]?.holdStage ?? null,
               eventTermsRequired: view.eventTermsRequired,
               eventTermsAccepted: view.eventTermsAccepted,
             }

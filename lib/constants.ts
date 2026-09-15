@@ -81,6 +81,21 @@ export function splitVatInclusiveTotal(totalAedFils: number): { baseAedFils: num
   return { baseAedFils, vatAedFils: totalAedFils - baseAedFils };
 }
 
+// Hard ceiling on booths per booking — not itself admin-configurable (per
+// spec: "Never more than 2 unless an Admin/event setting is added later").
+// Whether multi-booth is allowed AT ALL is the configurable part — see
+// Settings.allowMultipleBoothsDefault / Event.allowMultipleBooths and
+// lib/settings.ts getMaxBoothsPerBooking().
+export const MAX_BOOTHS_PER_BOOKING = 2;
+
+/** The single place a list of booth codes becomes display text — every
+ *  admin list/detail/export that shows "which booth(s) did this booking
+ *  get" calls this, so "B3 + B4" is spelled identically everywhere rather
+ *  than each call site inventing its own join format. */
+export function formatBoothCodes(codes: string[]): string {
+  return codes.length ? codes.join(" + ") : "—";
+}
+
 // "Display status" combines Application.status + booth/payment state into the
 // single filterable status the admin panel and vendor dashboard show:
 // Pending / Rejected / Accepted-Unpaid / Paid / Expired.

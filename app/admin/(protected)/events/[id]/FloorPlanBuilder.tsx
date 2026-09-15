@@ -61,6 +61,8 @@ export function FloorPlanBuilder({
   const [placeName, setPlaceName] = useState("");
   const [placePrice, setPlacePrice] = useState("");
   const [placeColor, setPlaceColor] = useState("#C97C4B");
+  const [placeWidthM, setPlaceWidthM] = useState("");
+  const [placeDepthM, setPlaceDepthM] = useState("");
 
   const [selectionPrice, setSelectionPrice] = useState("");
   const [applyingSelectionPrice, setApplyingSelectionPrice] = useState(false);
@@ -198,6 +200,8 @@ export function FloorPlanBuilder({
           size: "custom",
           priceAedFils: placePrice ? Math.round(Number(placePrice) * 100) : null,
           colorHex: placeColor || null,
+          widthMm: placeWidthM.trim() ? Math.round(Number(placeWidthM) * 1000) : null,
+          depthMm: placeDepthM.trim() ? Math.round(Number(placeDepthM) * 1000) : null,
           gridX,
           gridY,
           gridW: w,
@@ -208,10 +212,12 @@ export function FloorPlanBuilder({
       if (!res.ok) setNotice(data.error || "Could not add booth");
       else {
         setPlaceName("");
+        setPlaceWidthM("");
+        setPlaceDepthM("");
         await load();
       }
     },
-    [eventId, placeName, placePrice, placeColor, load]
+    [eventId, placeName, placePrice, placeColor, placeWidthM, placeDepthM, load]
   );
 
   async function uploadFloorPlanImage(file: File) {
@@ -721,13 +727,13 @@ export function FloorPlanBuilder({
               <div className="rounded-[10px] border border-brown/10 bg-cream p-5">
                 <p className="text-sm font-medium text-brown-dark mb-2">Bulk import booths (paste JSON)</p>
                 <p className="text-xs text-brown-light mb-3">
-                  {'Array of {"code","size","gridX","gridY","gridW","gridH"} (X/Y/W/H as % of the canvas, 0-100) — paste the full real booth list here once confirmed. Existing codes are updated in place; new codes are created as available.'}
+                  {'Array of {"code","size","gridX","gridY","gridW","gridH","widthMm","depthMm"} (X/Y/W/H as % of the canvas, 0-100; widthMm/depthMm are optional real booth dimensions in millimeters, used for setup-size fit checks) — paste the full real booth list here once confirmed. Existing codes are updated in place; new codes are created as available.'}
                 </p>
                 <textarea
                   value={bulkText}
                   onChange={(e) => setBulkText(e.target.value)}
                   rows={6}
-                  placeholder='[{"code":"A1","size":"2x2","gridX":10,"gridY":10,"gridW":6,"gridH":6}]'
+                  placeholder='[{"code":"A1","size":"2x2","gridX":10,"gridY":10,"gridW":6,"gridH":6,"widthMm":2000,"depthMm":2000}]'
                   className="w-full border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft text-xs font-mono"
                 />
                 <button onClick={submitBulk} className="mt-3 px-4 py-2 rounded-[6px] bg-brown text-cream-soft text-sm">
@@ -895,6 +901,32 @@ export function FloorPlanBuilder({
                     />
                   </div>
                 </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex flex-col gap-1">
+                    Width (m)
+                    <input
+                      id="booth-width-m"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      defaultValue={selected.widthMm != null ? selected.widthMm / 1000 : ""}
+                      placeholder="e.g. 2.0"
+                      className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    Depth (m)
+                    <input
+                      id="booth-depth-m"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      defaultValue={selected.depthMm != null ? selected.depthMm / 1000 : ""}
+                      placeholder="e.g. 2.0"
+                      className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
+                    />
+                  </label>
+                </div>
                 <label className="flex flex-col gap-1">
                   Status
                   <select
@@ -952,6 +984,8 @@ export function FloorPlanBuilder({
                     const w = (document.getElementById("booth-w") as HTMLInputElement).value;
                     const h = (document.getElementById("booth-h") as HTMLInputElement).value;
                     const rotation = (document.getElementById("booth-rotation") as HTMLInputElement).value;
+                    const widthM = (document.getElementById("booth-width-m") as HTMLInputElement).value;
+                    const depthM = (document.getElementById("booth-depth-m") as HTMLInputElement).value;
                     saveSelected({
                       status,
                       code,
@@ -964,6 +998,8 @@ export function FloorPlanBuilder({
                       rotation: rotation ? Number(rotation) : 0,
                       assignedApplicationId: assignedApplicationId || null,
                       manualAssigneeName: assignedApplicationId ? null : manualAssigneeName || null,
+                      widthMm: widthM.trim() ? Math.round(Number(widthM) * 1000) : null,
+                      depthMm: depthM.trim() ? Math.round(Number(depthM) * 1000) : null,
                     });
                   }}
                   className="px-4 py-2 rounded-[6px] bg-brown text-cream-soft text-sm"
@@ -1030,6 +1066,32 @@ export function FloorPlanBuilder({
                     />
                   </div>
                 </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex flex-col gap-1 text-xs text-brown-light">
+                    Width (m) <span className="text-brown-light/60">optional</span>
+                    <input
+                      value={placeWidthM}
+                      onChange={(e) => setPlaceWidthM(e.target.value)}
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="2.0"
+                      className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-sm"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs text-brown-light">
+                    Depth (m) <span className="text-brown-light/60">optional</span>
+                    <input
+                      value={placeDepthM}
+                      onChange={(e) => setPlaceDepthM(e.target.value)}
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="2.0"
+                      className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-sm"
+                    />
+                  </label>
+                </div>
                 <button
                   type="button"
                   onClick={() => setPlacementOn((v) => !v)}

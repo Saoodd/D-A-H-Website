@@ -16,6 +16,7 @@ export default async function AdminSettingsPage() {
         contactEmail={settings.contactEmail}
         contactInstagramHandle={settings.contactInstagramHandle}
         tradeLicenseRequired={settings.tradeLicenseRequired}
+        allowMultipleBoothsDefault={settings.allowMultipleBoothsDefault}
       />
     </div>
   );

@@ -12,6 +12,8 @@ interface BulkBooth {
   priceAedFils?: number | null;
   colorHex?: string | null;
   rotation?: number;
+  widthMm?: number | null;
+  depthMm?: number | null;
 }
 
 // Bulk-paste the full booth list for an event (e.g. every A#/B# kiosk from
@@ -42,10 +44,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const priceAedFils = b.priceAedFils == null ? null : Math.round(Number(b.priceAedFils));
     const colorHex = b.colorHex ? String(b.colorHex).trim() : null;
     const rotation = b.rotation == null ? 0 : ((Math.round(Number(b.rotation)) % 360) + 360) % 360;
+    const widthMm = b.widthMm == null ? null : Math.round(Number(b.widthMm));
+    const depthMm = b.depthMm == null ? null : Math.round(Number(b.depthMm));
     if (
       !code ||
       [gridX, gridY, gridW, gridH].some((n) => Number.isNaN(n)) ||
       (priceAedFils != null && Number.isNaN(priceAedFils)) ||
+      (widthMm != null && Number.isNaN(widthMm)) ||
+      (depthMm != null && Number.isNaN(depthMm)) ||
       Number.isNaN(rotation)
     ) {
       errors.push(`Skipped invalid row: ${JSON.stringify(b)}`);
@@ -53,10 +59,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
     const existing = await prisma.booth.findUnique({ where: { eventId_code: { eventId: id, code } } });
     if (existing) {
-      await prisma.booth.update({ where: { id: existing.id }, data: { size, gridX, gridY, gridW, gridH, priceAedFils, colorHex, rotation } });
+      await prisma.booth.update({ where: { id: existing.id }, data: { size, gridX, gridY, gridW, gridH, priceAedFils, colorHex, rotation, widthMm, depthMm } });
       updated += 1;
     } else {
-      await prisma.booth.create({ data: { eventId: id, code, size, gridX, gridY, gridW, gridH, priceAedFils, colorHex, rotation, status: "AVAILABLE" } });
+      await prisma.booth.create({ data: { eventId: id, code, size, gridX, gridY, gridW, gridH, priceAedFils, colorHex, rotation, widthMm, depthMm, status: "AVAILABLE" } });
       created += 1;
     }
   }

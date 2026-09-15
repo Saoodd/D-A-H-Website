@@ -42,14 +42,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
     return NextResponse.json({ error: "This payment has already been resolved." }, { status: 409 });
   }
 
-  const booth = await prisma.booth.findUnique({ where: { id: payment.boothId } });
-  if (
-    !booth ||
-    booth.heldByApplicationId !== applicationId ||
-    booth.holdStage !== "PAYMENT" ||
-    !booth.holdExpiresAt ||
-    booth.holdExpiresAt < new Date()
-  ) {
+  const paymentBooths = await prisma.paymentBooth.findMany({ where: { paymentId }, include: { booth: true } });
+  const booths = paymentBooths.map((pb) => pb.booth);
+  const allStillValid = booths.every(
+    (booth) => booth.heldByApplicationId === applicationId && booth.holdStage === "PAYMENT" && booth.holdExpiresAt && booth.holdExpiresAt > new Date()
+  );
+  if (booths.length === 0 || !allStillValid) {
     await prisma.payment.update({ where: { id: paymentId }, data: { status: "FAILED" } });
     return NextResponse.json(
       { error: "Your payment session expired. Please select a booth again." },
@@ -64,30 +62,47 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
 
   if (outcome === "SUCCEEDED") {
     const soldAt = new Date();
+    const boothIds = booths.map((b) => b.id);
     // Same TOCTOU concern as the booth-hold route: guard the actual write
     // with the condition just re-checked above (still held by this
     // application, in the PAYMENT stage) so a double-submit or a race with
-    // an expiry sweep can't sell the booth twice or out from under the hold.
+    // an expiry sweep can't sell a booth twice or out from under the hold.
+    // Checking `sale.count === boothIds.length` (not just > 0) is what
+    // keeps a multi-booth sale all-or-nothing — if even one booth's row
+    // no longer matches, NONE of them are marked sold here, and the
+    // payment is simply failed rather than left half-applied.
     const sale = await prisma.booth.updateMany({
-      where: { id: booth.id, heldByApplicationId: applicationId, holdStage: "PAYMENT" },
+      where: { id: { in: boothIds }, heldByApplicationId: applicationId, holdStage: "PAYMENT" },
       data: {
         status: "SOLD",
         assignedApplicationId: applicationId,
         heldByApplicationId: null,
         holdStage: null,
         holdExpiresAt: null,
-        priceAedFilsAtSale: payment.amountAedFils,
         soldAt,
       },
     });
-    if (sale.count === 0) {
+    if (sale.count !== boothIds.length) {
       await prisma.payment.update({ where: { id: paymentId }, data: { status: "FAILED" } });
       return NextResponse.json(
         { error: "Your payment session expired. Please select a booth again." },
         { status: 409 }
       );
     }
+    // priceAedFilsAtSale is per-booth (unlike the shared soldAt/status
+    // above) — set individually from each PaymentBooth's own charged price.
+    await Promise.all(
+      paymentBooths.map((pb) => prisma.booth.update({ where: { id: pb.boothId }, data: { priceAedFilsAtSale: pb.priceAedFilsAtCharge } }))
+    );
     await prisma.payment.update({ where: { id: paymentId }, data: { status: "SUCCEEDED", paidAt: soldAt } });
+    // The acceptance deadline's only job was to force a timely payment —
+    // now that payment has genuinely succeeded, clear it so this booking
+    // can never later be caught and flipped to ACCEPTANCE_EXPIRED by
+    // lib/expiry.ts's sweep just because wall-clock time passed the
+    // original (now irrelevant) deadline. application.status itself stays
+    // "ACCEPTED" — there is no separate "CONFIRMED" status; getDisplayStatus()
+    // already derives "PAID" from ACCEPTED + a succeeded payment.
+    await prisma.application.update({ where: { id: applicationId }, data: { acceptanceExpiresAt: null } });
     await assignReceiptNumber(paymentId, soldAt);
 
     // getReceiptData is the same authoritative source the vendor's own
@@ -103,7 +118,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
         eventName: application.event.name,
         eventStartDate: application.event.startDate,
         eventLocation: application.event.location,
-        boothCode: booth.code,
+        boothCode: receipt.boothCode,
         boothSizeLabel: receipt.boothSizeLabel,
         subtotalAedFils: receipt.subtotalAedFils,
         vatAedFils: receipt.vatAedFils,

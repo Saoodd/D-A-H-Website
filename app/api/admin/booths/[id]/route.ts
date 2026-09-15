@@ -43,6 +43,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if ("colorHex" in body) {
     data.colorHex = body.colorHex || null;
   }
+  if ("widthMm" in body) {
+    data.widthMm = body.widthMm == null || body.widthMm === "" ? null : Math.round(Number(body.widthMm));
+  }
+  if ("depthMm" in body) {
+    data.depthMm = body.depthMm == null || body.depthMm === "" ? null : Math.round(Number(body.depthMm));
+  }
   for (const key of ["gridX", "gridY", "gridW", "gridH"] as const) {
     if (body[key] !== undefined) {
       const n = Number(body[key]);

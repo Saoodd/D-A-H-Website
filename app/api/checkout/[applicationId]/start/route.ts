@@ -30,16 +30,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
     return NextResponse.json({ error: "Your acceptance is not currently active." }, { status: 403 });
   }
 
-  const booth = await prisma.booth.findFirst({
+  const booths = await prisma.booth.findMany({
     where: { heldByApplicationId: applicationId, status: "HELD" },
   });
-  if (!booth) {
+  if (booths.length === 0) {
     return NextResponse.json({ error: "No active booth hold — please select a booth first." }, { status: 409 });
   }
 
   // The one rule that must never have a bypass: no route to payment exists
   // without accepting THIS event's current Terms & Conditions, even if the
-  // client skips the UI and calls this endpoint directly.
+  // client skips the UI and calls this endpoint directly. One acceptance
+  // covers the whole booking regardless of how many booths it has.
   const acceptedCurrentTerms = await hasAcceptedCurrentEventTerms(session.vendorId, applicationId, application.eventId);
   if (!acceptedCurrentTerms) {
     return NextResponse.json(
@@ -48,46 +49,57 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
     );
   }
 
-  const price = await getBoothPrice(booth, application.eventId);
-  if (price == null) {
-    return NextResponse.json({ error: "Pricing is not configured for this booth." }, { status: 500 });
+  // Price every held booth server-side — never trust a client-supplied
+  // total. One combined charge covers the whole set.
+  const priced: { boothId: string; code: string; priceAedFils: number }[] = [];
+  for (const booth of booths) {
+    const price = await getBoothPrice(booth, application.eventId);
+    if (price == null) {
+      return NextResponse.json({ error: "Pricing is not configured for this booth." }, { status: 500 });
+    }
+    priced.push({ boothId: booth.id, code: booth.code, priceAedFils: price });
   }
+  const totalAedFils = priced.reduce((sum, p) => sum + p.priceAedFils, 0);
 
   const holdExpiresAt = new Date(Date.now() + BOOTH_PAYMENT_HOLD_MINUTES * 60 * 1000);
-  await prisma.booth.update({
-    where: { id: booth.id },
+  await prisma.booth.updateMany({
+    where: { id: { in: booths.map((b) => b.id) } },
     data: { holdStage: "PAYMENT", holdExpiresAt },
   });
 
   const gateway = getGateway();
+  const boothCodes = priced.map((p) => p.code).join(" + ");
   const charge = await gateway.createCharge({
-    amountAedFils: price,
+    amountAedFils: totalAedFils,
     currency: "AED",
     applicationId,
-    boothId: booth.id,
+    boothId: priced[0].boothId, // representative booth for the single-booth-shaped gateway metadata — the real per-booth breakdown lives in PaymentBooth
     eventId: application.eventId,
     vendorEmail: application.email,
-    description: `Booth ${booth.code} — ${application.eventId}`,
+    description: `Booth ${boothCodes} — ${application.eventId}`,
   });
 
   const payment = await prisma.payment.create({
     data: {
       applicationId,
       eventId: application.eventId,
-      boothId: booth.id,
-      amountAedFils: price,
+      boothId: priced[0].boothId,
+      amountAedFils: totalAedFils,
       currency: "AED",
       status: "PENDING",
       provider: gateway.name,
       providerRef: charge.providerRef,
+      booths: {
+        create: priced.map((p) => ({ boothId: p.boothId, priceAedFilsAtCharge: p.priceAedFils })),
+      },
     },
   });
 
   return NextResponse.json({
     paymentId: payment.id,
     providerRef: charge.providerRef,
-    amountAedFils: price,
-    boothCode: booth.code,
+    amountAedFils: totalAedFils,
+    boothCode: boothCodes,
     holdExpiresAt: holdExpiresAt.toISOString(),
   });
 }

@@ -2,6 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import { getVendorSession } from "@/lib/auth";
 import { getApplicationView } from "@/lib/applicationView";
 import { getPublishedAgreement } from "@/lib/agreements";
+import { formatBoothCodes } from "@/lib/constants";
 import { EventTermsClient } from "./EventTermsClient";
 
 export default async function EventTermsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -28,7 +29,7 @@ export default async function EventTermsPage({ params }: { params: Promise<{ id:
       eventDate={view.event.startDate}
       venue={view.event.location}
       businessName={view.businessName}
-      boothCode={view.boothHold?.code ?? null}
+      boothCode={view.boothHolds.length ? formatBoothCodes(view.boothHolds.map((b) => b.code)) : null}
       title={agreement.title}
       version={agreement.version}
       bodyHtml={agreement.bodyHtml}

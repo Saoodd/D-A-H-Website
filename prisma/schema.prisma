@@ -47,6 +47,14 @@ model Settings {
   // each other. false = optional (default — matches current stated policy).
   tradeLicenseRequired Boolean @default(false)
 
+  // Global default for whether a vendor may hold/book more than one booth
+  // (max 2, see MAX_BOOTHS_PER_BOOKING in lib/constants.ts — not itself
+  // configurable yet) in a single application. Event.allowMultipleBooths
+  // overrides this per event, same nullable-override pattern as
+  // acceptanceDeadlineHours above. false = single-booth only (default —
+  // matches current behavior for every existing event).
+  allowMultipleBoothsDefault Boolean @default(false)
+
   updatedAt DateTime @updatedAt
 }
 
@@ -97,6 +105,10 @@ model Event {
 
   // Overrides Settings.defaultAcceptanceDeadlineHours for this event only.
   acceptanceDeadlineHours Int?
+
+  // Overrides Settings.allowMultipleBoothsDefault for this event only —
+  // lets DAH turn 2-booth bookings on/off per event without a code change.
+  allowMultipleBooths Boolean?
 
   booths           Booth[]
   features         FloorPlanFeature[]
@@ -157,6 +169,18 @@ model Booth {
   priceAedFils Int?
   colorHex     String?
 
+  // The booth's real physical footprint, in millimeters — set by Admin
+  // (see requirement: admin floor-plan/booth editor). Deliberately separate
+  // from `gridW`/`gridH` below, which are canvas-percentage POSITION/size
+  // for rendering only and do not reliably correspond to real-world
+  // dimensions (e.g. a newly placed booth defaults to a fixed 6% canvas
+  // box regardless of its actual size). Null on any booth Admin hasn't
+  // configured yet — the size-fit check (lib/boothFit.ts) simply skips
+  // itself when either side of the comparison is unknown, never blocking
+  // a booking over data DAH hasn't entered.
+  widthMm Int?
+  depthMm Int?
+
   // Position/size as a percentage (0-100) of the floor plan canvas/image —
   // lets the admin click-to-place a booth instead of typing coordinates.
   gridX    Float
@@ -182,7 +206,8 @@ model Booth {
   priceAedFilsAtSale Int? // snapshot of price actually charged/reserved at, historical
   soldAt             DateTime?
 
-  payments Payment[]
+  payments      Payment[]
+  paymentBooths PaymentBooth[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -196,8 +221,8 @@ model Booth {
 // (Admin → Vendors). Once verified, they can apply to individual published
 // events from their dashboard (see Application below).
 model Vendor {
-  id           String  @id @default(cuid())
-  email        String  @unique
+  id            String  @id @default(cuid())
+  email         String  @unique
   // The vendor's chosen sign-in name, in the exact casing they typed —
   // shown back to them everywhere. `usernameLower` is the real uniqueness
   // and lookup key (trimmed + lowercased): "SaeedStore", "saeedstore" and
@@ -207,13 +232,13 @@ model Vendor {
   username      String
   usernameLower String  @unique
   passwordHash  String
-  businessName String
-  contactName  String
-  phone        String
-  category     String // one of lib/constants.ts VENDOR_CATEGORIES, or free text under "Other"
-  description  String  @default("") // short business description, shown to admin during verification
-  instagram    String?
-  verified     Boolean @default(false)
+  businessName  String
+  contactName   String
+  phone         String
+  category      String // one of lib/constants.ts VENDOR_CATEGORIES, or free text under "Other"
+  description   String  @default("") // short business description, shown to admin during verification
+  instagram     String?
+  verified      Boolean @default(false)
 
   // Business profile — vendor-editable via /vendor/profile. All optional:
   // trade license fields stay optional even when Settings.tradeLicenseRequired
@@ -267,10 +292,10 @@ model Vendor {
   // `agreementAcceptances.find(a => a.agreement.type === "VENDOR_TERMS")`
   // rather than a direct pointer, since the acceptance row can only be
   // created after this Vendor row exists.
-  agreementAcceptances AgreementAcceptance[]
-  passwordResetTokens  PasswordResetToken[]
-  emailChangeTokens    EmailChangeToken[]
-  sessions             VendorSession[]
+  agreementAcceptances    AgreementAcceptance[]
+  passwordResetTokens     PasswordResetToken[]
+  emailChangeTokens       EmailChangeToken[]
+  sessions                VendorSession[]
 
   // Soft-delete: closing an account never deletes the row (agreements,
   // payments and bookings all reference vendorId and must stay readable),
@@ -289,10 +314,10 @@ model Vendor {
   // reusable). Every existing gate in the codebase already checks
   // `accountStatus !== "ACTIVE"` rather than `=== "CLOSED"`, so DELETED is
   // blocked everywhere CLOSED already was, with no other code changes.
-  accountStatus String    @default("ACTIVE") // ACTIVE | CLOSED | DELETED
-  closedAt      DateTime?
+  accountStatus        String    @default("ACTIVE") // ACTIVE | CLOSED | DELETED
+  closedAt             DateTime?
   permanentlyDeletedAt DateTime? // set once, by an admin, via lib/vendorDeletion.ts — never by the vendor themselves
-  emailChangedAt DateTime? // last time the login email was changed, for audit
+  emailChangedAt       DateTime? // last time the login email was changed, for audit
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -399,9 +424,9 @@ model EmailDelivery {
 // without looking up anything sensitive. Never stores passwords, tokens, or
 // any personal data beyond that one reference.
 model AdminAuditLog {
-  id       String @id @default(cuid())
-  action   String // e.g. VENDOR_PERMANENT_DELETE
-  vendorId String
+  id        String @id @default(cuid())
+  action    String // e.g. VENDOR_PERMANENT_DELETE
+  vendorId  String
   vendorRef String // usernameLower/businessName snapshot at the time of the action
 
   hadSelfClosed      Boolean // whether the vendor had already closed their own account before this
@@ -514,6 +539,18 @@ model Application {
   category     String
   instagram    String?
 
+  // The vendor's declared stand/kiosk footprint FOR THIS EVENT, in
+  // millimeters — collected once, at apply time (before booth selection),
+  // and never silently changed afterward by an unrelated profile edit: a
+  // vendor may bring a different physical setup to different events, so
+  // this deliberately lives per-Application rather than on Vendor. Null
+  // until the vendor actually enters it (existing/historical applications
+  // predate this field). Editable via "Edit Setup Size" during booth
+  // selection — see app/api/applications/[id]/setup-size/route.ts — which
+  // only ever touches this same field, never Vendor's own profile.
+  setupWidthMm Int?
+  setupDepthMm Int?
+
   status String @default("PENDING") // PENDING | REJECTED | ACCEPTED | ACCEPTANCE_EXPIRED
 
   acceptedAt          DateTime?
@@ -544,12 +581,25 @@ model Application {
 }
 
 model Payment {
-  id            String      @id @default(cuid())
+  id            String         @id @default(cuid())
   applicationId String
-  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  application   Application    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   eventId       String
+  // The PRIMARY/first booth this payment covers — kept as a direct scalar
+  // FK (rather than removed in favor of `booths` below) so every existing
+  // single-booth Payment row keeps working completely unchanged, and so
+  // simple single-booth call sites never need to touch the join table.
+  // `amountAedFils` is always the COMBINED total across every booth in
+  // `booths` (one booth for a normal booking, up to two for a multi-booth
+  // one) — see `booths` for the authoritative per-booth breakdown used by
+  // receipts and multi-booth pricing.
   boothId       String
-  booth         Booth       @relation(fields: [boothId], references: [id])
+  booth         Booth          @relation(fields: [boothId], references: [id])
+  // Every booth this one payment/booking actually covers, one row per
+  // booth (including a mirror row for `boothId` itself) — the source of
+  // truth for multi-booth receipts/pricing. A single-booth payment has
+  // exactly one row here, identical to `boothId`/`amountAedFils`.
+  booths        PaymentBooth[]
 
   amountAedFils Int
   currency      String @default("AED")
@@ -566,6 +616,28 @@ model Payment {
 
   createdAt DateTime  @default(now())
   paidAt    DateTime?
+}
+
+// One row per (payment, booth) pair — lets a single Payment/receipt cover
+// up to MAX_BOOTHS_PER_BOOKING (2) booths for a multi-booth booking, while
+// every historical single-booth Payment still has exactly one row here
+// (backfilled from its own boothId/amountAedFils in the migration that
+// introduced this table) so nothing needs special-casing by booth count.
+model PaymentBooth {
+  id        String  @id @default(cuid())
+  paymentId String
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  boothId   String
+  booth     Booth   @relation(fields: [boothId], references: [id])
+
+  // Snapshot of that one booth's own price at the moment this payment was
+  // charged — sums to Payment.amountAedFils across all rows for the same
+  // payment. Kept per-row (not recomputed later) for the same historical-
+  // accuracy reason Booth.priceAedFilsAtSale is a snapshot.
+  priceAedFilsAtCharge Int
+
+  @@unique([paymentId, boothId])
+  @@index([boothId])
 }
 
 model Adjustment {

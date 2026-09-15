@@ -54,6 +54,8 @@ export function BoothSelector({
   venueWidthM,
   onConfirmBooth,
   onBoothBecameUnavailable,
+  excludeIds = [],
+  confirmLabel,
 }: {
   features: FloorFeature[];
   booths: FloorBooth[];
@@ -67,6 +69,16 @@ export function BoothSelector({
    *  deciding — before they ever pressed Confirm. The caller shows the
    *  actual notice text (same banner used for the confirm-time race). */
   onBoothBecameUnavailable?: () => void;
+  /** Booths already picked in a multi-booth selection round — rendered as
+   *  "Added" rather than a normal available/unavailable status, and never
+   *  re-selectable (the vendor removes them from the parent's staged list
+   *  instead, not by re-clicking here). Purely a client-side display/
+   *  interaction filter: these booths are still genuinely AVAILABLE
+   *  server-side until the final atomic hold actually claims them. */
+  excludeIds?: string[];
+  /** Overrides the preview panel's confirm button copy (e.g. "Add This
+   *  Booth" instead of "Confirm B3") when staging a second booth. */
+  confirmLabel?: (booth: FloorBooth) => string;
 }) {
   const { locale } = useLocale();
   const isAr = locale === "ar";
@@ -108,27 +120,35 @@ export function BoothSelector({
 
   const tierBySizeKey = useMemo(() => new Map(tiers.map((t) => [t.sizeKey, t])), [tiers]);
 
+  const isExcluded = (id: string) => excludeIds.includes(id);
+
   const filteredBooths = useMemo(() => {
     const q = search.trim().toUpperCase();
     return booths
-      .filter((b) => (showUnavailable ? true : b.status === "AVAILABLE" || b.isMine))
+      .filter((b) => (showUnavailable ? true : (b.status === "AVAILABLE" || b.isMine) && !isExcluded(b.id)))
       .filter((b) => !tierFilter || b.size === tierFilter)
       .filter((b) => !q || b.code.toUpperCase().includes(q))
       .sort((a, b) => {
-        const aAvail = a.status === "AVAILABLE" || a.isMine;
-        const bAvail = b.status === "AVAILABLE" || b.isMine;
+        const aAvail = (a.status === "AVAILABLE" || a.isMine) && !isExcluded(a.id);
+        const bAvail = (b.status === "AVAILABLE" || b.isMine) && !isExcluded(b.id);
         if (aAvail !== bAvail) return aAvail ? -1 : 1;
         return a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: "base" });
       });
-  }, [booths, search, tierFilter, showUnavailable]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- excludeIds compared by isExcluded closure, not identity
+  }, [booths, search, tierFilter, showUnavailable, excludeIds]);
 
-  const availableCount = useMemo(() => booths.filter((b) => b.status === "AVAILABLE" || b.isMine).length, [booths]);
+  const availableCount = useMemo(
+    () => booths.filter((b) => (b.status === "AVAILABLE" || b.isMine) && !isExcluded(b.id)).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- excludeIds compared by isExcluded closure, not identity
+    [booths, excludeIds]
+  );
 
   const selectedBooth = selectedId ? booths.find((b) => b.id === selectedId) ?? null : null;
   const highlightedFromList = listHoverId;
   const highlightedFromMap = mapHoverId;
 
   function selectBooth(booth: FloorBooth) {
+    if (isExcluded(booth.id)) return;
     if (booth.status !== "AVAILABLE" && !booth.isMine) return;
     setSelectedId(booth.id);
   }
@@ -229,7 +249,8 @@ export function BoothSelector({
           {filteredBooths.map((b) => {
             const tier = tierBySizeKey.get(b.size);
             const price = boothPrice(b, tier);
-            const available = b.status === "AVAILABLE" || b.isMine;
+            const excluded = isExcluded(b.id);
+            const available = (b.status === "AVAILABLE" || b.isMine) && !excluded;
             const isSelected = selectedId === b.id;
             const isHighlighted = highlightedFromMap === b.id;
             return (
@@ -244,6 +265,8 @@ export function BoothSelector({
                 className={`w-full text-left rounded-[8px] border px-3.5 py-3 flex items-center justify-between gap-3 transition-colors ${
                   isSelected
                     ? "border-emerald-700 bg-emerald-700/[0.06]"
+                    : excluded
+                    ? "border-emerald-700/40 bg-emerald-700/[0.03]"
                     : isHighlighted && available
                     ? "border-brown/40 bg-brown/[0.04]"
                     : "border-brown/10 bg-cream"
@@ -253,7 +276,10 @@ export function BoothSelector({
                   <div className="flex items-center gap-2">
                     <span className="font-heading text-lg text-brown-dark">{b.code}</span>
                     {isSelected && <StatusBadge label={isAr ? "محدد" : "Selected"} tone="positive" />}
-                    {!isSelected && <StatusBadge label={statusLabel(b, isAr)} tone={statusTone[b.status as keyof typeof statusTone] ?? "neutral"} />}
+                    {!isSelected && excluded && <StatusBadge label={isAr ? "مُضاف" : "Added"} tone="positive" />}
+                    {!isSelected && !excluded && (
+                      <StatusBadge label={statusLabel(b, isAr)} tone={statusTone[b.status as keyof typeof statusTone] ?? "neutral"} />
+                    )}
                   </div>
                   <p className="text-xs text-brown-light mt-0.5 truncate">{boothSizeText(b, tier)}</p>
                 </div>
@@ -294,6 +320,7 @@ export function BoothSelector({
             onConfirm={() => onConfirmBooth(selectedBooth)}
             onChooseAnother={() => setSelectedId(null)}
             onViewOnMap={mobileView === "list" ? () => setMobileView("map") : undefined}
+            confirmLabel={confirmLabel?.(selectedBooth)}
           />
         </div>
       )}
@@ -308,6 +335,7 @@ export function BoothSelector({
                 tier={tierBySizeKey.get(selectedBooth.size)}
                 onConfirm={() => onConfirmBooth(selectedBooth)}
                 onChooseAnother={() => setSelectedId(null)}
+                confirmLabel={confirmLabel?.(selectedBooth)}
               />
             </div>
           )}
@@ -343,12 +371,14 @@ function SelectedBoothPanel({
   onConfirm,
   onChooseAnother,
   onViewOnMap,
+  confirmLabel,
 }: {
   booth: FloorBooth;
   tier: Tier | undefined;
   onConfirm: () => void;
   onChooseAnother: () => void;
   onViewOnMap?: () => void;
+  confirmLabel?: string;
 }) {
   const { locale } = useLocale();
   const isAr = locale === "ar";
@@ -384,7 +414,7 @@ function SelectedBoothPanel({
 
       <div className="flex flex-col gap-2">
         <Button onClick={onConfirm} size="md" className="w-full">
-          {isAr ? `تأكيد ${booth.code}` : `Confirm ${booth.code}`}
+          {confirmLabel ?? (isAr ? `تأكيد ${booth.code}` : `Confirm ${booth.code}`)}
         </Button>
         {onViewOnMap && (
           <Button onClick={onViewOnMap} variant="secondary" size="sm" className="w-full">

@@ -20,6 +20,7 @@ interface EventData {
   status: string;
   whatsappVendorGroupLink: string | null;
   acceptanceDeadlineHours: number | null;
+  allowMultipleBooths: boolean | null;
 }
 
 function toInputDate(iso: string | null) {
@@ -45,6 +46,9 @@ export function EventForm({
   const [showPublicPricing, setShowPublicPricing] = useState(initial?.showPublicPricing ?? true);
   const [coverImage, setCoverImage] = useState(initial?.coverImage || "");
   const [uploadingCover, setUploadingCover] = useState(false);
+  const [allowMultipleBooths, setAllowMultipleBooths] = useState(
+    initial?.allowMultipleBooths === true ? "on" : initial?.allowMultipleBooths === false ? "off" : "default"
+  );
 
   async function uploadCoverImage(file: File) {
     setUploadingCover(true);
@@ -94,6 +98,7 @@ export function EventForm({
       status: form.get("status"),
       whatsappVendorGroupLink: form.get("whatsappVendorGroupLink") || null,
       acceptanceDeadlineHours: form.get("acceptanceDeadlineHours") || null,
+      allowMultipleBooths: allowMultipleBooths === "default" ? null : allowMultipleBooths === "on",
       duplicateFromEventId: duplicateFrom || undefined,
       copyTerms: duplicateFrom ? copyTerms : undefined,
     };
@@ -225,6 +230,23 @@ export function EventForm({
       <label className="flex items-center gap-2 text-sm sm:col-span-2">
         <input type="checkbox" checked={showPublicPricing} onChange={(e) => setShowPublicPricing(e.target.checked)} />
         Show public pricing (&ldquo;Booths from AED X&rdquo;) on this event&rsquo;s public page
+      </label>
+
+      <label className="flex flex-col gap-1 text-sm">
+        Allow multiple booths per booking
+        <select
+          value={allowMultipleBooths}
+          onChange={(e) => setAllowMultipleBooths(e.target.value)}
+          className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft"
+        >
+          <option value="default">Use site default</option>
+          <option value="on">On for this event</option>
+          <option value="off">Off for this event</option>
+        </select>
+        <span className="text-xs text-brown-light">
+          When on, a vendor can add a second booth to the same booking (maximum 2). Overrides the site-wide default
+          in Settings for this event only.
+        </span>
       </label>
 
       {!initial && existingEvents.length > 0 && (

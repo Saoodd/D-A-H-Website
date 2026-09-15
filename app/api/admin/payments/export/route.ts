@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
 import { toCsv } from "@/lib/csv";
 import { toXlsxBuffer } from "@/lib/xlsx";
-import { filsToAed } from "@/lib/constants";
+import { filsToAed, formatBoothCodes } from "@/lib/constants";
 
 // Shared export for both the per-event Payments workspace (always passes
 // `eventId`, so its file can never contain another event's transactions)
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     where,
     include: {
       application: { select: { businessName: true, contactName: true, email: true, phone: true, event: { select: { name: true } } } },
-      booth: { select: { code: true } },
+      booths: { select: { booth: { select: { code: true } } } },
     },
     orderBy: { createdAt: "desc" },
     take: 5000,
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
     contact: p.application.contactName,
     email: p.application.email,
     phone: p.application.phone,
-    booth: p.booth.code,
+    booth: formatBoothCodes(p.booths.map((pb) => pb.booth.code)),
     amountAed: filsToAed(p.amountAedFils),
     status: p.status,
     provider: p.provider,

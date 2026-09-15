@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
       status: ["DRAFT", "PUBLISHED", "CLOSED"].includes(body.status) ? body.status : "DRAFT",
       whatsappVendorGroupLink: body.whatsappVendorGroupLink || null,
       acceptanceDeadlineHours: body.acceptanceDeadlineHours ? Number(body.acceptanceDeadlineHours) : null,
+      allowMultipleBooths: body.allowMultipleBooths === null || body.allowMultipleBooths === undefined ? null : Boolean(body.allowMultipleBooths),
     },
   });
 

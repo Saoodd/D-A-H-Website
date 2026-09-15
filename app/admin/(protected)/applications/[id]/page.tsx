@@ -51,8 +51,10 @@ export default async function AdminApplicationDetailPage({
         expiredAt: app.expiredAt ? app.expiredAt.toISOString() : null,
         eventName: app.event.name,
         eventId: app.event.id,
-        heldBooth: app.heldBooths.find((b) => b.status === "HELD")?.code || null,
-        soldBooth: app.assignedBooths.find((b) => b.status === "SOLD") || null,
+        heldBooths: app.heldBooths.filter((b) => b.status === "HELD").map((b) => b.code),
+        soldBooths: app.assignedBooths
+          .filter((b) => b.status === "SOLD")
+          .map((b) => ({ code: b.code, priceAedFilsAtSale: b.priceAedFilsAtSale })),
         adjustments: app.adjustments.map((a) => ({
           id: a.id,
           amountAedFils: a.amountAedFils,

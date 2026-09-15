@@ -33,8 +33,19 @@ export function ReceiptSummaryCard({ receipt }: { receipt: ReceiptData }) {
       <dl className="text-sm space-y-2">
         <Row label={locale === "ar" ? "الفعالية" : "Event"} value={receipt.eventName} />
         <Row label={locale === "ar" ? "النشاط التجاري" : "Business"} value={receipt.businessName} />
-        <Row label={locale === "ar" ? "الكشك" : "Booth"} value={receipt.boothCode} />
-        <Row label={locale === "ar" ? "مساحة الكشك" : "Booth Size"} value={receipt.boothSizeLabel} />
+        {receipt.booths.length <= 1 ? (
+          <>
+            <Row label={locale === "ar" ? "الكشك" : "Booth"} value={receipt.boothCode} />
+            <Row label={locale === "ar" ? "مساحة الكشك" : "Booth Size"} value={receipt.boothSizeLabel} />
+          </>
+        ) : (
+          <>
+            <Row label={locale === "ar" ? "الأكشاك" : "Booths"} value={receipt.boothCode} />
+            {receipt.booths.map((b) => (
+              <Row key={b.code} label={`${b.code} — ${b.sizeLabel}`} value={formatAed(b.priceAedFils)} />
+            ))}
+          </>
+        )}
       </dl>
 
       <div className="border-t border-brown/10 mt-5 pt-5">

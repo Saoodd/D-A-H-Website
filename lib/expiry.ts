@@ -28,13 +28,24 @@ export async function releaseExpiredHolds(eventId?: string) {
 /** Expire any ACCEPTED application whose payment deadline has passed:
  *  flips status, releases any booth it was holding, and emails the vendor.
  *  Idempotent — only fires once per application since status changes away
- *  from ACCEPTED after the first pass. */
+ *  from ACCEPTED after the first pass.
+ *
+ *  Excludes applications that already have a SUCCEEDED payment — the
+ *  deadline exists only to force a timely payment; once payment has
+ *  legitimately completed, this booking is done and must never be flipped
+ *  to expired just because its (by-then-irrelevant) original deadline has
+ *  since passed. This is a belt-and-braces guard: the checkout confirm
+ *  route also clears `acceptanceExpiresAt` the moment payment succeeds, so
+ *  a paid application should never even match the deadline filter below —
+ *  this exclusion protects against any path that doesn't (a delayed sweep
+ *  racing a payment, or a booking paid before that clearing existed). */
 export async function expireStaleAcceptances(eventId?: string) {
   const now = new Date();
   const stale = await prisma.application.findMany({
     where: {
       status: "ACCEPTED",
       acceptanceExpiresAt: { lt: now },
+      payments: { none: { status: "SUCCEEDED" } },
       ...(eventId ? { eventId } : {}),
     },
     include: { event: true, vendor: true },

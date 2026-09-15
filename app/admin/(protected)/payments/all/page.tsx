@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { formatBoothCodes } from "@/lib/constants";
 import { PageHeader } from "@/components/ui/Card";
 import { TransactionsList } from "@/components/admin/TransactionsList";
 
@@ -30,7 +31,7 @@ export default async function AdminAllTransactionsPage({
   const [payments, events, providers] = await Promise.all([
     prisma.payment.findMany({
       where,
-      include: { application: { include: { event: { select: { name: true } } } }, booth: true },
+      include: { application: { include: { event: { select: { name: true } } } }, booths: { include: { booth: true } } },
       orderBy: { createdAt: "desc" },
       take: 300,
     }),
@@ -126,7 +127,7 @@ export default async function AdminAllTransactionsPage({
           contactName: p.application.contactName,
           email: p.application.email,
           phone: p.application.phone,
-          boothCode: p.booth.code,
+          boothCode: formatBoothCodes(p.booths.map((pb) => pb.booth.code)),
           amountAedFils: p.amountAedFils,
           status: p.status,
           provider: p.provider,

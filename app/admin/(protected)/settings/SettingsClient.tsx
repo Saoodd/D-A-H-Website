@@ -20,12 +20,14 @@ export function SettingsClient({
   contactEmail,
   contactInstagramHandle,
   tradeLicenseRequired,
+  allowMultipleBoothsDefault,
 }: {
   mainCommunityWhatsappLink: string | null;
   defaultAcceptanceDeadlineHours: number;
   contactEmail: string | null;
   contactInstagramHandle: string | null;
   tradeLicenseRequired: boolean;
+  allowMultipleBoothsDefault: boolean;
 }) {
   const router = useRouter();
   const [link, setLink] = useState(mainCommunityWhatsappLink || "");
@@ -33,6 +35,7 @@ export function SettingsClient({
   const [email, setEmail] = useState(contactEmail || "");
   const [instagram, setInstagram] = useState(contactInstagramHandle || "");
   const [licenseRequired, setLicenseRequired] = useState(tradeLicenseRequired);
+  const [multiBoothDefault, setMultiBoothDefault] = useState(allowMultipleBoothsDefault);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -49,6 +52,7 @@ export function SettingsClient({
           contactEmail: email,
           contactInstagramHandle: instagram,
           tradeLicenseRequired: licenseRequired,
+          allowMultipleBoothsDefault: multiBoothDefault,
         }),
       });
       setSaved(true);
@@ -100,6 +104,17 @@ export function SettingsClient({
         <p className="text-xs text-brown-light">
           Controls the wording on the vendor registration page and the Terms &amp; Conditions — one switch, so they can
           never contradict each other. Off means optional (current default).
+        </p>
+      </Section>
+
+      <Section title="Booth booking">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={multiBoothDefault} onChange={(e) => setMultiBoothDefault(e.target.checked)} />
+          Allow vendors to book more than one booth by default
+        </label>
+        <p className="text-xs text-brown-light">
+          Maximum of 2 booths per booking. Lets a vendor add a second booth to the same booking instead of applying
+          twice. Can be turned on or off per event in that event&rsquo;s Settings tab, overriding this default.
         </p>
       </Section>
 

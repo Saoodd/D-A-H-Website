@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./prisma";
+import { formatBoothCodes } from "./constants";
 
 /** A vendor's DAH participation, derived entirely from their successful
  *  payments — never a stored counter (see AGENTS/brief: don't fake counts).
@@ -9,7 +10,7 @@ export async function getVendorParticipation(vendorId: string) {
   const payments = await prisma.payment.findMany({
     where: { status: "SUCCEEDED", application: { vendorId } },
     include: {
-      booth: true,
+      booths: { include: { booth: true } },
       application: { include: { event: true } },
     },
     orderBy: { paidAt: "desc" },
@@ -39,8 +40,8 @@ export async function getVendorParticipation(vendorId: string) {
     startDate: p.application.event.startDate,
     endDate: p.application.event.endDate,
     location: p.application.event.location,
-    boothCode: p.booth.code,
-    boothSize: p.booth.size,
+    boothCode: formatBoothCodes(p.booths.map((pb) => pb.booth.code)),
+    boothSize: Array.from(new Set(p.booths.map((pb) => pb.booth.size))).join(", "),
     amountAedFils: p.amountAedFils,
     paidAt: p.paidAt,
     whatsappVendorGroupLink: p.application.event.whatsappVendorGroupLink,

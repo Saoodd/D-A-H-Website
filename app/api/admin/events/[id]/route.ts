@@ -54,6 +54,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if ("acceptanceDeadlineHours" in body) {
     data.acceptanceDeadlineHours = body.acceptanceDeadlineHours ? Number(body.acceptanceDeadlineHours) : null;
   }
+  if ("allowMultipleBooths" in body) {
+    // Nullable override: null falls back to Settings.allowMultipleBoothsDefault
+    // (see getAllowMultipleBooths) — true/false pins this event either way
+    // regardless of the global default.
+    data.allowMultipleBooths = body.allowMultipleBooths === null ? null : Boolean(body.allowMultipleBooths);
+  }
 
   const previous = data.coverImage !== undefined || data.floorPlanImageUrl !== undefined
     ? await prisma.event.findUnique({ where: { id }, select: { coverImage: true, floorPlanImageUrl: true } })

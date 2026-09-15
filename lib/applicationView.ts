@@ -2,10 +2,32 @@ import "server-only";
 import { prisma } from "./prisma";
 import { runExpiryPass } from "./expiry";
 import { getDisplayStatus } from "./status";
-import { getSettings } from "./settings";
+import { getSettings, getAllowMultipleBooths } from "./settings";
+import { getBoothPrice } from "./pricing";
 import { DisplayStatus } from "./constants";
 import { eventHasPublishedTerms, hasAcceptedCurrentEventTerms } from "./agreements";
 import { getReceiptData, type ReceiptData } from "./receipts";
+
+export interface BoothHoldInfo {
+  boothId: string;
+  code: string;
+  size: string;
+  holdStage: string | null;
+  holdExpiresAt: string | null;
+  priceAedFils: number | null;
+  widthMm: number | null;
+  depthMm: number | null;
+}
+
+export interface SoldBoothInfo {
+  boothId: string;
+  code: string;
+  size: string;
+  priceAedFils: number | null;
+  soldAt: string | null;
+  widthMm: number | null;
+  depthMm: number | null;
+}
 
 export interface ApplicationView {
   id: string;
@@ -25,20 +47,24 @@ export interface ApplicationView {
   // is currently held (see BOOTH_SELECTION_SESSION_MINUTES). null once a
   // booth is confirmed, expired, or never started.
   boothSelectionExpiresAt: string | null;
-  boothHold: {
-    boothId: string;
-    code: string;
-    size: string;
-    holdStage: string | null;
-    holdExpiresAt: string | null;
-  } | null;
-  soldBooth: {
-    boothId: string;
-    code: string;
-    size: string;
-    priceAedFils: number | null;
-    soldAt: string | null;
-  } | null;
+  // Whether this event currently allows booking more than one booth (still
+  // capped at MAX_BOOTHS_PER_BOOKING) — resolved server-side from
+  // Event.allowMultipleBooths / Settings.allowMultipleBoothsDefault so the
+  // client never has to know about that override chain.
+  allowMultipleBooths: boolean;
+  // The vendor's declared setup footprint for THIS application — null
+  // until they've entered it (see requirement: setup size collected before
+  // booth selection). Snapshotted at apply time; never silently changed by
+  // a later profile edit.
+  setupWidthMm: number | null;
+  setupDepthMm: number | null;
+  // Every booth this application currently holds (0, 1, or up to
+  // MAX_BOOTHS_PER_BOOKING) — all share the same holdStage/holdExpiresAt
+  // since they were claimed together in one atomic hold.
+  boothHolds: BoothHoldInfo[];
+  // Every booth this application was actually sold (0, 1, or up to
+  // MAX_BOOTHS_PER_BOOKING).
+  soldBooths: SoldBoothInfo[];
   latestPayment: {
     id: string;
     status: string;
@@ -91,8 +117,8 @@ export async function getApplicationView(
   const displayStatus = getDisplayStatus(fresh, !!succeededPayment);
   const settings = await getSettings();
 
-  const heldBooth = fresh.heldBooths.find((b) => b.status === "HELD") || null;
-  const soldBooth = fresh.assignedBooths.find((b) => b.status === "SOLD") || null;
+  const heldBooths = fresh.heldBooths.filter((b) => b.status === "HELD");
+  const soldBooths = fresh.assignedBooths.filter((b) => b.status === "SOLD");
   const latest = fresh.payments[0] || null;
 
   const eventTermsRequired = await eventHasPublishedTerms(fresh.eventId);
@@ -100,6 +126,20 @@ export async function getApplicationView(
     ? await hasAcceptedCurrentEventTerms(vendorId, applicationId, fresh.eventId)
     : true;
   const receipt = succeededPayment ? await getReceiptData(succeededPayment.id) : null;
+  const allowMultipleBooths = await getAllowMultipleBooths(fresh.event.allowMultipleBooths);
+
+  const boothHolds: BoothHoldInfo[] = await Promise.all(
+    heldBooths.map(async (b) => ({
+      boothId: b.id,
+      code: b.code,
+      size: b.size,
+      holdStage: b.holdStage,
+      holdExpiresAt: b.holdExpiresAt ? b.holdExpiresAt.toISOString() : null,
+      priceAedFils: await getBoothPrice(b, fresh.eventId),
+      widthMm: b.widthMm,
+      depthMm: b.depthMm,
+    }))
+  );
 
   return {
     id: fresh.id,
@@ -116,27 +156,22 @@ export async function getApplicationView(
     displayStatus,
     acceptanceExpiresAt: fresh.acceptanceExpiresAt ? fresh.acceptanceExpiresAt.toISOString() : null,
     boothSelectionExpiresAt:
-      !heldBooth && fresh.boothSelectionExpiresAt && fresh.boothSelectionExpiresAt > new Date()
+      heldBooths.length === 0 && fresh.boothSelectionExpiresAt && fresh.boothSelectionExpiresAt > new Date()
         ? fresh.boothSelectionExpiresAt.toISOString()
         : null,
-    boothHold: heldBooth
-      ? {
-          boothId: heldBooth.id,
-          code: heldBooth.code,
-          size: heldBooth.size,
-          holdStage: heldBooth.holdStage,
-          holdExpiresAt: heldBooth.holdExpiresAt ? heldBooth.holdExpiresAt.toISOString() : null,
-        }
-      : null,
-    soldBooth: soldBooth
-      ? {
-          boothId: soldBooth.id,
-          code: soldBooth.code,
-          size: soldBooth.size,
-          priceAedFils: soldBooth.priceAedFilsAtSale,
-          soldAt: soldBooth.soldAt ? soldBooth.soldAt.toISOString() : null,
-        }
-      : null,
+    allowMultipleBooths,
+    setupWidthMm: fresh.setupWidthMm,
+    setupDepthMm: fresh.setupDepthMm,
+    boothHolds,
+    soldBooths: soldBooths.map((b) => ({
+      boothId: b.id,
+      code: b.code,
+      size: b.size,
+      priceAedFils: b.priceAedFilsAtSale,
+      soldAt: b.soldAt ? b.soldAt.toISOString() : null,
+      widthMm: b.widthMm,
+      depthMm: b.depthMm,
+    })),
     latestPayment: latest
       ? { id: latest.id, status: latest.status, amountAedFils: latest.amountAedFils, providerRef: latest.providerRef }
       : null,

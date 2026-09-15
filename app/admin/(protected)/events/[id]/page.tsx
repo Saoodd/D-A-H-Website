@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getDisplayStatus } from "@/lib/status";
 import { getPublishedAgreement } from "@/lib/agreements";
 import { getEventRevenueAedFils } from "@/lib/payments";
+import { formatBoothCodes } from "@/lib/constants";
 import { EventWorkspaceClient } from "./EventWorkspaceClient";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -27,7 +28,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
     }),
     prisma.payment.findMany({
       where: { eventId: id, status: "SUCCEEDED" },
-      include: { application: { select: { businessName: true, id: true } }, booth: { select: { code: true } } },
+      include: { application: { select: { businessName: true, id: true } }, booths: { select: { booth: { select: { code: true } } } } },
       orderBy: { paidAt: "desc" },
     }),
     // Same authoritative sum used by the Payments area — never a
@@ -86,7 +87,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
         id: p.id,
         businessName: p.application.businessName,
         applicationId: p.application.id,
-        boothCode: p.booth.code,
+        boothCode: formatBoothCodes(p.booths.map((pb) => pb.booth.code)),
         amountAedFils: p.amountAedFils,
         paidAt: p.paidAt ? p.paidAt.toISOString() : null,
       }))}
@@ -108,6 +109,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
           status: event.status,
           whatsappVendorGroupLink: event.whatsappVendorGroupLink,
           acceptanceDeadlineHours: event.acceptanceDeadlineHours,
+          allowMultipleBooths: event.allowMultipleBooths,
         },
       }}
       floorPlanProps={{

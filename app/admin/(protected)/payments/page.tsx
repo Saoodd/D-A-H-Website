@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getPaymentsOverviewByEvent } from "@/lib/payments";
-import { formatAed } from "@/lib/constants";
+import { formatAed, formatBoothCodes } from "@/lib/constants";
 import { PageHeader, EmptyState } from "@/components/ui/Card";
 import { LinkButton } from "@/components/ui/Button";
 import { AcknowledgeCancelButton } from "./AcknowledgeCancelButton";
@@ -40,7 +40,7 @@ export default async function AdminPaymentsPage() {
                 <div className="text-sm">
                   <p className="text-red-900">
                     {c.application.businessName} — {c.application.event.name} — booth{" "}
-                    {c.application.assignedBooths.find((b) => b.status === "SOLD")?.code || "?"}
+                    {formatBoothCodes(c.application.assignedBooths.filter((b) => b.status === "SOLD").map((b) => b.code))}
                   </p>
                   <p className="text-xs text-red-700">{c.reason}</p>
                 </div>

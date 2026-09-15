@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { formatAed } from "@/lib/constants";
+import { formatAed, formatBoothCodes } from "@/lib/constants";
 
 interface Application {
   id: string;
@@ -24,8 +24,8 @@ interface Application {
   expiredAt: string | null;
   eventName: string;
   eventId: string;
-  heldBooth: string | null;
-  soldBooth: { code: string; priceAedFilsAtSale: number | null } | null;
+  heldBooths: string[];
+  soldBooths: { code: string; priceAedFilsAtSale: number | null }[];
   adjustments: { id: string; amountAedFils: number; reason: string; createdAt: string }[];
   payments: { id: string; amountAedFils: number; status: string; provider: string; createdAt: string; paidAt: string | null }[];
   cancellationRequests: { id: string; reason: string; status: string; createdAt: string }[];
@@ -161,10 +161,14 @@ export function ApplicationDetailAdminClient({ application: a }: { application: 
         <Row label="Hours granted" value={a.acceptanceHoursUsed != null ? String(a.acceptanceHoursUsed) : "—"} />
         <Row label="Rejected at" value={a.rejectedAt ? new Date(a.rejectedAt).toLocaleString() : "—"} />
         <Row label="Expired at" value={a.expiredAt ? new Date(a.expiredAt).toLocaleString() : "—"} />
-        <Row label="Booth (held/selecting)" value={a.heldBooth || "—"} />
+        <Row label="Booth(s) held/selecting" value={formatBoothCodes(a.heldBooths)} />
         <Row
-          label="Booth (sold)"
-          value={a.soldBooth ? `${a.soldBooth.code}${a.soldBooth.priceAedFilsAtSale != null ? ` — ${formatAed(a.soldBooth.priceAedFilsAtSale)}` : ""}` : "—"}
+          label="Booth(s) sold"
+          value={
+            a.soldBooths.length
+              ? a.soldBooths.map((b) => `${b.code}${b.priceAedFilsAtSale != null ? ` (${formatAed(b.priceAedFilsAtSale)})` : ""}`).join(" + ")
+              : "—"
+          }
         />
       </section>
 

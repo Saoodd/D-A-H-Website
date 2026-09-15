@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./prisma";
+import { formatBoothCodes } from "./constants";
 
 // The single authoritative source for every payment total shown across
 // Admin — the Payments overview, a per-event Payments view, and the Event
@@ -107,7 +108,10 @@ export async function getEventPaymentsDetail(eventId: string): Promise<EventPaym
   const [payments, adjustments, unresolvedCancellations] = await Promise.all([
     prisma.payment.findMany({
       where: { eventId },
-      include: { application: { select: { businessName: true, contactName: true, email: true, phone: true, id: true } }, booth: { select: { code: true } } },
+      include: {
+        application: { select: { businessName: true, contactName: true, email: true, phone: true, id: true } },
+        booths: { select: { booth: { select: { code: true } } } },
+      },
       orderBy: { createdAt: "desc" },
     }),
     prisma.adjustment.aggregate({ where: { application: { eventId } }, _sum: { amountAedFils: true } }),
@@ -134,7 +138,7 @@ export async function getEventPaymentsDetail(eventId: string): Promise<EventPaym
       contactName: p.application.contactName,
       email: p.application.email,
       phone: p.application.phone,
-      boothCode: p.booth.code,
+      boothCode: formatBoothCodes(p.booths.map((pb) => pb.booth.code)),
       amountAedFils: p.amountAedFils,
       status: p.status,
       provider: p.provider,

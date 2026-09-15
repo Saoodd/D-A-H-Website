@@ -373,7 +373,16 @@ export async function getEventVendorAgreementStatus(eventId: string): Promise<Ev
       ? prisma.agreementAcceptance.findMany({ where: { agreementId: published.id, applicationId: { in: applicationIds } } })
       : Promise.resolve([]),
   ]);
-  const boothByApp = new Map(soldBooths.map((b) => [b.assignedApplicationId, b.code]));
+  // A last-write-wins Map here would silently drop one booth's code for any
+  // application with 2 sold booths — group instead so every sold booth is
+  // represented (see formatBoothCodes for the shared "B3 + B4" join).
+  const boothCodesByApp = new Map<string, string[]>();
+  for (const b of soldBooths) {
+    if (!b.assignedApplicationId) continue;
+    const list = boothCodesByApp.get(b.assignedApplicationId) ?? [];
+    list.push(b.code);
+    boothCodesByApp.set(b.assignedApplicationId, list);
+  }
   const acceptanceByApp = new Map(acceptances.filter((a) => a.applicationId).map((a) => [a.applicationId as string, a]));
 
   const { getDisplayStatus } = await import("./status");
@@ -386,7 +395,7 @@ export async function getEventVendorAgreementStatus(eventId: string): Promise<Ev
       contactName: a.contactName,
       username: a.vendor.username,
       vendorId: a.vendor.id,
-      boothCode: boothByApp.get(a.id) ?? null,
+      boothCode: (boothCodesByApp.get(a.id) ?? []).join(" + ") || null,
       displayStatus: getDisplayStatus(a, a.payments.length > 0),
       agreementAccepted: !!acceptance,
       acceptedVersion: acceptance?.snapshotVersion ?? null,

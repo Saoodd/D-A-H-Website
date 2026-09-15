@@ -22,6 +22,8 @@ export interface FloorBooth {
   isMine?: boolean;
   colorHex?: string | null;
   priceAedFils?: number | null;
+  widthMm?: number | null;
+  depthMm?: number | null;
 }
 
 export interface SizeStyle {

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getVendorSession } from "@/lib/auth";
 import { runExpiryPass } from "@/lib/expiry";
 import { getEventPricingTiers } from "@/lib/pricing";
+import { getAllowMultipleBooths } from "@/lib/settings";
 
 // Approved-vendor-only: never expose full booth-level detail to the public.
 // A vendor may only view the floor plan for an event they have an
@@ -33,12 +34,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ even
     prisma.floorPlanFeature.findMany({ where: { eventId } }),
     prisma.booth.findMany({ where: { eventId } }),
     getEventPricingTiers(eventId),
-    prisma.event.findUnique({ where: { id: eventId }, select: { floorPlanImageUrl: true } }),
+    prisma.event.findUnique({ where: { id: eventId }, select: { floorPlanImageUrl: true, allowMultipleBooths: true } }),
   ]);
 
   return NextResponse.json({
     features,
     floorPlanImageUrl: event?.floorPlanImageUrl ?? null,
+    allowMultipleBooths: await getAllowMultipleBooths(event?.allowMultipleBooths ?? null),
+    setupWidthMm: refreshed.setupWidthMm,
+    setupDepthMm: refreshed.setupDepthMm,
     booths: booths.map((b) => ({
       id: b.id,
       code: b.code,
@@ -51,6 +55,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ even
       rotation: b.rotation,
       colorHex: b.colorHex,
       priceAedFils: b.priceAedFils,
+      widthMm: b.widthMm,
+      depthMm: b.depthMm,
       isMine: b.heldByApplicationId === applicationId || b.assignedApplicationId === applicationId,
       holdExpiresAt:
         b.heldByApplicationId === applicationId && b.holdExpiresAt ? b.holdExpiresAt.toISOString() : null,
