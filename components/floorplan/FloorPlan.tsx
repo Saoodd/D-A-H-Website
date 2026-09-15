@@ -373,6 +373,10 @@ export function FloorPlan({
   smartGuidesEnabled = false,
   gridSnapEnabled = false,
   venueWidthM,
+  highlightedBoothId,
+  onHoverBooth,
+  focusBoothId,
+  focusNonce,
 }: {
   features: FloorFeature[];
   booths: FloorBooth[];
@@ -418,10 +422,32 @@ export function FloorPlan({
   /** Real venue width in meters — when set, distance labels while dragging
    *  show real meters instead of a raw canvas percentage. */
   venueWidthM?: number | null;
+  /** External hover state — set by a paired list UI (e.g. a booth list
+   *  panel) so hovering a row highlights the matching booth here too.
+   *  Purely additive to the map's own internal pointer-hover; never
+   *  conflicts with it. */
+  highlightedBoothId?: string | null;
+  /** Fires whenever the map's own pointer hover changes (enter/leave a
+   *  clickable booth) — lets a paired list UI mirror the highlight back
+   *  the other direction. Read-only signal; never drives this component. */
+  onHoverBooth?: (id: string | null) => void;
+  /** When set to a booth id present in `booths`, pans/zooms the view to
+   *  center that booth once — e.g. picking a booth from a paired list.
+   *  Never fights a subsequent manual pan/zoom, and re-centers again if
+   *  the same booth is re-selected after being cleared. */
+  focusBoothId?: string | null;
+  /** Bump this (any changed number) to force a re-center on the SAME
+   *  focusBoothId — needed when the map was hidden (e.g. `display:none`
+   *  behind a mobile List/Map toggle) at the moment focusBoothId was set,
+   *  since a hidden container measures as zero-sized and the first attempt
+   *  is a no-op. */
+  focusNonce?: number;
 }) {
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const [hoveredBoothId, setHoveredBoothId] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const lastFocusedBoothRef = useRef<string | null>(null);
   const [preview, setPreview] = useState<Record<string, BoothPatch>>({});
   const [guides, setGuides] = useState<Guides | null>(null);
   const [rubberBand, setRubberBand] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
@@ -540,6 +566,38 @@ export function FloorPlan({
   const onTouchEnd = useCallback((e: React.TouchEvent) => {
     if (e.touches.length < 2) pinchState.current = null;
   }, []);
+
+  // Forget the last-focused key once focusBoothId is cleared, so re-selecting
+  // the SAME booth after deselecting it re-centers again instead of being
+  // treated as "already focused there."
+  useEffect(() => {
+    if (!focusBoothId) lastFocusedBoothRef.current = null;
+  }, [focusBoothId]);
+
+  // Pans/zooms to center `focusBoothId` — fires once per (id, nonce) pair
+  // (guarded by lastFocusedBoothRef), so it never fights a vendor's own
+  // subsequent manual pan/zoom on that same booth. If the container measures
+  // zero-sized (hidden behind a mobile List/Map toggle), it does NOT mark
+  // this attempt as done, so the next re-render (or a focusNonce bump once
+  // the map becomes visible) retries with a real measurement.
+  useEffect(() => {
+    const key = `${focusBoothId ?? ""}:${focusNonce ?? 0}`;
+    if (!focusBoothId || key === lastFocusedBoothRef.current) return;
+    const booth = booths.find((b) => b.id === focusBoothId);
+    const el = containerRef.current;
+    if (!booth || !el) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return; // hidden — retry later, don't mark done
+    lastFocusedBoothRef.current = key;
+    const size = Math.min(rect.width, rect.height);
+    const cx = booth.gridX + booth.gridW / 2;
+    const cy = booth.gridY + booth.gridH / 2;
+    const targetScale = clampScale(Math.max(scale, 1.6));
+    const unit = (size / VIEWBOX) * targetScale;
+    setScale(targetScale);
+    setTranslate({ x: size / 2 - cx * unit, y: size / 2 - cy * unit });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-checks on booths/scale changes but only acts once per (focusBoothId, focusNonce) pair (see lastFocusedBoothRef guard above)
+  }, [focusBoothId, focusNonce, booths]);
 
   // ---- booth manipulation (editable mode): drag-to-move (solo or as a
   // group), corner resize handles, and a rotate handle, all operating in
@@ -804,6 +862,7 @@ export function FloorPlan({
       </div>
 
       <div
+        ref={containerRef}
         className={`relative w-full aspect-square max-h-[70vh] overflow-hidden touch-none ${
           placementMode ? "cursor-crosshair" : multiSelectMode ? "cursor-default" : "cursor-grab active:cursor-grabbing"
         } ${!backgroundImageUrl ? "bg-[repeating-linear-gradient(45deg,rgba(107,68,41,0.03),rgba(107,68,41,0.03)_10px,transparent_10px,transparent_20px)]" : ""}`}
@@ -865,7 +924,7 @@ export function FloorPlan({
             const isSelected = multiSelectMode ? (selectedIds?.has(b.id) ?? false) : selectedBoothId === b.id;
             const isSoleSelected = multiSelectMode ? selectedIds?.size === 1 && selectedIds.has(b.id) : isSelected;
             const isGroupSelected = multiSelectMode && isSelected && (selectedIds?.size ?? 0) > 1;
-            const isHovered = hoveredBoothId === b.id;
+            const isHovered = hoveredBoothId === b.id || highlightedBoothId === b.id;
             const fill = b.status === "AVAILABLE" ? baseColor : statusFill[b.status] || baseColor;
             const clickable = interactive && !placementMode && (allowAnyStatusClick || b.status === "AVAILABLE" || b.isMine);
             const canManipulate = editable && clickable;
@@ -900,8 +959,15 @@ export function FloorPlan({
                   }}
                   onPointerMove={(e) => canManipulate && onManipPointerMove(e, raw)}
                   onPointerUp={(e) => canManipulate && onManipPointerUp(e, raw)}
-                  onPointerEnter={() => clickable && setHoveredBoothId(b.id)}
-                  onPointerLeave={() => setHoveredBoothId((cur) => (cur === b.id ? null : cur))}
+                  onPointerEnter={() => {
+                    if (!clickable) return;
+                    setHoveredBoothId(b.id);
+                    onHoverBooth?.(b.id);
+                  }}
+                  onPointerLeave={() => {
+                    setHoveredBoothId((cur) => (cur === b.id ? null : cur));
+                    if (clickable) onHoverBooth?.(null);
+                  }}
                   style={{
                     cursor: canManipulate ? "move" : clickable ? "pointer" : "default",
                     touchAction: canManipulate ? "none" : undefined,

@@ -5,8 +5,7 @@ import Link from "next/link";
 import { useLocale } from "@/lib/i18n/context";
 import { Countdown } from "@/components/Countdown";
 import { formatAed, DisplayStatus } from "@/lib/constants";
-import { FloorPlan } from "@/components/floorplan/FloorPlan";
-import { Legend } from "@/components/floorplan/Legend";
+import { BoothSelector } from "@/components/vendor/BoothSelector";
 import { BoothConfirmModal } from "@/components/vendor/BoothConfirmModal";
 import { SelectedBoothCard } from "@/components/vendor/SelectedBoothCard";
 import { ReceiptSummaryCard } from "@/components/vendor/ReceiptSummaryCard";
@@ -78,6 +77,18 @@ export function ApplicationDetailClient({
       loadFloorplan();
     }
   }, [view.displayStatus, view.boothHold, loadFloorplan]);
+
+  // Keep the map/list availability live while the vendor is actively
+  // browsing (not yet holding anything) — the same authoritative data the
+  // hold endpoint itself checks, just refreshed proactively here so a booth
+  // someone else just took visibly updates instead of only being caught at
+  // confirm time. Deliberately NOT polled once a hold exists (that stage
+  // has its own countdown-driven refreshStatus already).
+  useEffect(() => {
+    if (view.displayStatus !== "ACCEPTED_UNPAID" || view.boothHold || selectionExpired) return;
+    const id = setInterval(loadFloorplan, 6000);
+    return () => clearInterval(id);
+  }, [view.displayStatus, view.boothHold, selectionExpired, loadFloorplan]);
 
   const startBoothSelectionSession = useCallback(async () => {
     if (startingSelectionRef.current) return;
@@ -346,16 +357,21 @@ export function ApplicationDetailClient({
                   </button>
                 </div>
               ) : floorplan ? (
-                <>
-                  <FloorPlan
-                    features={floorplan.features}
-                    booths={floorplan.booths}
-                    sizeStyles={sizeStyles}
-                    backgroundImageUrl={floorplan.floorPlanImageUrl}
-                    onSelectBooth={setPendingBooth}
-                  />
-                  <Legend sizeStyles={sizeStyles} />
-                </>
+                <BoothSelector
+                  features={floorplan.features}
+                  booths={floorplan.booths}
+                  tiers={floorplan.tiers}
+                  sizeStyles={sizeStyles}
+                  backgroundImageUrl={floorplan.floorPlanImageUrl}
+                  onConfirmBooth={setPendingBooth}
+                  onBoothBecameUnavailable={() =>
+                    setNotice(
+                      locale === "ar"
+                        ? "أصبح هذا الكشك غير متاح للتو. يرجى اختيار كشك آخر."
+                        : "This booth has just become unavailable. Please choose another booth."
+                    )
+                  }
+                />
               ) : (
                 <p className="text-brown-light text-sm">{locale === "ar" ? "جارٍ التحميل…" : "Loading floor plan…"}</p>
               )}
