@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
 import { getPublishedAgreement } from "@/lib/agreements";
-import { deleteBlobIfOwned } from "@/lib/uploadSafety";
+import { deletePublicBlobIfOwned } from "@/lib/blob";
 
 // Duplicating an event can carry the SAME floorPlanImageUrl into a new
 // Event row (see POST /api/admin/events) — so before deleting a blob this
@@ -12,7 +12,7 @@ async function deleteEventImageIfUnshared(url: string | null | undefined, exclud
   const stillReferenced = await prisma.event.count({
     where: { id: { not: excludeEventId }, OR: [{ coverImage: url }, { floorPlanImageUrl: url }] },
   });
-  if (stillReferenced === 0) await deleteBlobIfOwned(url);
+  if (stillReferenced === 0) await deletePublicBlobIfOwned(url);
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put } from "@vercel/blob";
 import { requireAdmin } from "@/lib/adminGuard";
-import { safeUploadFilename, isBlobConfigError, BLOB_NOT_CONFIGURED_MESSAGE, fileMatchesDeclaredType } from "@/lib/uploadSafety";
+import { safeUploadFilename, fileMatchesDeclaredType } from "@/lib/uploadSafety";
+import { putPublic, isPublicBlobConfigError, PUBLIC_BLOB_NOT_CONFIGURED_MESSAGE } from "@/lib/blob";
 
 const MAX_BYTES = 15 * 1024 * 1024; // 15MB — a photo/scan of a venue floor plan
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
@@ -9,9 +9,8 @@ const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 // Generic admin image upload — used by the floor plan builder and the
 // event cover image field to let admin upload a photo directly instead of
 // pasting a URL. Always public (venue photos, event covers are public-
-// facing by nature). Stored in Vercel Blob — see .env.example for how
-// credentials resolve (OIDC when the connected store has it enabled,
-// BLOB_READ_WRITE_TOKEN otherwise).
+// facing by nature) — stored in the PUBLIC Blob store (see lib/blob.ts),
+// never the private/default store.
 export async function POST(req: NextRequest) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -31,16 +30,16 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const blob = await put(`floorplans/${safeUploadFilename(file.type)}`, file, {
+    const blob = await putPublic(`floorplans/${safeUploadFilename(file.type)}`, file, {
       access: "public",
       addRandomSuffix: true,
       contentType: file.type,
     });
     return NextResponse.json({ ok: true, url: blob.url });
   } catch (err) {
-    if (isBlobConfigError(err)) {
-      console.error("[admin upload] Blob not configured", { message: (err as Error).message });
-      return NextResponse.json({ error: BLOB_NOT_CONFIGURED_MESSAGE, code: "BLOB_NOT_CONFIGURED" }, { status: 503 });
+    if (isPublicBlobConfigError(err)) {
+      console.error("[admin upload] public Blob store not configured", { message: (err as Error).message });
+      return NextResponse.json({ error: PUBLIC_BLOB_NOT_CONFIGURED_MESSAGE, code: "BLOB_NOT_CONFIGURED" }, { status: 503 });
     }
     console.error("[admin upload] failed", { message: err instanceof Error ? err.message : String(err) });
     return NextResponse.json({ error: "Upload failed. Please try again." }, { status: 500 });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { safeUploadFilename, isBlobConfigError, BLOB_NOT_CONFIGURED_MESSAGE, fileMatchesDeclaredType } from "@/lib/uploadSafety";
+import { putPublic, isPublicBlobConfigError, PUBLIC_BLOB_NOT_CONFIGURED_MESSAGE } from "@/lib/blob";
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10MB
 
@@ -46,18 +47,28 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const blob = await put(`vendor-docs/signup/${safeUploadFilename(file.type)}`, file, {
-      access: spec.access,
-      addRandomSuffix: true,
-      contentType: file.type,
-    });
+    const blob =
+      purpose === "logo"
+        ? await putPublic(`vendor-logos/signup/${safeUploadFilename(file.type)}`, file, {
+            access: "public",
+            addRandomSuffix: true,
+            contentType: file.type,
+          })
+        : await put(`vendor-docs/signup/${safeUploadFilename(file.type)}`, file, {
+            access: spec.access,
+            addRandomSuffix: true,
+            contentType: file.type,
+          });
     return NextResponse.json({ ok: true, url: blob.url });
   } catch (err) {
-    if (isBlobConfigError(err)) {
-      console.error("[vendor upload-signup] Blob not configured", { message: (err as Error).message });
-      return NextResponse.json({ error: BLOB_NOT_CONFIGURED_MESSAGE, code: "BLOB_NOT_CONFIGURED" }, { status: 503 });
+    if (purpose === "logo" ? isPublicBlobConfigError(err) : isBlobConfigError(err)) {
+      console.error("[vendor upload-signup] Blob not configured", { purpose, message: (err as Error).message });
+      return NextResponse.json(
+        { error: purpose === "logo" ? PUBLIC_BLOB_NOT_CONFIGURED_MESSAGE : BLOB_NOT_CONFIGURED_MESSAGE, code: "BLOB_NOT_CONFIGURED" },
+        { status: 503 }
+      );
     }
-    console.error("[vendor upload-signup] failed", { message: err instanceof Error ? err.message : String(err) });
+    console.error("[vendor upload-signup] failed", { purpose, message: err instanceof Error ? err.message : String(err) });
     return NextResponse.json({ error: "Upload failed. Please try again." }, { status: 500 });
   }
 }

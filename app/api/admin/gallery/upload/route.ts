@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
-import { safeUploadFilename, isBlobConfigError, BLOB_NOT_CONFIGURED_MESSAGE, GALLERY_MAX_FILE_BYTES, fileMatchesDeclaredType } from "@/lib/uploadSafety";
+import { safeUploadFilename, GALLERY_MAX_FILE_BYTES, fileMatchesDeclaredType } from "@/lib/uploadSafety";
+import { putPublic, isPublicBlobConfigError, PUBLIC_BLOB_NOT_CONFIGURED_MESSAGE } from "@/lib/blob";
 
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   const caption = typeof form?.get("caption") === "string" ? String(form.get("caption")).slice(0, 300) : "";
 
   try {
-    const blob = await put(`gallery/${safeUploadFilename(file.type)}`, file, {
+    const blob = await putPublic(`gallery/${safeUploadFilename(file.type)}`, file, {
       access: "public",
       addRandomSuffix: true,
       contentType: file.type,
@@ -70,9 +70,9 @@ export async function POST(req: NextRequest) {
     if (fileKey) recentUploads.set(fileKey, { imageId: image.id, expiresAt: Date.now() + DEDUP_WINDOW_MS });
     return NextResponse.json({ ok: true, image });
   } catch (err) {
-    if (isBlobConfigError(err)) {
-      console.error("[gallery upload] Blob not configured", { message: (err as Error).message });
-      return NextResponse.json({ error: BLOB_NOT_CONFIGURED_MESSAGE, code: "BLOB_NOT_CONFIGURED" }, { status: 503 });
+    if (isPublicBlobConfigError(err)) {
+      console.error("[gallery upload] public Blob store not configured", { message: (err as Error).message });
+      return NextResponse.json({ error: PUBLIC_BLOB_NOT_CONFIGURED_MESSAGE, code: "BLOB_NOT_CONFIGURED" }, { status: 503 });
     }
     console.error("[gallery upload] failed", { message: err instanceof Error ? err.message : String(err) });
     return NextResponse.json({ error: "Upload failed. Please try again." }, { status: 500 });

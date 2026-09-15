@@ -86,7 +86,7 @@ export async function fileMatchesDeclaredType(file: File, mimeType: string): Pro
 // (which can be any arbitrary URL, never a real Blob object) is silently
 // left alone instead of triggering a failed/no-op delete against some
 // unrelated third-party host.
-function isOwnedBlobUrl(url: string): boolean {
+export function isOwnedBlobUrl(url: string): boolean {
   try {
     return /\.public\.blob\.vercel-storage\.com$|\.blob\.vercel-storage\.com$/.test(new URL(url).hostname);
   } catch {
