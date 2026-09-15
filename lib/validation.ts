@@ -1,13 +1,19 @@
 import { z } from "zod";
 import { isValidUsernameFormat, trimUsername, USERNAME_FORMAT_HINT } from "./username";
+import { isUsernameAppropriate } from "./profanity";
 
 // Server-side validation for every public form. Applied in the API route
 // handlers — never trust client-side validation alone.
 
+// The single point every username-accepting endpoint validates through —
+// format first, then appropriateness. Never surfaces the actual blocked
+// word: the refine message is a generic "not allowed" notice regardless of
+// which rule tripped (see lib/profanity.ts for how the check itself works).
 const usernameField = z
   .string()
   .transform(trimUsername)
-  .refine(isValidUsernameFormat, { message: `Please choose a username: ${USERNAME_FORMAT_HINT}` });
+  .refine(isValidUsernameFormat, { message: `Please choose a username: ${USERNAME_FORMAT_HINT}` })
+  .refine(isUsernameAppropriate, { message: "This username isn't allowed. Please choose another username." });
 
 // Honeypot: a hidden field real users never fill in. Any value = bot.
 export const honeypotSchema = z.object({

@@ -7,6 +7,7 @@ import { formatAed, DisplayStatus } from "@/lib/constants";
 import { MetricCard, EmptyState } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { PermanentRemoveVendorModal } from "@/components/admin/PermanentRemoveVendorModal";
 
 interface VendorFull {
   id: string;
@@ -27,6 +28,9 @@ interface VendorFull {
   phoneVerified: boolean;
   phoneVerifiedAt: string | null;
   phoneVerifiedMethod: string | null;
+  accountStatus: string;
+  closedAt: string | null;
+  permanentlyDeletedAt: string | null;
 }
 
 interface AppRow {
@@ -263,7 +267,13 @@ export function VendorDetailClient({
           <div>
             <div className="flex items-center gap-2">
               <h1 className="font-heading text-2xl text-brown-dark">{vendor.businessName}</h1>
-              <StatusBadge label={vendor.verified ? "Verified" : "Unverified"} tone={vendor.verified ? "positive" : "attention"} />
+              {vendor.accountStatus === "DELETED" ? (
+                <StatusBadge label="Permanently Removed" tone="negative" />
+              ) : vendor.accountStatus === "CLOSED" ? (
+                <StatusBadge label="Closed" tone="neutral" />
+              ) : (
+                <StatusBadge label={vendor.verified ? "Verified" : "Unverified"} tone={vendor.verified ? "positive" : "attention"} />
+              )}
               {activeWarningsCount > 0 && (
                 <StatusBadge label={`${activeWarningsCount} active warning${activeWarningsCount === 1 ? "" : "s"}`} tone="negative" />
               )}
@@ -278,9 +288,11 @@ export function VendorDetailClient({
             </p>
           </div>
         </div>
-        <Button variant={vendor.verified ? "secondary" : "primary"} onClick={() => setVerified(!vendor.verified)} loading={verifyBusy}>
-          {vendor.verified ? "Unverify" : "Verify vendor"}
-        </Button>
+        {vendor.accountStatus === "ACTIVE" && (
+          <Button variant={vendor.verified ? "secondary" : "primary"} onClick={() => setVerified(!vendor.verified)} loading={verifyBusy}>
+            {vendor.verified ? "Unverify" : "Verify vendor"}
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -630,6 +642,27 @@ export function VendorDetailClient({
           </section>
         </div>
       </div>
+
+      <section className="mt-8 rounded-[10px] border border-red-800/25 bg-red-50/40 dark:bg-red-950/10 p-6">
+        <p className="label-caps text-red-800 dark:text-red-400 mb-1">Danger Zone</p>
+        {vendor.accountStatus === "DELETED" ? (
+          <p className="text-sm text-brown-light">
+            This vendor was permanently removed
+            {vendor.permanentlyDeletedAt ? ` on ${new Date(vendor.permanentlyDeletedAt).toLocaleString()}` : ""}. Their account,
+            business profile and removable personal data have been erased; any signed agreements, payments or bookings DAH is
+            required to keep remain on file with their identifying details anonymized.
+          </p>
+        ) : (
+          <>
+            <p className="text-sm text-brown-light mb-4">
+              Permanently remove this vendor from DAH — not the same as them closing their own account. This works even if the
+              vendor has already self-closed. Signed agreements, payments, receipts and completed bookings DAH is required to
+              keep are never deleted; only the vendor&apos;s account and removable personal data are.
+            </p>
+            <PermanentRemoveVendorModal vendorId={vendor.id} businessName={vendor.businessName} />
+          </>
+        )}
+      </section>
     </div>
   );
 }

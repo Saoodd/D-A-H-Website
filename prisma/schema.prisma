@@ -278,8 +278,20 @@ model Vendor {
   // the row also keeps `usernameLower`/`email` reserved in their unique
   // indexes, so a closed account's identifiers can never be immediately
   // claimed by someone else.
-  accountStatus String    @default("ACTIVE") // ACTIVE | CLOSED
+  //
+  // DELETED is a stronger, admin-only state on top of the same mechanism
+  // (see lib/vendorDeletion.ts): the Vendor row is still never hard-deleted
+  // — AgreementAcceptance.vendorId cascades directly from this row, so a
+  // real `prisma.vendor.delete()` would destroy signed agreements — instead
+  // the row is anonymized in place and kept as a tombstone, which is also
+  // what keeps `usernameLower` permanently reserved (requirement: a
+  // permanently removed vendor's username must never be immediately
+  // reusable). Every existing gate in the codebase already checks
+  // `accountStatus !== "ACTIVE"` rather than `=== "CLOSED"`, so DELETED is
+  // blocked everywhere CLOSED already was, with no other code changes.
+  accountStatus String    @default("ACTIVE") // ACTIVE | CLOSED | DELETED
   closedAt      DateTime?
+  permanentlyDeletedAt DateTime? // set once, by an admin, via lib/vendorDeletion.ts — never by the vendor themselves
   emailChangedAt DateTime? // last time the login email was changed, for audit
 
   createdAt DateTime @default(now())
@@ -375,6 +387,32 @@ model EmailDelivery {
   @@index([vendorId])
   @@index([type])
   @@index([providerMessageId])
+}
+
+// Record of a sensitive, irreversible admin action — currently only the
+// permanent vendor removal (see lib/vendorDeletion.ts). `vendorId` is
+// deliberately a bare string, not a relation: the row it refers to may
+// since have been anonymized (never hard-deleted, see Vendor.accountStatus
+// DELETED above), and the log must survive regardless. `vendorRef` is a
+// safe, human-readable snapshot (the vendor's usernameLower/businessName at
+// the time of deletion) so Admin can still identify which account this was
+// without looking up anything sensitive. Never stores passwords, tokens, or
+// any personal data beyond that one reference.
+model AdminAuditLog {
+  id       String @id @default(cuid())
+  action   String // e.g. VENDOR_PERMANENT_DELETE
+  vendorId String
+  vendorRef String // usernameLower/businessName snapshot at the time of the action
+
+  hadSelfClosed      Boolean // whether the vendor had already closed their own account before this
+  applicationsKept   Int // applications anonymized-and-kept (had payment/agreement/booth history)
+  applicationsPurged Int // applications hard-deleted (no history at all)
+  blobsDeleted       Int // logo/trade-licence files removed from storage
+
+  result    String // short human-readable outcome summary
+  createdAt DateTime @default(now())
+
+  @@index([vendorId])
 }
 
 // Single-use, expiring token proving the vendor controls the email address

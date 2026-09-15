@@ -11,15 +11,21 @@ type SortKey = "recent" | "name" | "applications";
 export default async function AdminVendorsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string; sort?: string; page?: string }>;
+  searchParams: Promise<{ status?: string; account?: string; q?: string; sort?: string; page?: string }>;
 }) {
-  const { status, q, sort, page } = await searchParams;
+  const { status, account, q, sort, page } = await searchParams;
   const search = (q || "").trim();
   const sortKey: SortKey = sort === "name" || sort === "applications" ? sort : "recent";
   const pageNum = Math.max(1, parseInt(page || "1", 10) || 1);
 
   const where = {
     ...(status === "verified" ? { verified: true } : status === "unverified" ? { verified: false } : {}),
+    // A separate filter dimension from verified/unverified above — whether
+    // the account itself is active, self-closed, or permanently removed by
+    // an admin. Deliberately never excludes CLOSED/DELETED vendors by
+    // default ("All accounts"): Admin must always be able to find and act
+    // on them, not just currently-active ones.
+    ...(account === "active" ? { accountStatus: "ACTIVE" } : account === "closed" ? { accountStatus: "CLOSED" } : account === "deleted" ? { accountStatus: "DELETED" } : {}),
     ...(search
       ? {
           OR: [
@@ -53,6 +59,7 @@ export default async function AdminVendorsPage({
   return (
     <VendorsListClient
       activeStatus={status || ""}
+      activeAccount={account || ""}
       query={search}
       sort={sortKey}
       page={pageNum}

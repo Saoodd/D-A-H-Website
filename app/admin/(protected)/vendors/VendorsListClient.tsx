@@ -33,6 +33,7 @@ function buildHref(params: Record<string, string | number | undefined>) {
 export function VendorsListClient({
   vendors,
   activeStatus,
+  activeAccount,
   query,
   sort,
   page,
@@ -41,6 +42,7 @@ export function VendorsListClient({
 }: {
   vendors: Vendor[];
   activeStatus: string;
+  activeAccount: string;
   query: string;
   sort: string;
   page: number;
@@ -69,7 +71,7 @@ export function VendorsListClient({
 
   function submitSearch(e: React.FormEvent) {
     e.preventDefault();
-    router.push(buildHref({ status: activeStatus, q, sort }));
+    router.push(buildHref({ status: activeStatus, account: activeAccount, q, sort }));
   }
 
   return (
@@ -87,7 +89,7 @@ export function VendorsListClient({
         </form>
         <select
           value={sort}
-          onChange={(e) => router.push(buildHref({ status: activeStatus, q: query, sort: e.target.value }))}
+          onChange={(e) => router.push(buildHref({ status: activeStatus, account: activeAccount, q: query, sort: e.target.value }))}
           className="border border-brown/20 rounded-lg px-3 py-2 bg-cream text-sm"
         >
           <option value="recent">Newest first</option>
@@ -96,24 +98,55 @@ export function VendorsListClient({
         </select>
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-3">
         <Link
-          href={buildHref({ q: query, sort })}
+          href={buildHref({ account: activeAccount, q: query, sort })}
           className={`text-xs px-3 py-1.5 rounded-full border ${!activeStatus ? "bg-brown text-cream-soft border-brown" : "border-brown/30"}`}
         >
           All
         </Link>
         <Link
-          href={buildHref({ status: "unverified", q: query, sort })}
+          href={buildHref({ status: "unverified", account: activeAccount, q: query, sort })}
           className={`text-xs px-3 py-1.5 rounded-full border ${activeStatus === "unverified" ? "bg-brown text-cream-soft border-brown" : "border-brown/30"}`}
         >
           Unverified
         </Link>
         <Link
-          href={buildHref({ status: "verified", q: query, sort })}
+          href={buildHref({ status: "verified", account: activeAccount, q: query, sort })}
           className={`text-xs px-3 py-1.5 rounded-full border ${activeStatus === "verified" ? "bg-brown text-cream-soft border-brown" : "border-brown/30"}`}
         >
           Verified
+        </Link>
+      </div>
+
+      {/* A separate filter dimension from verified/unverified above — which
+          vendors are shown by account lifecycle state. "All accounts" (the
+          default) never hides closed or permanently removed vendors: Admin
+          must always be able to find and act on them. */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        <Link
+          href={buildHref({ status: activeStatus, q: query, sort })}
+          className={`text-xs px-3 py-1.5 rounded-full border ${!activeAccount ? "bg-brown text-cream-soft border-brown" : "border-brown/30"}`}
+        >
+          All accounts
+        </Link>
+        <Link
+          href={buildHref({ status: activeStatus, account: "active", q: query, sort })}
+          className={`text-xs px-3 py-1.5 rounded-full border ${activeAccount === "active" ? "bg-brown text-cream-soft border-brown" : "border-brown/30"}`}
+        >
+          Active
+        </Link>
+        <Link
+          href={buildHref({ status: activeStatus, account: "closed", q: query, sort })}
+          className={`text-xs px-3 py-1.5 rounded-full border ${activeAccount === "closed" ? "bg-brown text-cream-soft border-brown" : "border-brown/30"}`}
+        >
+          Closed
+        </Link>
+        <Link
+          href={buildHref({ status: activeStatus, account: "deleted", q: query, sort })}
+          className={`text-xs px-3 py-1.5 rounded-full border ${activeAccount === "deleted" ? "bg-brown text-cream-soft border-brown" : "border-brown/30"}`}
+        >
+          Deleted
         </Link>
       </div>
 
@@ -140,7 +173,9 @@ export function VendorsListClient({
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="font-heading text-brown-dark">{v.businessName}</p>
-                      {v.accountStatus === "CLOSED" ? (
+                      {v.accountStatus === "DELETED" ? (
+                        <StatusBadge label="Deleted" tone="negative" />
+                      ) : v.accountStatus === "CLOSED" ? (
                         <StatusBadge label="Closed" tone="neutral" />
                       ) : (
                         <StatusBadge label={v.verified ? "Verified" : "Unverified"} tone={v.verified ? "positive" : "attention"} />
@@ -157,7 +192,7 @@ export function VendorsListClient({
                   </div>
                 </div>
                 <div className="flex gap-2 shrink-0">
-                  {v.accountStatus === "CLOSED" ? null : v.verified ? (
+                  {v.accountStatus !== "ACTIVE" ? null : v.verified ? (
                     <button
                       disabled={busyId === v.id}
                       onClick={(e) => setVerified(v.id, false, e)}
@@ -186,7 +221,7 @@ export function VendorsListClient({
           {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
             <Link
               key={p}
-              href={buildHref({ status: activeStatus, q: query, sort, page: p })}
+              href={buildHref({ status: activeStatus, account: activeAccount, q: query, sort, page: p })}
               className={`text-xs w-8 h-8 flex items-center justify-center rounded-[6px] border ${
                 p === page ? "bg-brown text-cream-soft border-brown" : "border-brown/25 text-brown-dark"
               }`}

@@ -45,6 +45,17 @@ export async function POST(req: NextRequest) {
     if (termsIssue) {
       return NextResponse.json({ error: termsIssue.message }, { status: 400 });
     }
+    // Username format and profanity checks both live on the same field —
+    // the client can only pre-check format (the profanity word list is
+    // server-only, see lib/profanity.ts), so this is the ONLY path an
+    // inappropriate username's specific message ever reaches the vendor.
+    // Surfaced the same way as terms above, rather than falling into the
+    // generic message below, so the client's guessErrorField() routes it
+    // to the username field instead of a top-level banner.
+    const usernameIssue = parsed.error.issues.find((i) => i.path[0] === "username");
+    if (usernameIssue) {
+      return NextResponse.json({ error: usernameIssue.message }, { status: 400 });
+    }
     return NextResponse.json({ error: "Please check the form and try again." }, { status: 400 });
   }
   const data = parsed.data;

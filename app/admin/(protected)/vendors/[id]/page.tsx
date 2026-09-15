@@ -60,6 +60,9 @@ export default async function AdminVendorDetailPage({ params }: { params: Promis
         phoneVerified: isPhoneVerified(vendor),
         phoneVerifiedAt: vendor.phoneVerifiedAt ? vendor.phoneVerifiedAt.toISOString() : null,
         phoneVerifiedMethod: vendor.phoneVerifiedMethod,
+        accountStatus: vendor.accountStatus,
+        closedAt: vendor.closedAt ? vendor.closedAt.toISOString() : null,
+        permanentlyDeletedAt: vendor.permanentlyDeletedAt ? vendor.permanentlyDeletedAt.toISOString() : null,
       }}
       stats={{
         eventsParticipated: participation.eventsParticipated,
