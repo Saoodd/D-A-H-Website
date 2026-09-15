@@ -9,7 +9,8 @@ import { UpcomingEventsSection, type UpcomingEventRow } from "./UpcomingEventsSe
 import { ConfirmedEventsSection, type ConfirmedEventRow } from "./ConfirmedEventsSection";
 import { ApplicationsOverviewSection, type OverviewAppRow } from "./ApplicationsOverviewSection";
 import { VendorNav } from "@/components/vendor/VendorNav";
-import { Button } from "@/components/ui/Button";
+import { Button, LinkButton } from "@/components/ui/Button";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { PhoneVerifyModal } from "@/components/vendor/PhoneVerifyModal";
 
 /** The vendor dashboard's Overview — the main control center, per the
@@ -24,6 +25,7 @@ export function DashboardClient({
   recentApplications,
   totalApplicationsCount,
   unviewedWarnings,
+  profileSummary,
 }: {
   businessName: string;
   communityLink: string | null;
@@ -32,6 +34,11 @@ export function DashboardClient({
   recentApplications: OverviewAppRow[];
   totalApplicationsCount: number;
   unviewedWarnings: { id: string; title: string }[];
+  profileSummary: {
+    logoUrl: string | null;
+    completionPercent: number;
+    phoneVerified: boolean;
+  };
 }) {
   const { t } = useLocale();
   const router = useRouter();
@@ -122,6 +129,42 @@ export function DashboardClient({
           <UpcomingEventsSection events={upcomingEvents} onApply={applyToEvent} applyingId={applyingId} />
 
           <ApplicationsOverviewSection applications={recentApplications} totalCount={totalApplicationsCount} />
+
+          {/* Compact link to the full Profile page — never a second copy of
+              the profile form. Keeps Overview and Profile feeling connected
+              without duplicating any editable field here. */}
+          <div className="rounded-[10px] border border-brown/10 bg-cream p-5 flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              {profileSummary.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- vendor-uploaded logo via Blob, not a local static asset
+                <img
+                  src={profileSummary.logoUrl}
+                  alt={businessName}
+                  className="w-10 h-10 rounded-full object-cover border border-brown/10 shrink-0"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-cream-deep flex items-center justify-center font-heading text-sm text-brown-dark shrink-0">
+                  {businessName.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="label-caps">{t("vendorOverview.profileSummaryTitle")}</p>
+                <p className="text-sm text-brown-dark font-medium truncate mt-0.5">{businessName}</p>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <span className="text-xs text-brown-light">
+                    {t("vendorOverview.profileLabel")} {profileSummary.completionPercent}% {t("vendorOverview.completeSuffix")}
+                  </span>
+                  <StatusBadge
+                    label={profileSummary.phoneVerified ? t("vendorOverview.phoneVerified") : t("vendorOverview.phoneNotVerified")}
+                    tone={profileSummary.phoneVerified ? "positive" : "attention"}
+                  />
+                </div>
+              </div>
+            </div>
+            <LinkButton href="/vendor/profile" variant="secondary" size="md">
+              {t("vendorOverview.viewEditProfile")}
+            </LinkButton>
+          </div>
 
           <div className="rounded-[10px] border border-brown/10 bg-cream p-6 flex items-center justify-between flex-wrap gap-4">
             <div>

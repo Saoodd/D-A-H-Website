@@ -6,8 +6,9 @@ import { getSettings } from "@/lib/settings";
 import { isValidHttpUrl } from "@/lib/url";
 import { runExpiryPass } from "@/lib/expiry";
 import { getDisplayStatus } from "@/lib/status";
-import { getVendorParticipation } from "@/lib/vendorStats";
+import { getVendorParticipation, computeProfileCompletion } from "@/lib/vendorStats";
 import { getMinPriceForEvent } from "@/lib/events";
+import { isPhoneVerified } from "@/lib/verification";
 import { DashboardClient } from "./DashboardClient";
 import { PendingVerificationClient } from "./PendingVerificationClient";
 
@@ -131,6 +132,12 @@ export default async function VendorDashboardPage() {
   // unfiltered and still includes paid ones, for a complete audit trail.
   const recentApplications = allApplications.filter((a) => a.displayStatus !== "PAID").slice(0, 4);
 
+  // Same authoritative completion logic as the full Profile page — never a
+  // second, drifting copy of the rule for what counts as "complete".
+  const profileCompletion = computeProfileCompletion(vendor as unknown as Record<string, unknown>, {
+    tradeLicenseRequired: settings.tradeLicenseRequired,
+  });
+
   return (
     <DashboardClient
       businessName={vendor.businessName}
@@ -142,6 +149,11 @@ export default async function VendorDashboardPage() {
       unviewedWarnings={warnings
         .filter((w) => !w.viewedAt)
         .map((w) => ({ id: w.id, title: w.title }))}
+      profileSummary={{
+        logoUrl: vendor.logoUrl,
+        completionPercent: profileCompletion.percent,
+        phoneVerified: isPhoneVerified(vendor),
+      }}
     />
   );
 }
