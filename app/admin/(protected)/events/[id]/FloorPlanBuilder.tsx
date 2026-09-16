@@ -1178,6 +1178,29 @@ export function FloorPlanBuilder({
                 <button type="submit" className="mt-3 px-4 py-2 rounded-[6px] bg-brown text-cream-soft text-sm">
                   Add feature
                 </button>
+                {features.length > 0 && (
+                  <ul className="mt-4 space-y-1.5 border-t border-brown/10 pt-3">
+                    {features.map((f) => (
+                      <li key={f.id} className="flex items-center justify-between text-xs text-brown-light">
+                        <span>
+                          {f.label || f.type.replaceAll("_", " ")} — {f.type.replaceAll("_", " ")}
+                          {f.rotation ? ` (${f.rotation}°)` : ""}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!confirm(`Remove "${f.label || f.type}"?`)) return;
+                            await fetch(`/api/admin/features/${f.id}`, { method: "DELETE" });
+                            await load();
+                          }}
+                          className="text-red-700 underline"
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </form>
 
               <div className="rounded-[10px] border border-brown/10 bg-cream p-5">

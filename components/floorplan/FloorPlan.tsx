@@ -1001,30 +1001,27 @@ export function FloorPlan({
             <image href={backgroundImageUrl} x={0} y={0} width={viewBox.width} height={viewBox.height} preserveAspectRatio="xMidYMid meet" />
           )}
 
-          {features.map((f) => (
-            <g key={f.id}>
-              <rect
-                x={f.gridX}
-                y={f.gridY}
-                width={f.gridW}
-                height={f.gridH}
-                fill={backgroundImageUrl ? "rgba(227,217,204,0.75)" : "#E3D9CC"}
-                stroke="#B79A7C"
-                strokeWidth={0.15 * unitScale}
-                strokeDasharray={f.type.startsWith("ENTRANCE") ? `${unitScale} ${0.7 * unitScale}` : undefined}
-              />
-              <text
-                x={f.gridX + f.gridW / 2}
-                y={f.gridY + f.gridH / 2}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                fontSize={2.2 * unitScale}
-                fill="#6B4429"
-              >
-                {f.label || featureLabel[f.type]}
-              </text>
-            </g>
-          ))}
+          {features.map((f) => {
+            const fcx = f.gridX + f.gridW / 2;
+            const fcy = f.gridY + f.gridH / 2;
+            return (
+              <g key={f.id} transform={f.rotation ? `rotate(${f.rotation} ${fcx} ${fcy})` : undefined}>
+                <rect
+                  x={f.gridX}
+                  y={f.gridY}
+                  width={f.gridW}
+                  height={f.gridH}
+                  fill={backgroundImageUrl ? "rgba(227,217,204,0.75)" : "#E3D9CC"}
+                  stroke="#B79A7C"
+                  strokeWidth={0.15 * unitScale}
+                  strokeDasharray={f.type.startsWith("ENTRANCE") ? `${unitScale} ${0.7 * unitScale}` : undefined}
+                />
+                <text x={fcx} y={fcy} textAnchor="middle" dominantBaseline="middle" fontSize={2.2 * unitScale} fill="#6B4429">
+                  {f.label || featureLabel[f.type]}
+                </text>
+              </g>
+            );
+          })}
 
           {booths.map((raw) => {
             const b = getEffective(raw);
