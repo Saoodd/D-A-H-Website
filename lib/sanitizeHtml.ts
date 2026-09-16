@@ -16,3 +16,14 @@ const ALLOWED_ATTR = ["href", "target", "rel"];
 export function sanitizeAgreementHtml(html: string): string {
   return DOMPurify.sanitize(html, { ALLOWED_TAGS, ALLOWED_ATTR });
 }
+
+// Same allowlist, reused verbatim for Admin-authored Communications Center
+// email bodies (see lib/communications/render.ts) — headings/bold/italic/
+// lists/links already covered above, deliberately no images/scripts/style
+// attributes/iframes. Kept as a distinctly-named export (rather than
+// callers importing sanitizeAgreementHtml directly) so it's obvious at
+// each call site which content type is being sanitized, even though the
+// underlying rule set is identical by design.
+export function sanitizeEmailHtml(html: string): string {
+  return DOMPurify.sanitize(html, { ALLOWED_TAGS, ALLOWED_ATTR });
+}

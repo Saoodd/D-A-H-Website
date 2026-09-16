@@ -4,6 +4,7 @@ import Link from "next/link";
 import { getEventPaymentsDetail } from "@/lib/payments";
 import { formatAed } from "@/lib/constants";
 import { PageHeader } from "@/components/ui/Card";
+import { LinkButton } from "@/components/ui/Button";
 import { EventPaymentsTable } from "./EventPaymentsTable";
 
 export async function generateMetadata({ params }: { params: Promise<{ eventId: string }> }): Promise<Metadata> {
@@ -28,6 +29,11 @@ export default async function AdminEventPaymentsPage({ params }: { params: Promi
         eyebrow="Payments"
         title={event.name}
         description={`${event.startDate.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}${event.location ? ` · ${event.location}` : ""}`}
+        actions={
+          <LinkButton href={`/admin/communications/new?eventId=${event.id}&audience=accepted-unpaid`} variant="secondary" size="sm">
+            Message Unpaid Vendors
+          </LinkButton>
+        }
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 text-sm">

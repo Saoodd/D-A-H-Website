@@ -35,6 +35,7 @@ const groups: { label: string; links: { href: string; label: string }[] }[] = [
   {
     label: "Management",
     links: [
+      { href: "/admin/communications", label: "Communications" },
       { href: "/admin/emails", label: "Emails" },
       { href: "/admin/settings", label: "Settings" },
     ],

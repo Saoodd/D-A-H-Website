@@ -281,12 +281,25 @@ model Vendor {
   phoneOtpPinId String?
   phoneOtpPhone String?
 
-  applications            Application[]
-  notes                   VendorNote[]
-  warnings                VendorWarning[]
-  emailVerificationTokens EmailVerificationToken[]
-  phoneVerificationLogs   VendorPhoneVerificationLog[]
-  emailDeliveries         EmailDelivery[]
+  // WhatsApp broadcast consent — separate from phone verification, and
+  // separate from any WhatsApp community-group link (Settings/Event
+  // fields above, which are just admin-pasted chat.whatsapp.com URLs, not
+  // a messaging channel). Gates the Admin Communications Center's
+  // WhatsApp channel: a vendor is only proactively messaged once opted
+  // in. Every vendor, including every pre-existing row, starts unset —
+  // nobody is retroactively opted in by adding this field.
+  whatsappOptInAt     DateTime?
+  whatsappOptInMethod String? // VENDOR | ADMIN — ADMIN covers consent obtained outside the app and recorded manually
+  whatsappOptOutAt    DateTime?
+
+  applications             Application[]
+  notes                    VendorNote[]
+  warnings                 VendorWarning[]
+  emailVerificationTokens  EmailVerificationToken[]
+  phoneVerificationLogs    VendorPhoneVerificationLog[]
+  emailDeliveries          EmailDelivery[]
+  whatsappDeliveries       WhatsAppDelivery[]
+  communicationRecipients  CommunicationRecipient[]
   // Every Agreement (VENDOR_TERMS at signup, EVENT_TERMS per booking) this
   // vendor has accepted — look up the VENDOR_TERMS one via
   // `agreementAcceptances.find(a => a.agreement.type === "VENDOR_TERMS")`
@@ -722,6 +735,155 @@ model AgreementAcceptance {
   @@index([vendorId])
   @@index([agreementId])
   @@index([applicationId])
+}
+
+// ---------------------------------------------------------------------------
+// Admin Communications Center — manual/broadcast messaging to vendors,
+// ADDITIVE to (never a replacement for) the automatic transactional
+// notifications in lib/email/messages.ts, which continue to fire
+// independently from their own existing call sites and are never touched
+// by this. A Communication is one broadcast/campaign; each
+// CommunicationRecipient is one (recipient, channel) delivery attempt
+// within it. Email delivery status is tracked by reusing the existing
+// EmailDelivery table (via dedupeKey `broadcast:<communicationId>:
+// <vendorId>`, the same idempotency mechanism every automatic email
+// already uses) rather than a parallel one; WhatsApp has no equivalent
+// pre-existing table, so WhatsAppDelivery below mirrors EmailDelivery's
+// shape/statuses/dedupeKey pattern exactly instead of inventing a
+// different one.
+// ---------------------------------------------------------------------------
+model Communication {
+  id             String @id @default(cuid())
+  idempotencyKey String @unique // client-generated once, at the "Send" click — a double-click/page-refresh/serverless retry can never start a second real send for the same campaign
+
+  internalName String // admin-facing label only, e.g. "Vol 5 Setup Instructions" — never shown to vendors
+  sentByName   String? // free-text, admin-self-reported "sent by" — see AdminSession: this system has no per-admin login identity (one shared password), so this is the closest available attribution, not an authenticated actor
+
+  channel String // EMAIL | WHATSAPP | BOTH
+
+  eventId    String? // denormalized, no FK (like Payment.eventId) — null means "All Events" audience; a later event deletion must never break this history
+  eventNames String? // snapshot label, e.g. "DAH Vol 5" or "All Events (3)" — for history display even if the Event is later renamed
+
+  // The exact filter selection the admin made, as JSON — see
+  // lib/communications/audience.ts AudienceFilters. Re-run through
+  // resolveAudience() any time a DRAFT's live count needs recomputing.
+  // This is NOT the recipient list — see CommunicationRecipient for the
+  // frozen snapshot taken at send time.
+  audienceFiltersJson String @db.Text
+  audienceSummary     String // human-readable one-line summary, e.g. "DAH Vol 5 • Confirmed & Paid • Tier A"
+
+  emailSubject  String?
+  emailBodyHtml String? @db.Text // sanitized admin-authored HTML with {{variable}} placeholders still in place — substitution happens per recipient at send time
+
+  whatsappTemplateName     String?
+  whatsappTemplateLanguage String?
+  whatsappVariablesJson    String? @db.Text // admin's {{1}}.. mapping to a dynamic field key or a literal string — see lib/communications/render.ts
+  whatsappFreeformBody     String? @db.Text // only used for the explicit "free-form to the eligible subset" action
+
+  status String @default("DRAFT") // DRAFT | SENDING | COMPLETED | PARTIALLY_FAILED | FAILED
+
+  isTest Boolean @default(false) // true for a "Send Test" run — excluded from all vendor-facing history/stats
+
+  totalRecipients Int @default(0)
+
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  recipients CommunicationRecipient[]
+
+  @@index([eventId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// One row per (Communication, vendor, channel) — the frozen recipient
+// snapshot AND the per-channel delivery pointer. Business/contact/booth/
+// status fields are captured at send time and never change even if the
+// vendor's real data changes later (a vendor paying 10 minutes after a
+// send must not retroactively change who a completed campaign reached).
+// The @@unique below is the row-level idempotency guard: a retried send
+// for the same recipient+channel can never create a second row — see
+// lib/communications/service.ts.
+model CommunicationRecipient {
+  id              String        @id @default(cuid())
+  communicationId String
+  communication   Communication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+  vendorId        String
+  vendor          Vendor        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  applicationId   String? // the specific booking this send was about, when the audience was event-scoped
+
+  businessNameSnapshot      String
+  contactNameSnapshot       String
+  emailSnapshot             String?
+  phoneSnapshot             String?
+  boothCodesSnapshot        String? // comma-joined, e.g. "B14,B15"
+  applicationStatusSnapshot String? // the DisplayStatus at send time, e.g. "PAID"
+
+  channel     String // EMAIL | WHATSAPP
+  destination String? // the email address or E.164 phone actually targeted
+
+  emailDeliveryId    String? @unique // points into the existing EmailDelivery table (status kept current by the real Resend webhook)
+  whatsappDeliveryId String? @unique // points into WhatsAppDelivery below
+
+  status      String    @default("QUEUED") // QUEUED | SENT | DELIVERED | FAILED | SKIPPED
+  skipReason  String? // e.g. "No email on file", "No WhatsApp opt-in", "Invalid phone", "Outside free-form window — template required"
+  queuedAt    DateTime  @default(now())
+  processedAt DateTime?
+
+  @@unique([communicationId, vendorId, channel])
+  @@index([communicationId])
+  @@index([vendorId])
+  @@index([status])
+}
+
+// WhatsApp's equivalent of EmailDelivery — same shape/statuses/dedupeKey
+// idempotency pattern, deliberately mirrored rather than invented fresh.
+// Written by lib/whatsapp/infobip.ts sendWhatsAppTemplate(); updated by
+// the Infobip delivery-report webhook the same way
+// app/api/webhooks/resend/route.ts updates EmailDelivery.
+model WhatsAppDelivery {
+  id                String    @id @default(cuid())
+  type              String // e.g. BROADCAST — a future automatic WhatsApp notification could reuse this same table/type set
+  vendorId          String?
+  vendor            Vendor?   @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  eventId           String?
+  toPhone           String // E.164
+  provider          String    @default("infobip")
+  templateName      String?
+  providerMessageId String?
+  status            String    @default("QUEUED") // QUEUED | SENT | DELIVERED | FAILED
+  failReason        String?
+  dedupeKey         String?   @unique
+  queuedAt          DateTime  @default(now())
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+
+  @@index([vendorId])
+  @@index([type])
+  @@index([providerMessageId])
+}
+
+// Local cache of Infobip's real approved WhatsApp templates, refreshed by
+// calling Infobip's live template-list API (lib/whatsapp/infobip.ts
+// listWhatsAppTemplates()) — never a hand-typed hardcoded list. A row
+// with source="MANUAL" is an admin-registered fallback for when the live
+// call fails or returns a shape this app's parser doesn't recognize; the
+// UI must never present a MANUAL row as "Approved" the way a SYNCED one
+// is, since its approval status was never actually confirmed by Infobip.
+model WhatsAppTemplateCache {
+  id             String   @id @default(cuid())
+  name           String
+  language       String
+  category       String? // e.g. MARKETING, UTILITY, AUTHENTICATION
+  status         String? // whatever Infobip's API reports, e.g. APPROVED | PENDING | REJECTED
+  bodyText       String?  @db.Text // template body with {{1}} {{2}} placeholders, for the admin preview
+  variableCount  Int      @default(0)
+  source         String   @default("SYNCED") // SYNCED | MANUAL
+  isAuthTemplate Boolean  @default(false) // AUTHENTICATION-category templates are excluded from the broadcast picker entirely — OTP must never appear as a general broadcast template
+  syncedAt       DateTime @default(now())
+
+  @@unique([name, language])
 }
 
 model GalleryImage {

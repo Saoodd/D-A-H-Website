@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { runExpiryPass } from "@/lib/expiry";
 import { getDisplayStatus } from "@/lib/status";
 import { PageHeader } from "@/components/ui/Card";
+import { LinkButton } from "@/components/ui/Button";
 import { EventApplicationsClient } from "./EventApplicationsClient";
 
 export async function generateMetadata({ params }: { params: Promise<{ eventId: string }> }): Promise<Metadata> {
@@ -78,6 +79,19 @@ export default async function AdminEventApplicationsPage({ params }: { params: P
         eyebrow="Applications"
         title={event.name}
         description={`${event.startDate.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}${event.location ? ` · ${event.location}` : ""}`}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <LinkButton href={`/admin/communications/new?eventId=${event.id}&audience=pending`} variant="secondary" size="sm">
+              Message Pending
+            </LinkButton>
+            <LinkButton href={`/admin/communications/new?eventId=${event.id}&audience=accepted-unpaid`} variant="secondary" size="sm">
+              Message Accepted
+            </LinkButton>
+            <LinkButton href={`/admin/communications/new?eventId=${event.id}&audience=rejected`} variant="secondary" size="sm">
+              Message Rejected
+            </LinkButton>
+          </div>
+        }
       />
       <EventApplicationsClient eventName={event.name} applications={rows} />
     </div>

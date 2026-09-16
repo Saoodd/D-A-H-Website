@@ -5,6 +5,7 @@ import Link from "next/link";
 import { formatAed, DisplayStatus } from "@/lib/constants";
 import { MetricCard, EmptyState } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { LinkButton } from "@/components/ui/Button";
 import { EventForm } from "../EventForm";
 import { FloorPlanBuilder } from "./FloorPlanBuilder";
 import { EventDangerZone } from "./EventDangerZone";
@@ -100,9 +101,14 @@ export function EventWorkspaceClient({
           &larr; Events
         </Link>
       </div>
-      <div className="flex items-center gap-3 mb-6 flex-wrap">
-        <h1 className="font-heading text-2xl text-brown-dark">{event.name}</h1>
-        <StatusBadge label={event.status} tone={event.status === "PUBLISHED" ? "positive" : "neutral"} />
+      <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="font-heading text-2xl text-brown-dark">{event.name}</h1>
+          <StatusBadge label={event.status} tone={event.status === "PUBLISHED" ? "positive" : "neutral"} />
+        </div>
+        <LinkButton href={`/admin/communications/new?eventId=${event.id}`} variant="secondary" size="sm">
+          Message Vendors
+        </LinkButton>
       </div>
 
       <div className="flex gap-1 overflow-x-auto mb-8 border-b border-brown/10">
@@ -154,6 +160,14 @@ export function EventWorkspaceClient({
               <p className="text-brown-light text-xs">Rejected</p>
               <p className="font-heading text-xl text-brown-dark mt-1">{stats.rejected}</p>
             </div>
+          </div>
+          <div className="flex flex-wrap gap-2 mt-6">
+            <LinkButton href={`/admin/communications/new?eventId=${event.id}&audience=confirmed-paid`} variant="secondary" size="sm">
+              Message Confirmed &amp; Paid Vendors
+            </LinkButton>
+            <LinkButton href={`/admin/communications/new?eventId=${event.id}&audience=accepted-unpaid`} variant="secondary" size="sm">
+              Message Accepted, Unpaid Vendors
+            </LinkButton>
           </div>
         </div>
       )}
