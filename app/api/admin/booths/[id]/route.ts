@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
 import { getBoothPrice } from "@/lib/pricing";
 import { BOOTH_STATUS } from "@/lib/constants";
+import { notifyVendorWhatsApp } from "@/lib/notifications/notify";
 
 // Admin booth management: manual status changes, assign/reassign to a
 // specific approved vendor (or a free-text walk-in name), and unassign back
@@ -96,6 +97,41 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const updated = await prisma.booth.update({ where: { id }, data });
+
+  // BOOKING_UPDATED is intentional/opt-in only (spec: "never automatically
+  // for tiny internal/admin-only edits") — fires ONLY when the admin
+  // explicitly passes notifyVendor:true AND the booth was already a
+  // confirmed SOLD booking whose assigned vendor is actually changing. A
+  // cosmetic edit (price/color/geometry) on a SOLD booth, or a fresh
+  // assignment on a booth that wasn't SOLD before this PATCH, never
+  // triggers this — that's the normal admin floor-plan setup flow, not a
+  // change to an existing vendor's confirmed booking.
+  if (
+    body.notifyVendor === true &&
+    booth.status === "SOLD" &&
+    updated.status === "SOLD" &&
+    updated.assignedApplicationId &&
+    updated.assignedApplicationId !== booth.assignedApplicationId
+  ) {
+    const application = await prisma.application.findUnique({ where: { id: updated.assignedApplicationId }, include: { event: true } });
+    if (application) {
+      const previousBoothCode = typeof body.previousBoothCode === "string" && body.previousBoothCode.trim() ? body.previousBoothCode.trim() : booth.code;
+      await notifyVendorWhatsApp({
+        useCase: "BOOKING_UPDATED",
+        vendorId: application.vendorId,
+        eventId: application.eventId,
+        applicationId: application.id,
+        entityId: `${updated.id}:${Date.now()}`,
+        data: {
+          business_name: application.businessName,
+          event_name: application.event.name,
+          booth_old: previousBoothCode,
+          booth_new: updated.code,
+        },
+      });
+    }
+  }
+
   return NextResponse.json({ ok: true, booth: updated });
 }
 

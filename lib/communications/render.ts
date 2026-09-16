@@ -3,7 +3,7 @@ import { formatAed, formatBoothCodes } from "../constants";
 import { sanitizeEmailHtml } from "../sanitizeHtml";
 import { emailShell } from "../email/template";
 import type { AudienceRecipient } from "./audience";
-import { EMAIL_VARIABLES, type EmailVariable } from "./variables";
+import { EMAIL_VARIABLES, type EmailVariable, type WhatsAppVariableMapping } from "./variables";
 
 export { EMAIL_VARIABLES, type EmailVariable };
 
@@ -44,6 +44,15 @@ export function buildVariableContext(recipient: AudienceRecipient, ctx: Recipien
     amount_due: recipient.amountDueAedFils != null ? formatAed(recipient.amountDueAedFils) : "—",
     acceptance_deadline: formatDate(recipient.acceptanceExpiresAt),
     booking_url: bookingUrl,
+    // Not meaningful for a general audience-wide broadcast recipient —
+    // only ever populated by the single-vendor automatic notifications
+    // that actually have this context (see lib/notifications/notify.ts).
+    // An admin who maps a broadcast placeholder to one of these gets a
+    // harmless "—", same fallback as every other unset field here.
+    booth_old: "—",
+    booth_new: "—",
+    setup_date: "—",
+    setup_time: "—",
   };
 }
 
@@ -80,7 +89,7 @@ export function previewEmailBody(rawBodyHtml: string, recipient: AudienceRecipie
 // dynamic recipient field (one of EMAIL_VARIABLES, reused as the same safe
 // list) or a literal admin-entered string. Never arbitrary code.
 // ---------------------------------------------------------------------------
-export type WhatsAppVariableMapping = Record<string, { kind: "field"; field: EmailVariable } | { kind: "literal"; value: string }>;
+export type { WhatsAppVariableMapping };
 
 /** Resolves a WhatsApp template's {{1}}..{{N}} mapping into the ordered
  *  placeholder array Infobip's template-message API expects (see

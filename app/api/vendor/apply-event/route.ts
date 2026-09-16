@@ -5,6 +5,7 @@ import { applyToEventSchema } from "@/lib/validation";
 import { sendAppliedToEventEmails } from "@/lib/email";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { isPhoneVerified, VERIFICATION_REQUIRED_MESSAGE } from "@/lib/verification";
+import { notifyVendorWhatsApp } from "@/lib/notifications/notify";
 
 // One-click "apply to this event" from a verified vendor's dashboard — no
 // form, since their business info is already on file. Unverified vendors
@@ -77,6 +78,14 @@ export async function POST(req: NextRequest) {
     businessName: vendor.businessName,
     eventId: event.id,
     eventName: event.name,
+  });
+
+  await notifyVendorWhatsApp({
+    useCase: "APPLICATION_RECEIVED",
+    vendorId: vendor.id,
+    eventId: event.id,
+    applicationId: application.id,
+    data: { business_name: vendor.businessName, event_name: event.name },
   });
 
   return NextResponse.json({ ok: true, applicationId: application.id });

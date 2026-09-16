@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
 import { getAcceptanceDeadlineHours } from "@/lib/settings";
 import { sendApplicationApprovedEmail } from "@/lib/email";
+import { notifyVendorWhatsApp } from "@/lib/notifications/notify";
+import { applicationUrl } from "@/lib/notifications/links";
 
 // Approving is also how DAH "re-accepts" a rejected or expired application —
 // it always grants a fresh acceptance + deadline regardless of prior status.
@@ -43,6 +45,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     deadlineHours: hours,
     acceptanceExpiresAt,
     dedupeKey: `application_accepted:${application.id}:${acceptedAt.getTime()}`,
+  });
+
+  await notifyVendorWhatsApp({
+    useCase: "APPLICATION_ACCEPTED",
+    vendorId: application.vendorId,
+    eventId: application.eventId,
+    applicationId: application.id,
+    // Timestamped, like the email dedupeKey above — approve() is also how
+    // a rejected/expired application gets re-accepted, and each such
+    // acceptance is a fresh, real event worth a fresh notification.
+    entityId: `${application.id}:${acceptedAt.getTime()}`,
+    data: {
+      business_name: application.businessName,
+      event_name: application.event.name,
+      acceptance_deadline: acceptanceExpiresAt.toLocaleString("en-AE", { dateStyle: "medium", timeStyle: "short" }),
+      booking_url: applicationUrl(application.id),
+    },
   });
 
   return NextResponse.json({ ok: true, application: updated });

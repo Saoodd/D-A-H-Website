@@ -7,6 +7,9 @@ import { sendPaymentSuccessEmail, sendPaymentFailedEmail } from "@/lib/email";
 import { assignReceiptNumber, getReceiptData } from "@/lib/receipts";
 import { trustedSiteUrl } from "@/lib/url";
 import { requirePhoneVerifiedVendor } from "@/lib/verification";
+import { notifyVendorWhatsApp } from "@/lib/notifications/notify";
+import { applicationUrl } from "@/lib/notifications/links";
+import { formatAed } from "@/lib/constants";
 
 // TODO: once a live gateway is wired in, this route's "outcome" input goes
 // away — success/failure will instead be driven by that gateway's webhook
@@ -129,6 +132,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
         receiptUrl: `${trustedSiteUrl()}/vendor/receipts/${paymentId}`,
         viewBookingUrl: `${trustedSiteUrl()}/vendor/applications/${applicationId}`,
         dedupeKey: `payment_receipt:${paymentId}`,
+      });
+
+      const whatsAppData = {
+        business_name: application.businessName,
+        event_name: application.event.name,
+        booth: receipt.boothCode,
+        amount_paid: formatAed(receipt.totalAedFils),
+        booking_url: applicationUrl(applicationId),
+      };
+      await notifyVendorWhatsApp({
+        useCase: "PAYMENT_RECEIVED",
+        vendorId: session.vendorId,
+        eventId: application.eventId,
+        applicationId,
+        paymentId,
+        data: whatsAppData,
+      });
+      await notifyVendorWhatsApp({
+        useCase: "BOOKING_CONFIRMED",
+        vendorId: session.vendorId,
+        eventId: application.eventId,
+        applicationId,
+        paymentId,
+        data: whatsAppData,
       });
     }
 

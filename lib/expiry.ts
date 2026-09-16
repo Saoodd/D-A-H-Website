@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./prisma";
 import { sendAcceptanceExpiredEmail } from "./email";
+import { notifyVendorWhatsApp } from "./notifications/notify";
 
 // Server/DB-enforced expiry. Called at the top of any API route that reads
 // or writes booths/applications, so a booth or an acceptance can never be
@@ -75,6 +76,15 @@ export async function expireStaleAcceptances(eventId?: string) {
       eventId: app.eventId,
       eventName: app.event.name,
       dedupeKey: `application_expired:${app.id}:${now.getTime()}`,
+    });
+
+    await notifyVendorWhatsApp({
+      useCase: "ACCEPTANCE_EXPIRED",
+      vendorId: app.vendorId,
+      eventId: app.eventId,
+      applicationId: app.id,
+      entityId: `${app.id}:${now.getTime()}`,
+      data: { business_name: app.businessName, event_name: app.event.name },
     });
   }
 }

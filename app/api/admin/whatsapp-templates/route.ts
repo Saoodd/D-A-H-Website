@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
-import { isWhatsAppConfigured, listWhatsAppTemplates, WHATSAPP_NOT_CONFIGURED_MESSAGE } from "@/lib/whatsapp/infobip";
+import { syncAndListTemplates } from "@/lib/whatsapp/templateSync";
 
 // Live-syncs Infobip's real approved WhatsApp templates (never a hardcoded
 // list — see lib/whatsapp/infobip.ts) into WhatsAppTemplateCache, then
@@ -10,33 +10,11 @@ import { isWhatsAppConfigured, listWhatsAppTemplates, WHATSAPP_NOT_CONFIGURED_ME
 // template) plus any MANUAL fallback rows an admin registered by hand.
 // Runs the sync on every GET (cheap, and keeps the picker current) —
 // there's also a dedicated POST /sync for an explicit "Refresh" action.
-async function syncAndList() {
-  if (!isWhatsAppConfigured()) {
-    const manual = await prisma.whatsAppTemplateCache.findMany({ where: { source: "MANUAL" }, orderBy: { name: "asc" } });
-    return { configured: false, error: WHATSAPP_NOT_CONFIGURED_MESSAGE, templates: manual };
-  }
-
-  const result = await listWhatsAppTemplates();
-  if (!result.ok) {
-    const cached = await prisma.whatsAppTemplateCache.findMany({ orderBy: { name: "asc" } });
-    return { configured: true, error: result.error, templates: cached.filter((t) => !t.isAuthTemplate) };
-  }
-
-  for (const t of result.templates) {
-    await prisma.whatsAppTemplateCache.upsert({
-      where: { name_language: { name: t.name, language: t.language } },
-      update: { category: t.category, status: t.status, bodyText: t.bodyText, variableCount: t.variableCount, isAuthTemplate: t.isAuthTemplate, source: "SYNCED", syncedAt: new Date() },
-      create: { name: t.name, language: t.language, category: t.category, status: t.status, bodyText: t.bodyText, variableCount: t.variableCount, isAuthTemplate: t.isAuthTemplate, source: "SYNCED" },
-    });
-  }
-
-  const merged = await prisma.whatsAppTemplateCache.findMany({ orderBy: { name: "asc" } });
-  return { configured: true, error: null, templates: merged.filter((t) => !t.isAuthTemplate) };
-}
-
+// The sync itself lives in lib/whatsapp/templateSync.ts, shared with the
+// Template Registry (app/api/admin/notification-templates/route.ts).
 export async function GET() {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const result = await syncAndList();
+  const result = await syncAndListTemplates();
   return NextResponse.json({ ok: true, ...result });
 }
 

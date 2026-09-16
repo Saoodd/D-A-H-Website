@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "../prisma";
 import { getDisplayStatus } from "../status";
 import { DisplayStatus } from "../constants";
-import { normalizePhoneToE164 } from "../phone";
+import { whatsappEligibility } from "../whatsapp/consent";
 
 // Resolves an Admin Communications audience filter into a concrete list of
 // vendors to message — the ONE place this logic lives. Reuses
@@ -110,20 +110,6 @@ function codeInRange(code: string, fromCode: string, toCode: string): boolean {
 
 function emailEligibility(email: string | null | undefined): { eligible: boolean; reason: string | null } {
   if (!email || !email.trim()) return { eligible: false, reason: "No email on file" };
-  return { eligible: true, reason: null };
-}
-
-function whatsappEligibility(vendor: {
-  phone: string;
-  whatsappOptInAt: Date | null;
-  whatsappOptOutAt: Date | null;
-}): { eligible: boolean; reason: string | null } {
-  const normalized = normalizePhoneToE164(vendor.phone);
-  if (!normalized) return { eligible: false, reason: "Invalid phone number" };
-  if (!vendor.whatsappOptInAt) return { eligible: false, reason: "No WhatsApp opt-in" };
-  if (vendor.whatsappOptOutAt && vendor.whatsappOptOutAt > vendor.whatsappOptInAt) {
-    return { eligible: false, reason: "Opted out of WhatsApp" };
-  }
   return { eligible: true, reason: null };
 }
 

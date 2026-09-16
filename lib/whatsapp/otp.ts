@@ -2,7 +2,7 @@ import "server-only";
 import { randomInt, createHmac, timingSafeEqual } from "crypto";
 import { prisma } from "../prisma";
 import { isExpired } from "../tokens";
-import { isWhatsAppConfigured, listWhatsAppTemplates, sendWhatsAppTemplate, WHATSAPP_NOT_CONFIGURED_MESSAGE } from "./infobip";
+import { isWhatsAppConfigured, listWhatsAppTemplates, sendWhatsAppTemplate, serializeButtons, WHATSAPP_NOT_CONFIGURED_MESSAGE } from "./infobip";
 
 // Phone verification over WhatsApp — replaces the retired Infobip 2FA (SMS)
 // integration (lib/sms/infobip.ts, deleted). Infobip's WhatsApp channel has
@@ -96,8 +96,31 @@ async function getConfiguredAuthTemplate(): Promise<AuthTemplateLookup> {
       for (const t of result.templates) {
         await prisma.whatsAppTemplateCache.upsert({
           where: { name_language: { name: t.name, language: t.language } },
-          update: { category: t.category, status: t.status, bodyText: t.bodyText, variableCount: t.variableCount, isAuthTemplate: t.isAuthTemplate, source: "SYNCED", syncedAt: new Date() },
-          create: { name: t.name, language: t.language, category: t.category, status: t.status, bodyText: t.bodyText, variableCount: t.variableCount, isAuthTemplate: t.isAuthTemplate, source: "SYNCED" },
+          update: {
+            category: t.category,
+            status: t.status,
+            bodyText: t.bodyText,
+            headerText: t.headerText,
+            footerText: t.footerText,
+            buttonsJson: serializeButtons(t.buttons),
+            variableCount: t.variableCount,
+            isAuthTemplate: t.isAuthTemplate,
+            source: "SYNCED",
+            syncedAt: new Date(),
+          },
+          create: {
+            name: t.name,
+            language: t.language,
+            category: t.category,
+            status: t.status,
+            bodyText: t.bodyText,
+            headerText: t.headerText,
+            footerText: t.footerText,
+            buttonsJson: serializeButtons(t.buttons),
+            variableCount: t.variableCount,
+            isAuthTemplate: t.isAuthTemplate,
+            source: "SYNCED",
+          },
         });
       }
       cached = await prisma.whatsAppTemplateCache.findUnique({ where: { name_language: { name, language } } });

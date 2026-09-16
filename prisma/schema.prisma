@@ -85,7 +85,13 @@ model Event {
   location    String
   coverImage  String?
   categories  String[]  @default([]) // vendor categories relevant to this event — shown publicly and offered as choices on the application form
-  status      String    @default("DRAFT") // DRAFT | PUBLISHED | CLOSED
+  status      String    @default("DRAFT") // DRAFT | PUBLISHED | CLOSED | CANCELLED
+  // Set only by the dedicated, explicit-confirmation cancel action
+  // (app/api/admin/events/[id]/cancel) — never by the general event PATCH,
+  // so an event can never be flipped to CANCELLED (and its vendors
+  // notified) just by editing a title or date. See EVENT_CANCELLED in
+  // lib/notifications/useCases.ts.
+  cancelledAt DateTime?
 
   // Whether the public event page shows a "Booths from AED X" starting
   // price. Defaults on to match prior behavior; admin can hide it per event.
@@ -301,14 +307,14 @@ model Vendor {
   whatsappOptInMethod String? // VENDOR | ADMIN — ADMIN covers consent obtained outside the app and recorded manually
   whatsappOptOutAt    DateTime?
 
-  applications             Application[]
-  notes                    VendorNote[]
-  warnings                 VendorWarning[]
-  emailVerificationTokens  EmailVerificationToken[]
-  phoneVerificationLogs    VendorPhoneVerificationLog[]
-  emailDeliveries          EmailDelivery[]
-  whatsappDeliveries       WhatsAppDelivery[]
-  communicationRecipients  CommunicationRecipient[]
+  applications            Application[]
+  notes                   VendorNote[]
+  warnings                VendorWarning[]
+  emailVerificationTokens EmailVerificationToken[]
+  phoneVerificationLogs   VendorPhoneVerificationLog[]
+  emailDeliveries         EmailDelivery[]
+  whatsappDeliveries      WhatsAppDelivery[]
+  communicationRecipients CommunicationRecipient[]
   // Every Agreement (VENDOR_TERMS at signup, EVENT_TERMS per booking) this
   // vendor has accepted — look up the VENDOR_TERMS one via
   // `agreementAcceptances.find(a => a.agreement.type === "VENDOR_TERMS")`
@@ -871,9 +877,26 @@ model WhatsAppDelivery {
   sentAt            DateTime?
   deliveredAt       DateTime?
 
+  // Automatic-notification bookkeeping — all denormalized (no FK), same
+  // reasoning as eventId above: a later application/payment deletion must
+  // never break delivery history. useCase (e.g. "APPLICATION_ACCEPTED")
+  // and triggerType let the History/delivery-log UI tell an automatic
+  // business-event send apart from an admin's manual broadcast (item 33
+  // of the Utility-messaging spec) — triggerType is "ADMIN_BROADCAST" for
+  // every existing Communications Center send (type="BROADCAST"/
+  // "BROADCAST_TEST") and "AUTOMATIC" for everything sent by
+  // lib/notifications/notify.ts. Both are nullable so existing rows
+  // (written before this column existed) don't need backfilling.
+  useCase       String?
+  triggerType   String? // AUTOMATIC | ADMIN_BROADCAST
+  applicationId String?
+  paymentId     String?
+
   @@index([vendorId])
   @@index([type])
   @@index([providerMessageId])
+  @@index([useCase])
+  @@index([applicationId])
 }
 
 // Local cache of Infobip's real approved WhatsApp templates, refreshed by
@@ -890,12 +913,39 @@ model WhatsAppTemplateCache {
   category       String? // e.g. MARKETING, UTILITY, AUTHENTICATION
   status         String? // whatever Infobip's API reports, e.g. APPROVED | PENDING | REJECTED
   bodyText       String?  @db.Text // template body with {{1}} {{2}} placeholders, for the admin preview
+  headerText     String?  @db.Text // header component text, if the template has one (may itself contain a {{1}} placeholder)
+  footerText     String?  @db.Text // footer component text, if the template has one (static, never has placeholders per WhatsApp's own template rules)
+  buttonsJson    String?  @db.Text // JSON array of the template's real registered buttons (type/text/url-with-placeholder), as returned by Infobip — see lib/whatsapp/infobip.ts ParsedWhatsAppTemplate.buttons. Never invented; only what the live template list actually reports.
   variableCount  Int      @default(0)
   source         String   @default("SYNCED") // SYNCED | MANUAL
   isAuthTemplate Boolean  @default(false) // AUTHENTICATION-category templates are excluded from the broadcast picker entirely — OTP must never appear as a general broadcast template
   syncedAt       DateTime @default(now())
 
   @@unique([name, language])
+}
+
+// Central use-case -> real-template mapping, admin-configured through the
+// Template Registry UI (Admin > Communications > Template Registry) after
+// the admin reviews their account's actual live-synced WhatsAppTemplateCache
+// rows — this app never guesses which Infobip template name corresponds to
+// "APPLICATION_ACCEPTED" etc. useCase is one of the fixed DAH notification
+// use cases (see lib/notifications/useCases.ts) and is the only thing
+// call sites reference; the admin can repoint it at a different approved
+// template at any time without a code change or a new env var per template
+// (deliberately not env-var-driven, unlike the single Authentication
+// template — see INFOBIP_WHATSAPP_AUTH_TEMPLATE — because there are many
+// of these and their names are not secrets).
+model WhatsAppNotificationTemplate {
+  id                     String   @id @default(cuid())
+  useCase                String   @unique
+  templateName           String
+  templateLanguage       String
+  placeholderMappingJson String?  @db.Text // same shape as Communication.whatsappVariablesJson: Record<"1".."N", {kind:"field",field}|{kind:"literal",value}>
+  buttonMappingJson      String?  @db.Text // Record<buttonIndex, {kind:"field",field}|{kind:"literal",value}> for URL buttons with a dynamic {{1}} segment
+  enabled                Boolean  @default(true) // admin can disable a use case's automatic send without deleting the mapping
+  updatedByName          String? // free-text "updated by" (same attribution pattern as Communication.sentByName — no per-admin login identity)
+  updatedAt              DateTime @updatedAt
+  createdAt              DateTime @default(now())
 }
 
 model GalleryImage {

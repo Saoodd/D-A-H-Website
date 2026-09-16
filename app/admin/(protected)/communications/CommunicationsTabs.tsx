@@ -7,6 +7,7 @@ const TABS = [
   { href: "/admin/communications/new", label: "Compose" },
   { href: "/admin/communications", label: "History" },
   { href: "/admin/communications/templates", label: "Templates" },
+  { href: "/admin/communications/registry", label: "Template Registry" },
 ];
 
 // Delivery Logs live inside each communication's own Detail page (a global

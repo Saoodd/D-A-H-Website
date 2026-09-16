@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
 import { getAcceptanceDeadlineHours } from "@/lib/settings";
 import { sendApplicationApprovedEmail } from "@/lib/email";
+import { notifyVendorWhatsApp } from "@/lib/notifications/notify";
+import { applicationUrl } from "@/lib/notifications/links";
 
 // Bulk acceptance is the same acceptance logic as the single Approve
 // button, applied to several applications at once — not a separate
@@ -86,6 +88,20 @@ export async function POST(req: NextRequest) {
       deadlineHours: hours,
       acceptanceExpiresAt,
       dedupeKey: `application_accepted:${application.id}:${acceptedAt.getTime()}`,
+    });
+
+    await notifyVendorWhatsApp({
+      useCase: "APPLICATION_ACCEPTED",
+      vendorId: application.vendorId,
+      eventId: application.eventId,
+      applicationId: application.id,
+      entityId: `${application.id}:${acceptedAt.getTime()}`,
+      data: {
+        business_name: application.businessName,
+        event_name: application.event.name,
+        acceptance_deadline: acceptanceExpiresAt.toLocaleString("en-AE", { dateStyle: "medium", timeStyle: "short" }),
+        booking_url: applicationUrl(application.id),
+      },
     });
 
     results.push({ applicationId, ok: true, businessName: application.businessName });

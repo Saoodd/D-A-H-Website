@@ -71,12 +71,22 @@ function authHeaders(apiKey: string): Record<string, string> {
 // Template listing — live-synced, never hardcoded.
 // ---------------------------------------------------------------------------
 
+export interface ParsedWhatsAppTemplateButton {
+  type: string; // e.g. URL, QUICK_REPLY, PHONE_NUMBER — whatever Infobip reports, never invented
+  text: string | null;
+  url: string | null; // for a URL button; may contain a literal "{{1}}" segment if the button has a dynamic parameter
+  hasPlaceholder: boolean; // true when `url` contains a {{n}} token — the button needs a `parameter` at send time
+}
+
 export interface ParsedWhatsAppTemplate {
   name: string;
   language: string;
   category: string | null;
   status: string | null;
   bodyText: string | null;
+  headerText: string | null;
+  footerText: string | null;
+  buttons: ParsedWhatsAppTemplateButton[];
   variableCount: number;
   isAuthTemplate: boolean;
 }
@@ -109,6 +119,99 @@ function extractBodyText(item: Record<string, unknown>): string | null {
   if (typeof body?.text === "string") return body.text;
 
   return null;
+}
+
+function findComponent(item: Record<string, unknown>, type: string): Record<string, unknown> | undefined {
+  const components = item.components as unknown[] | undefined;
+  if (!Array.isArray(components)) return undefined;
+  return components.find(
+    (c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === type
+  ) as Record<string, unknown> | undefined;
+}
+
+/** Same best-effort, several-shapes-tried approach as extractBodyText, for
+ *  the optional header component. Returns null (not "") for "no header" —
+ *  admin UI must treat null as "this template has no header", not as an
+ *  empty one. */
+function extractHeaderText(item: Record<string, unknown>): string | null {
+  const structure = item.structure as Record<string, unknown> | undefined;
+  const structureHeader = structure?.header as Record<string, unknown> | string | undefined;
+  if (typeof structureHeader === "string") return structureHeader;
+  if (typeof structureHeader?.text === "string") return structureHeader.text;
+
+  const headerComponent = findComponent(item, "HEADER");
+  if (typeof headerComponent?.text === "string") return headerComponent.text;
+
+  const header = item.header as Record<string, unknown> | string | undefined;
+  if (typeof header === "string") return header;
+  if (typeof header?.text === "string") return header.text;
+
+  return null;
+}
+
+function extractFooterText(item: Record<string, unknown>): string | null {
+  const structure = item.structure as Record<string, unknown> | undefined;
+  const structureFooter = structure?.footer as Record<string, unknown> | string | undefined;
+  if (typeof structureFooter === "string") return structureFooter;
+  if (typeof structureFooter?.text === "string") return structureFooter.text;
+
+  const footerComponent = findComponent(item, "FOOTER");
+  if (typeof footerComponent?.text === "string") return footerComponent.text;
+
+  const footer = item.footer as Record<string, unknown> | string | undefined;
+  if (typeof footer === "string") return footer;
+  if (typeof footer?.text === "string") return footer.text;
+
+  return null;
+}
+
+/** Best-effort extraction of a template's real registered buttons. Tries
+ *  Infobip's `structure.buttons` array, a `components[].{type:"BUTTONS"}`
+ *  wrapper with a nested `buttons` array (Meta/WhatsApp's own component
+ *  shape), and a bare top-level `buttons` array — in that order — and
+ *  returns [] (never a guess) if none match. Every returned button's
+ *  `url`/`text` is exactly what Infobip reported; `hasPlaceholder` is
+ *  derived, never asserted. */
+function extractButtons(item: Record<string, unknown>): ParsedWhatsAppTemplateButton[] {
+  const structure = item.structure as Record<string, unknown> | undefined;
+  let rawButtons: unknown[] | undefined = Array.isArray(structure?.buttons) ? (structure!.buttons as unknown[]) : undefined;
+
+  if (!rawButtons) {
+    const buttonsComponent = findComponent(item, "BUTTONS");
+    if (Array.isArray(buttonsComponent?.buttons)) rawButtons = buttonsComponent!.buttons as unknown[];
+  }
+
+  if (!rawButtons && Array.isArray(item.buttons)) rawButtons = item.buttons as unknown[];
+  if (!Array.isArray(rawButtons)) return [];
+
+  return rawButtons
+    .map((raw) => {
+      if (typeof raw !== "object" || raw === null) return null;
+      const b = raw as Record<string, unknown>;
+      const type = typeof b.type === "string" ? b.type : "UNKNOWN";
+      const text = typeof b.text === "string" ? b.text : null;
+      const url = typeof b.url === "string" ? b.url : typeof b.parameter === "string" ? b.parameter : null;
+      const hasPlaceholder = typeof url === "string" && /\{\{\s*\d+\s*\}\}/.test(url);
+      return { type, text, url, hasPlaceholder };
+    })
+    .filter((b): b is ParsedWhatsAppTemplateButton => b !== null);
+}
+
+/** JSON-serializes a template's parsed buttons for WhatsAppTemplateCache.buttonsJson.
+ *  Shared by every sync call site (otp.ts's own cache refresh and the
+ *  Template Registry's) so the exact same shape is stored everywhere. */
+export function serializeButtons(buttons: ParsedWhatsAppTemplateButton[]): string | null {
+  return buttons.length > 0 ? JSON.stringify(buttons) : null;
+}
+
+export function parseButtonsJson(json: string | null): ParsedWhatsAppTemplateButton[] {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json) as unknown;
+    return Array.isArray(parsed) ? (parsed as ParsedWhatsAppTemplateButton[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 export type ListTemplatesResult =
@@ -163,6 +266,9 @@ export async function listWhatsAppTemplates(): Promise<ListTemplatesResult> {
       const category = typeof item.category === "string" ? item.category : null;
       const status = typeof item.status === "string" ? item.status : typeof item.approvalStatus === "string" ? (item.approvalStatus as string) : null;
       const bodyText = extractBodyText(item);
+      const headerText = extractHeaderText(item);
+      const footerText = extractFooterText(item);
+      const buttons = extractButtons(item);
       const structure = item.structure as Record<string, unknown> | undefined;
       const structureBody = structure?.body as Record<string, unknown> | undefined;
       const declaredPlaceholders = Array.isArray(structureBody?.placeholders) ? (structureBody!.placeholders as unknown[]).length : 0;
@@ -173,6 +279,9 @@ export async function listWhatsAppTemplates(): Promise<ListTemplatesResult> {
         category,
         status,
         bodyText,
+        headerText,
+        footerText,
+        buttons,
         variableCount,
         isAuthTemplate: (category || "").toUpperCase() === "AUTHENTICATION",
       };
@@ -210,6 +319,13 @@ export interface SendWhatsAppTemplateOptions {
   type: string;
   vendorId?: string;
   eventId?: string;
+  /** Automatic-notification bookkeeping only (never set by the OTP or
+   *  Communications Center call sites) — see WhatsAppDelivery.useCase/
+   *  triggerType/applicationId/paymentId in schema.prisma. */
+  useCase?: string;
+  triggerType?: string;
+  applicationId?: string;
+  paymentId?: string;
   /** Same idempotency contract as lib/email/core.ts sendEmail's dedupeKey —
    *  a second call with the same key is recognized as a retry of the SAME
    *  send (via WhatsAppDelivery.dedupeKey's unique constraint) and is
@@ -276,6 +392,10 @@ async function logQueued(opts: SendWhatsAppTemplateOptions, toPhone: string): Pr
         templateName: opts.templateName,
         status: "QUEUED",
         dedupeKey: opts.dedupeKey,
+        useCase: opts.useCase,
+        triggerType: opts.triggerType,
+        applicationId: opts.applicationId,
+        paymentId: opts.paymentId,
       },
     });
     return row.id;
@@ -303,7 +423,20 @@ async function logOutcome(
     await prisma.whatsAppDelivery.update({ where: { id: rowId }, data }).catch(() => {});
   } else {
     await prisma.whatsAppDelivery
-      .create({ data: { type: opts.type, vendorId: opts.vendorId, eventId: opts.eventId, toPhone, templateName: opts.templateName, ...data } })
+      .create({
+        data: {
+          type: opts.type,
+          vendorId: opts.vendorId,
+          eventId: opts.eventId,
+          toPhone,
+          templateName: opts.templateName,
+          useCase: opts.useCase,
+          triggerType: opts.triggerType,
+          applicationId: opts.applicationId,
+          paymentId: opts.paymentId,
+          ...data,
+        },
+      })
       .catch(() => {});
   }
 }

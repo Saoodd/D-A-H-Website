@@ -192,6 +192,7 @@ async function processOneRecipient(
     language: comm.whatsappTemplateLanguage,
     placeholders,
     type: "BROADCAST",
+    triggerType: "ADMIN_BROADCAST",
     vendorId: row.vendorId,
     eventId: comm.eventId || undefined,
     dedupeKey,
@@ -337,6 +338,7 @@ export async function sendTestCommunication(communicationId: string, opts: { tes
       language: comm.whatsappTemplateLanguage,
       placeholders,
       type: "BROADCAST_TEST",
+      triggerType: "ADMIN_BROADCAST",
     });
     result.whatsapp = { ok: r.ok, error: r.ok ? undefined : r.error };
   }

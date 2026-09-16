@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { RichTextEditor } from "@/components/admin/RichTextEditor";
-import { EMAIL_VARIABLES } from "@/lib/communications/variables";
+import { EMAIL_VARIABLES, VARIABLE_LABEL } from "@/lib/communications/variables";
 import type { AudienceFilters, AudienceRecipient } from "@/lib/communications/audience";
 import type { DisplayStatus } from "@/lib/constants";
 
@@ -20,13 +20,33 @@ interface TierOption {
   sizeKey: string;
   label: string;
 }
+interface TemplateButtonInfo {
+  type: string;
+  text: string | null;
+  url: string | null;
+  hasPlaceholder: boolean;
+}
 interface WhatsAppTemplate {
   name: string;
   language: string;
+  category: string | null;
   bodyText: string | null;
+  headerText: string | null;
+  footerText: string | null;
+  buttonsJson: string | null;
   variableCount: number;
   source: string;
   status: string | null;
+}
+
+function parseTemplateButtons(json: string | null): TemplateButtonInfo[] {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 type VarMapping = Record<string, { kind: "field"; field: string } | { kind: "literal"; value: string }>;
 
@@ -49,19 +69,6 @@ const STATUS_LABEL: Record<DisplayStatus, string> = {
   ACCEPTED_UNPAID: "Accepted — Unpaid",
   PAID: "Confirmed & Paid",
   EXPIRED: "Acceptance Expired",
-};
-
-const VARIABLE_LABEL: Record<string, string> = {
-  business_name: "Business Name",
-  contact_name: "Contact Name",
-  event_name: "Event Name",
-  event_date: "Event Date",
-  venue: "Venue",
-  booth: "Booth",
-  amount_paid: "Amount Paid",
-  amount_due: "Amount Due",
-  acceptance_deadline: "Acceptance Deadline",
-  booking_url: "Booking URL",
 };
 
 function emptyFilters(eventId: string | null, statuses: DisplayStatus[]): AudienceFilters {
@@ -138,6 +145,15 @@ export function ComposeClient({
   const [templatesError, setTemplatesError] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<WhatsAppTemplate | null>(null);
   const [variableMapping, setVariableMapping] = useState<VarMapping>({});
+  // Compose never populates a template's button parameters (see
+  // lib/communications/service.ts) — a template with a dynamic ({{1}})
+  // button would silently send without its required value, which Infobip
+  // may reject. Block sending such a template from here rather than let
+  // that surprise the admin at send time.
+  const whatsappHasUnsupportedButton = useMemo(
+    () => (selectedTemplate ? parseTemplateButtons(selectedTemplate.buttonsJson).some((b) => b.hasPlaceholder) : false),
+    [selectedTemplate]
+  );
 
   const [preview, setPreview] = useState<{ totalCount: number; emailEligibleCount: number; whatsappEligibleCount: number; summary: string; recipients: AudienceRecipient[] } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -350,7 +366,14 @@ export function ComposeClient({
   );
 
   const isLargeSend = (preview?.totalCount || 0) > 100;
-  const canSend = (preview?.totalCount || 0) > 0 && internalName.trim().length > 0 && (channel === "EMAIL" ? emailSubject.trim() && emailBodyHtml.trim() : channel === "WHATSAPP" ? !!selectedTemplate : emailSubject.trim() && emailBodyHtml.trim() && !!selectedTemplate);
+  const canSend =
+    (preview?.totalCount || 0) > 0 &&
+    internalName.trim().length > 0 &&
+    (channel === "EMAIL"
+      ? emailSubject.trim() && emailBodyHtml.trim()
+      : channel === "WHATSAPP"
+        ? !!selectedTemplate && !whatsappHasUnsupportedButton
+        : emailSubject.trim() && emailBodyHtml.trim() && !!selectedTemplate && !whatsappHasUnsupportedButton);
 
   return (
     <div className="space-y-6 pb-24">
@@ -614,16 +637,41 @@ export function ComposeClient({
             className="w-full sm:w-96 rounded-[6px] border border-brown/20 px-3 py-2 text-sm"
           >
             <option value="">Select Template…</option>
-            {templates.map((t) => (
-              <option key={`${t.name}::${t.language}`} value={`${t.name}::${t.language}`}>
-                {t.name} ({t.language}) {t.source === "MANUAL" ? "— unverified" : ""}
-              </option>
-            ))}
+            {templates.map((t) => {
+              // Only selectable when Infobip has actually confirmed
+              // approval — a MANUAL row is the one exception, since an
+              // admin registering it by hand is already vouching for its
+              // real-world approval out of band (see TemplatesClient).
+              const selectable = t.source === "MANUAL" || (t.status || "").toUpperCase() === "APPROVED";
+              return (
+                <option key={`${t.name}::${t.language}`} value={`${t.name}::${t.language}`} disabled={!selectable}>
+                  {t.name} ({t.language}) — {t.category || "uncategorized"} —{" "}
+                  {t.source === "MANUAL" ? "unverified" : t.status || "unknown status"}
+                </option>
+              );
+            })}
           </select>
 
           {selectedTemplate && (
             <div className="space-y-3">
+              {whatsappHasUnsupportedButton && (
+                <p className="text-sm text-amber-800 bg-amber-500/10 rounded-[8px] px-4 py-3">
+                  This template has a dynamic button Compose doesn&apos;t support mapping for yet — sending it here would omit the
+                  button&apos;s required value. Use Admin → Communications → Template Registry instead to wire this template to an
+                  automatic notification, which does support button mapping, or choose a different template.
+                </p>
+              )}
+              {selectedTemplate.headerText && (
+                <p className="text-xs text-brown-light bg-cream-deep/30 rounded-[6px] px-3 py-2">
+                  <span className="font-medium">Header:</span> {selectedTemplate.headerText}
+                </p>
+              )}
               {selectedTemplate.bodyText && <p className="text-sm bg-cream-deep/30 rounded-[6px] px-3 py-2 whitespace-pre-wrap">{selectedTemplate.bodyText}</p>}
+              {selectedTemplate.footerText && (
+                <p className="text-xs text-brown-light bg-cream-deep/30 rounded-[6px] px-3 py-2">
+                  <span className="font-medium">Footer:</span> {selectedTemplate.footerText}
+                </p>
+              )}
               {Array.from({ length: selectedTemplate.variableCount }, (_, i) => i + 1).map((idx) => {
                 const current = variableMapping[String(idx)];
                 return (

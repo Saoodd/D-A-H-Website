@@ -287,7 +287,7 @@ export function EventWorkspaceClient({
       {tab === "settings" && (
         <div className="max-w-4xl">
           <EventForm existingEvents={eventFormProps.existingEvents} initial={eventFormProps.initial} />
-          <EventDangerZone eventId={event.id} eventName={event.name} />
+          <EventDangerZone eventId={event.id} eventName={event.name} eventStatus={event.status} />
         </div>
       )}
     </div>
