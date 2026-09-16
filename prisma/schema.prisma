@@ -263,23 +263,32 @@ model Vendor {
   // unverified again automatically (see PHONE CHANGE requirement) without
   // needing every phone-editing code path to remember to clear a flag.
   // `phoneVerifiedMethod` records how the CURRENT verification happened
-  // ("SMS" via Infobip 2FA, or "ADMIN" via manual admin override) — full
-  // history of every verification event (including ones since superseded by
-  // a phone change) lives in VendorPhoneVerificationLog below.
+  // ("WHATSAPP" via an Infobip WhatsApp Authentication template, or
+  // "ADMIN" via manual admin override) — full history of every
+  // verification event (including ones since superseded by a phone
+  // change) lives in VendorPhoneVerificationLog below.
   emailVerifiedAt     DateTime?
   phoneVerifiedAt     DateTime?
   phoneVerifiedNumber String?
   phoneVerifiedMethod String?
 
-  // Transient state for the CURRENT in-flight Infobip OTP attempt only —
-  // unrelated to the settled phoneVerified* fields above. Set together each
-  // time a code is sent (send or resend both overwrite these, invalidating
-  // any prior attempt); cleared on successful verification. `phoneOtpPhone`
-  // guards against verifying a stale pinId against a number the vendor has
-  // since changed (see PHONE CHANGE requirement) — see
-  // app/api/vendor/phone-verification/confirm/route.ts.
-  phoneOtpPinId String?
-  phoneOtpPhone String?
+  // Transient state for the CURRENT in-flight WhatsApp OTP attempt only —
+  // unrelated to the settled phoneVerified* fields above. Set together
+  // each time a code is sent (send or resend both overwrite these,
+  // invalidating any prior attempt); cleared on successful verification.
+  // Unlike the retired Infobip 2FA (SMS) integration, WhatsApp has no
+  // hosted PIN-management API — DAH generates, hashes, and expires the
+  // code itself (same pattern as PasswordResetToken: only a hash is
+  // stored, the raw code exists only in the WhatsApp message) and caps
+  // wrong-code attempts itself via `phoneOtpAttempts` (Infobip's 2FA API
+  // used to cap this for us; WhatsApp template sends don't). See
+  // lib/whatsapp/otp.ts. `phoneOtpPhone` guards against verifying a stale
+  // code against a number the vendor has since changed (see PHONE CHANGE
+  // requirement) — see app/api/vendor/phone-verification/confirm/route.ts.
+  phoneOtpCodeHash  String?
+  phoneOtpPhone     String?
+  phoneOtpExpiresAt DateTime?
+  phoneOtpAttempts  Int       @default(0)
 
   // WhatsApp broadcast consent — separate from phone verification, and
   // separate from any WhatsApp community-group link (Settings/Event
@@ -473,16 +482,19 @@ model EmailVerificationToken {
 // Append-only history of every phone-verification event for a vendor — an
 // audit trail distinct from Vendor.phoneVerifiedAt/phoneVerifiedNumber/
 // phoneVerifiedMethod (the CURRENT state only). Written on both a real
-// Twilio Verify success (method "SMS") and an admin manual override
-// (method "ADMIN") — Admin has no per-admin-user identity in this system
-// (a single shared password, see AdminSession), so "who" can only ever be
-// recorded generically as "ADMIN", not a named person.
+// WhatsApp OTP success (method "WHATSAPP", via an Infobip WhatsApp
+// Authentication template — see lib/whatsapp/otp.ts) and an admin manual
+// override (method "ADMIN") — Admin has no per-admin-user identity in
+// this system (a single shared password, see AdminSession), so "who" can
+// only ever be recorded generically as "ADMIN", not a named person.
+// Historical rows may still read "SMS" from before DAH moved off Infobip's
+// SMS 2FA API — never rewritten, since this table is append-only history.
 model VendorPhoneVerificationLog {
   id       String @id @default(cuid())
   vendorId String
   vendor   Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   phone    String // the E.164 number verified at this moment
-  method   String // SMS | ADMIN
+  method   String // WHATSAPP | ADMIN | SMS (legacy, pre-migration rows only)
 
   createdAt DateTime @default(now())
 

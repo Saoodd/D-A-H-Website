@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
 
   // A proven parsing library, not a handwritten regex — rejects anything
   // that isn't actually a dialable number up front, since an unparseable
-  // number could never receive an SMS verification code later anyway.
+  // number could never receive a WhatsApp verification code later anyway.
   const normalizedPhone = normalizePhoneToE164(data.phone);
   if (!normalizedPhone) {
     return NextResponse.json({ error: "Please enter a valid mobile number, including country code." }, { status: 400 });

@@ -3,12 +3,15 @@ import crypto from "crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
 
-// Infobip WhatsApp Business API — a SEPARATE Infobip product/channel from
-// the 2FA PIN API used for phone OTP (lib/sms/infobip.ts). Reuses the same
-// account credentials (INFOBIP_BASE_URL / INFOBIP_API_KEY) since both are
-// the same Infobip account, but needs one additional env var:
-// INFOBIP_WHATSAPP_SENDER — the WhatsApp Business number actually
-// registered/approved on that account (MSISDN, no leading "+").
+// Infobip WhatsApp Business API — the SOLE Infobip integration in this
+// codebase. DAH has moved completely off Infobip's SMS 2FA API (and off
+// Twilio, which was never actually used here despite some earlier stray
+// comments claiming otherwise) — phone verification, broadcast
+// Communications, and everything else Infobip-related all go through
+// this one WhatsApp channel and exactly three env vars:
+// INFOBIP_WHATSAPP_BASE_URL, INFOBIP_WHATSAPP_API_KEY,
+// INFOBIP_WHATSAPP_SENDER (the WhatsApp Business number actually
+// registered/approved on that account, MSISDN, no leading "+").
 //
 // IMPORTANT — this module was built against Infobip's publicly documented
 // request/response shape for sending a template message (confirmed via
@@ -32,8 +35,8 @@ interface WhatsAppConfig {
 }
 
 function getConfig(): WhatsAppConfig | null {
-  const baseUrl = process.env.INFOBIP_BASE_URL;
-  const apiKey = process.env.INFOBIP_API_KEY;
+  const baseUrl = process.env.INFOBIP_WHATSAPP_BASE_URL;
+  const apiKey = process.env.INFOBIP_WHATSAPP_API_KEY;
   const sender = process.env.INFOBIP_WHATSAPP_SENDER;
   if (!baseUrl || !apiKey || !sender) return null;
   return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey, sender: sender.replace(/^\+/, "") };
@@ -44,7 +47,7 @@ export function isWhatsAppConfigured(): boolean {
 }
 
 export const WHATSAPP_NOT_CONFIGURED_MESSAGE =
-  "WhatsApp isn't configured yet — set INFOBIP_WHATSAPP_SENDER (and confirm INFOBIP_BASE_URL/INFOBIP_API_KEY have the WhatsApp channel enabled) to send real messages.";
+  "WhatsApp isn't configured yet — set INFOBIP_WHATSAPP_BASE_URL, INFOBIP_WHATSAPP_API_KEY, and INFOBIP_WHATSAPP_SENDER to send real messages.";
 
 function toInfobipMsisdn(phoneE164: string): string {
   return phoneE164.replace(/^\+/, "");

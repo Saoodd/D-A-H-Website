@@ -371,7 +371,7 @@ export function VendorDetailClient({
                 {!vendor.phoneVerified && phoneVerifyConfirmOpen && (
                   <div className="mt-3 rounded-[8px] border border-amber-300/60 bg-amber-50 p-3">
                     <p className="text-xs text-amber-900 mb-3">
-                      Manually verify this vendor&apos;s phone number? This bypasses SMS OTP verification and immediately makes them eligible to apply to events.
+                      Manually verify this vendor&apos;s phone number? This bypasses WhatsApp OTP verification and immediately makes them eligible to apply to events.
                     </p>
                     <div className="flex gap-2">
                       <button

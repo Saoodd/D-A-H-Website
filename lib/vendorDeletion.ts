@@ -114,8 +114,10 @@ export async function permanentlyRemoveVendor(vendorId: string): Promise<VendorD
         phoneVerifiedAt: null,
         phoneVerifiedNumber: null,
         phoneVerifiedMethod: null,
-        phoneOtpPinId: null,
+        phoneOtpCodeHash: null,
         phoneOtpPhone: null,
+        phoneOtpExpiresAt: null,
+        phoneOtpAttempts: 0,
       },
     }),
   ]);

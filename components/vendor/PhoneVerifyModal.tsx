@@ -100,7 +100,7 @@ export function PhoneVerifyModal({ onVerified, onClose }: { onVerified: () => vo
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.code !== "SENT") {
         // Never advance to the code-entry step and never start a resend
-        // countdown unless the SMS provider actually accepted the request —
+        // countdown unless the WhatsApp provider actually accepted the request —
         // a failed send (bad number, provider outage, our own abuse cap)
         // must never look like "a code is on its way".
         const invalidNumber = data.code === "PHONE_INVALID" || data.code === "INVALID_NUMBER";

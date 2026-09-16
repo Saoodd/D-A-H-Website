@@ -89,9 +89,9 @@ export function TemplatesClient() {
         </div>
         {!configured && (
           <p className="mt-4 text-sm text-amber-800 bg-amber-500/10 rounded-[8px] px-4 py-3">
-            {error || "WhatsApp isn&apos;t configured yet."} Set <code className="text-xs">INFOBIP_WHATSAPP_SENDER</code> (and confirm
-            the account&apos;s WhatsApp channel is enabled) to sync real templates — until then, register one manually below if you
-            already know a real approved template&apos;s details.
+            {error || "WhatsApp isn&apos;t configured yet."} Set <code className="text-xs">INFOBIP_WHATSAPP_BASE_URL</code>,{" "}
+            <code className="text-xs">INFOBIP_WHATSAPP_API_KEY</code>, and <code className="text-xs">INFOBIP_WHATSAPP_SENDER</code> to
+            sync real templates — until then, register one manually below if you already know a real approved template&apos;s details.
           </p>
         )}
         {configured && error && (

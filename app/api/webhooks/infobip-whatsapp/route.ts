@@ -19,10 +19,12 @@ import { prisma } from "@/lib/prisma";
 // shape) specifically so a real payload that doesn't match exactly still
 // gets acknowledged (200) rather than retried forever by Infobip, while
 // logging the raw shape for a developer to reconcile against a live
-// account. No signature verification exists yet — INFOBIP_WHATSAPP_WEBHOOK_SECRET
-// is accepted for future use (see .env.example) but not yet enforced, since
-// Infobip's own webhook-signing scheme couldn't be confirmed either; treat
-// this endpoint as best-effort until verified against a real account.
+// account. No signature verification exists yet — Infobip's own
+// webhook-signing scheme couldn't be confirmed while this was built, and
+// DAH's Infobip config is deliberately limited to exactly three env vars
+// (INFOBIP_WHATSAPP_BASE_URL/API_KEY/SENDER), so no webhook-secret env
+// var exists to check against; treat this endpoint as best-effort until
+// verified against a real account.
 
 const STATUS_MAP: Record<string, "SENT" | "DELIVERED" | "FAILED"> = {
   PENDING: "SENT",
