@@ -68,6 +68,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Too many requests. Please try again later.", code: "RATE_LIMITED" }, { status: 429 });
   }
 
+  // Safe structured diagnostics — provider/channel/template identifiers
+  // only, never the API key or the OTP itself. Lets a deploy be confirmed
+  // as "actually running the WhatsApp path" from log output alone.
+  console.log("[phone-verification:send]", {
+    provider: "infobip",
+    channel: "whatsapp",
+    template: process.env.INFOBIP_WHATSAPP_AUTH_TEMPLATE || null,
+    templateLanguage: process.env.INFOBIP_WHATSAPP_AUTH_TEMPLATE_LANGUAGE || null,
+    senderConfigured: Boolean(process.env.INFOBIP_WHATSAPP_SENDER),
+  });
+
   const result = await sendWhatsAppOtp(vendor.id, normalizedPhone);
   if (!result.ok) {
     // result.code is one of CONFIG_MISSING / AUTH_TEMPLATE_NOT_CONFIGURED /
@@ -77,8 +88,10 @@ export async function POST(req: NextRequest) {
     // config, a typo'd/unapproved INFOBIP_WHATSAPP_AUTH_TEMPLATE, or a
     // genuine Infobip failure) is already logged server-side inside
     // sendWhatsAppOtp/sendWhatsAppTemplate, never returned to the client.
+    console.log("[phone-verification:send] result", { ok: false, code: result.code });
     return NextResponse.json({ error: result.error, code: result.code }, { status: 503 });
   }
+  console.log("[phone-verification:send] result", { ok: true, code: "SENT" });
 
   // Only now — after Infobip actually accepted the request — does the
   // vendor's resend window start counting down.
