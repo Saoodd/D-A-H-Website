@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
+import { hasConfirmedScale, mmToGridRect, gridRectToMm } from "@/lib/floorplan/transform";
+import { isFootprintWithinBoundary, parseVenueBoundary, BOUNDARY_VIOLATION_MESSAGE } from "@/lib/floorplan/boundary";
 
 const MAX_MASS_CREATE = 500; // sane ceiling — floor plans run to a few hundred booths at most
 
@@ -10,6 +12,7 @@ interface MassCreateRow {
   gridY: number;
   gridW: number;
   gridH: number;
+  boundaryOverride?: boolean;
 }
 
 // Creates many booths at once from a generated code list (e.g. B1..B67),
@@ -55,53 +58,86 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Invalid price." }, { status: 400 });
   }
 
-  const existing = await prisma.booth.findMany({ where: { eventId, code: { in: codes } }, select: { code: true } });
-  if (existing.length > 0) {
-    const skipConflicts = body.skipConflicts === true;
-    const conflictCodes = new Set(existing.map((b) => b.code));
-    if (!skipConflicts) {
-      return NextResponse.json(
-        { error: "Some booth codes already exist for this event.", code: "DUPLICATE_CODES", duplicateCodes: Array.from(conflictCodes) },
-        { status: 409 }
-      );
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: { venueScaleConfirmed: true, venueWidthMm: true, venueDepthMm: true, venueShape: true, venueBoundaryJson: true },
+  });
+  if (!event) return NextResponse.json({ error: "Event not found." }, { status: 404 });
+
+  // Root-cause fix for the historical "Mass Create ignores entered
+  // width/depth" bug: once this event has a confirmed physical scale, the
+  // SERVER — never the client — derives gridW/gridH (the actual rendered
+  // rectangle size) from the real widthMm/depthMm via mmToGridRect. A
+  // client-sent gridW/gridH is only ever trusted as a fallback for events
+  // that predate physical-scale configuration (see hasConfirmedScale),
+  // matching every existing booth's current behavior exactly. Position
+  // (gridX/gridY, i.e. the admin's chosen layout) still comes from the
+  // client's placement algorithm (row/grid/columns), converted to xMm/yMm
+  // for storage so it round-trips as real geometry too.
+  const scaleConfirmed = hasConfirmedScale(event);
+  const boundary = scaleConfirmed
+    ? { widthMm: event.venueWidthMm, depthMm: event.venueDepthMm, boundary: parseVenueBoundary(event.venueShape, event.venueBoundaryJson) }
+    : null;
+
+  function deriveRowGeometry(r: MassCreateRow): { gridX: number; gridY: number; gridW: number; gridH: number; xMm: number | null; yMm: number | null; blocked: boolean } {
+    if (!scaleConfirmed || widthMm == null || depthMm == null) {
+      return { gridX: r.gridX, gridY: r.gridY, gridW: r.gridW, gridH: r.gridH, xMm: null, yMm: null, blocked: false };
     }
-    // Caller explicitly chose "skip conflicts" — drop those rows and create the rest.
-    const filteredRows = rows.filter((r) => !conflictCodes.has(String(r.code).trim()));
-    const created = await prisma.booth.createMany({
-      data: filteredRows.map((r) => ({
-        eventId,
-        code: String(r.code).trim(),
-        size,
-        priceAedFils,
-        colorHex,
-        widthMm,
-        depthMm,
-        status,
-        gridX: r.gridX,
-        gridY: r.gridY,
-        gridW: r.gridW,
-        gridH: r.gridH,
-      })),
-    });
-    return NextResponse.json({ ok: true, created: created.count, skipped: conflictCodes.size, skippedCodes: Array.from(conflictCodes) });
+    const venue = { venueWidthMm: event!.venueWidthMm!, venueDepthMm: event!.venueDepthMm! };
+    // The client's gridX/gridY (its chosen row/grid placement) is the
+    // authoritative POSITION intent — converted to real mm here, then the
+    // true widthMm/depthMm (never the client's gridW/gridH) become the
+    // authoritative SIZE, and both are re-derived back into gridX/Y/W/H so
+    // the legacy percentage fields stay perfectly in sync with real mm.
+    const approxMm = gridRectToMm(venue, { gridX: r.gridX, gridY: r.gridY, gridW: r.gridW, gridH: r.gridH });
+    const xMm = approxMm.xMm;
+    const yMm = approxMm.yMm;
+    const grid = mmToGridRect(venue, { xMm, yMm, widthMm, depthMm });
+    const blocked = !r.boundaryOverride && boundary != null && !isFootprintWithinBoundary(boundary, { xMm, yMm, widthMm, depthMm, rotationDeg: 0 });
+    return { gridX: grid.gridX, gridY: grid.gridY, gridW: grid.gridW, gridH: grid.gridH, xMm, yMm, blocked };
   }
 
+  const geometry = rows.map((r) => ({ code: r.code.trim(), ...deriveRowGeometry(r) }));
+  const outOfBoundary = geometry.filter((g) => g.blocked).map((g) => g.code);
+  const placeable = geometry.filter((g) => !g.blocked);
+
+  const existing = await prisma.booth.findMany({ where: { eventId, code: { in: codes } }, select: { code: true } });
+  const conflictCodes = new Set(existing.map((b) => b.code));
+  const skipConflicts = body.skipConflicts === true;
+  if (conflictCodes.size > 0 && !skipConflicts) {
+    return NextResponse.json(
+      { error: "Some booth codes already exist for this event.", code: "DUPLICATE_CODES", duplicateCodes: Array.from(conflictCodes) },
+      { status: 409 }
+    );
+  }
+
+  const finalRows = placeable.filter((g) => !conflictCodes.has(g.code));
+
   const created = await prisma.booth.createMany({
-    data: rows.map((r) => ({
+    data: finalRows.map((g) => ({
       eventId,
-      code: r.code.trim(),
+      code: g.code,
       size,
       priceAedFils,
       colorHex,
       widthMm,
       depthMm,
+      xMm: g.xMm,
+      yMm: g.yMm,
       status,
-      gridX: r.gridX,
-      gridY: r.gridY,
-      gridW: r.gridW,
-      gridH: r.gridH,
+      gridX: g.gridX,
+      gridY: g.gridY,
+      gridW: g.gridW,
+      gridH: g.gridH,
     })),
   });
 
-  return NextResponse.json({ ok: true, created: created.count, skipped: 0, skippedCodes: [] });
+  return NextResponse.json({
+    ok: true,
+    created: created.count,
+    skipped: conflictCodes.size,
+    skippedCodes: Array.from(conflictCodes),
+    outOfBoundary,
+    outOfBoundaryMessage: outOfBoundary.length > 0 ? BOUNDARY_VIOLATION_MESSAGE : null,
+  });
 }

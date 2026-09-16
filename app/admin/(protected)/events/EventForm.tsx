@@ -16,6 +16,9 @@ interface EventData {
   categories: string[];
   floorPlanImageUrl: string | null;
   venueWidthM: number | null;
+  venueWidthMm?: number | null;
+  venueDepthMm?: number | null;
+  venueScaleConfirmed?: boolean;
   showPublicPricing: boolean;
   status: string;
   whatsappVendorGroupLink: string | null;

@@ -25,19 +25,74 @@ function rotateVec(x: number, y: number, deg: number) {
   return { x: x * cos - y * sin, y: x * sin + y * cos };
 }
 
-// The floor plan canvas is always a 0-100 x 0-100 percentage space, whether
-// or not there's a background image — booths/features store gridX/Y/W/H as
-// percentages of this canvas. That keeps a single coordinate system for
-// "click on the map to place a booth" regardless of whether admin is
-// working over a real venue photo or the plain dotted background.
-const VIEWBOX = 100;
-const MIN_BOOTH_SIZE = 2;
-const ROTATE_HANDLE_OFFSET = 6;
-const ALIGN_THRESHOLD = 1; // percent — how close an edge/center has to be to another booth's to snap
-const SPACING_TOLERANCE = 1.2; // percent — how close a gap has to be to a reference gap to snap-equalize
-const GRID_SIZE = 1; // percent — snap-to-grid cell size
-const NUDGE_AMOUNT = 0.5; // percent — arrow-key nudge
-const NUDGE_AMOUNT_BIG = 2; // percent — shift+arrow-key nudge
+// The floor plan canvas's coordinate space is either the LEGACY 0-100 x
+// 0-100 percentage square (every pre-existing event, and any event whose
+// venue physical scale hasn't been confirmed yet — see
+// lib/floorplan/transform.ts getFloorplanViewBox) or, once an event's scale
+// IS confirmed, the venue's own real-world size in millimetres used
+// DIRECTLY as SVG user units (viewBox = venueWidthMm x venueDepthMm) — so
+// gridX/Y/W/H simply ARE the mm coordinates in that mode, the venue's true
+// aspect ratio is preserved automatically, and zoom (a separate CSS
+// transform layered on top, see `scale`/`translate` state below) never
+// touches these values. All snap/nudge/handle-size constants below are
+// expressed as functions of the CURRENT viewBox so the same code produces
+// correct legacy percent-space behavior (unchanged from before this
+// component became viewBox-parametric) and correct real-world behavior in
+// mm mode (e.g. an ~1 meter grid, not "1% of an arbitrary square").
+const DEFAULT_VIEWBOX = { width: 100, height: 100 };
+
+interface ViewBoxSize {
+  width: number;
+  height: number;
+}
+
+/** General visual-scale factor: 1 at the legacy 100x100 square, and
+ *  proportionally larger in mm mode — every literal pixel-ish constant in
+ *  this file (stroke widths, font sizes, handle sizes, corner radii) is
+ *  multiplied by this so booths/handles/text look the same SIZE relative to
+ *  the venue regardless of which coordinate space is active. */
+function unitScaleOf(viewBox: ViewBoxSize): number {
+  return Math.max(viewBox.width, viewBox.height) / 100;
+}
+
+interface SnapTuning {
+  alignThreshold: number;
+  spacingTolerance: number;
+  gridSize: number;
+  nudgeAmount: number;
+  nudgeAmountBig: number;
+  minBoothSize: number;
+  rotateHandleOffset: number;
+}
+
+/** Legacy mode keeps the exact percent-based tuning this component always
+ *  used (1% align threshold, 1% grid, etc.) — zero behavior change for any
+ *  event that hasn't been scale-confirmed. MM mode uses real physical
+ *  defaults: ~5cm align snap, a 1m grid, 50mm/500mm nudge steps, a 30cm
+ *  minimum booth size — see requirement: physical grid/snapping (1m
+ *  major/0.25-0.5m minor), not a raw canvas percentage. */
+function snapTuningFor(viewBox: ViewBoxSize, mode: "MM" | "LEGACY_PERCENT"): SnapTuning {
+  if (mode === "MM") {
+    return {
+      alignThreshold: 50,
+      spacingTolerance: 60,
+      gridSize: 1000,
+      nudgeAmount: 50,
+      nudgeAmountBig: 500,
+      minBoothSize: 300,
+      rotateHandleOffset: Math.min(viewBox.width, viewBox.height) * 0.06,
+    };
+  }
+  return {
+    alignThreshold: 1,
+    spacingTolerance: 1.2,
+    gridSize: 1,
+    nudgeAmount: 0.5,
+    nudgeAmountBig: 2,
+    minBoothSize: 2,
+    rotateHandleOffset: 6,
+  };
+}
 
 interface GuideLine {
   orientation: "v" | "h";
@@ -61,12 +116,21 @@ function rangesOverlap(a1: number, a2: number, b1: number, b2: number) {
   return a1 < b2 && b1 < a2;
 }
 
-function formatDistance(gapPercent: number, venueWidthM?: number | null): string {
+/** Formats a gap for the smart-guide distance label. In MM mode the gap is
+ *  already a real millimetre distance (no conversion needed — this is the
+ *  whole point of rendering in mm-native SVG units). In legacy percent mode,
+ *  falls back to the old venueWidthM-derived approximate label, or a raw
+ *  percentage when even that isn't set. */
+function formatDistance(gap: number, mode: "MM" | "LEGACY_PERCENT", venueWidthM?: number | null): string {
+  if (mode === "MM") {
+    const meters = gap / 1000;
+    return `${meters.toFixed(meters < 10 ? 2 : 1)}m`;
+  }
   if (venueWidthM && venueWidthM > 0) {
-    const meters = (gapPercent / 100) * venueWidthM;
+    const meters = (gap / 100) * venueWidthM;
     return `${meters.toFixed(meters < 10 ? 1 : 0)}m`;
   }
-  return `${gapPercent.toFixed(1)}%`;
+  return `${gap.toFixed(1)}%`;
 }
 
 /** Is the given DOM event target a text-entry element? Used to keep the
@@ -79,7 +143,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 /** Best single edge/center alignment match on each axis, independently. */
-function computeAlignmentSnap(dragged: Rect, others: FloorBooth[]) {
+function computeAlignmentSnap(dragged: Rect, others: FloorBooth[], alignThreshold: number) {
   const xCands = [
     { offset: 0, at: dragged.gridX },
     { offset: dragged.gridW / 2, at: dragged.gridX + dragged.gridW / 2 },
@@ -98,13 +162,13 @@ function computeAlignmentSnap(dragged: Rect, others: FloorBooth[]) {
     for (const c of xCands) {
       for (const ov of oxs) {
         const delta = Math.abs(c.at - ov);
-        if (delta <= ALIGN_THRESHOLD && (!bestX || delta < bestX.delta)) bestX = { offset: c.offset, value: ov, delta, other: o };
+        if (delta <= alignThreshold && (!bestX || delta < bestX.delta)) bestX = { offset: c.offset, value: ov, delta, other: o };
       }
     }
     for (const c of yCands) {
       for (const ov of oys) {
         const delta = Math.abs(c.at - ov);
-        if (delta <= ALIGN_THRESHOLD && (!bestY || delta < bestY.delta)) bestY = { offset: c.offset, value: ov, delta, other: o };
+        if (delta <= alignThreshold && (!bestY || delta < bestY.delta)) bestY = { offset: c.offset, value: ov, delta, other: o };
       }
     }
   }
@@ -130,7 +194,7 @@ function computeAlignmentSnap(dragged: Rect, others: FloorBooth[]) {
 /** Snap the dragged rect's gap to a neighbor so it equals an existing,
  *  already-consistent gap elsewhere in the same row — or centers evenly
  *  between two flanking booths. */
-function computeRowSpacingSnap(dragged: Rect, others: FloorBooth[]) {
+function computeRowSpacingSnap(dragged: Rect, others: FloorBooth[], spacingTolerance: number) {
   const row = others
     .filter((o) => rangesOverlap(dragged.gridY, dragged.gridY + dragged.gridH, o.gridY, o.gridY + o.gridH))
     .sort((a, b) => a.gridX - b.gridX);
@@ -147,14 +211,14 @@ function computeRowSpacingSnap(dragged: Rect, others: FloorBooth[]) {
   if (left && leftOfLeft) {
     const refGap = left.gridX - (leftOfLeft.gridX + leftOfLeft.gridW);
     const curGap = dragged.gridX - (left.gridX + left.gridW);
-    if (refGap > 0.1 && Math.abs(curGap - refGap) <= SPACING_TOLERANCE) {
+    if (refGap > 0.1 && Math.abs(curGap - refGap) <= spacingTolerance) {
       return { gridX: left.gridX + left.gridW + refGap };
     }
   }
   if (right && rightOfRight) {
     const refGap = rightOfRight.gridX - (right.gridX + right.gridW);
     const curGap = right.gridX - (dragged.gridX + dragged.gridW);
-    if (refGap > 0.1 && Math.abs(curGap - refGap) <= SPACING_TOLERANCE) {
+    if (refGap > 0.1 && Math.abs(curGap - refGap) <= spacingTolerance) {
       return { gridX: right.gridX - dragged.gridW - refGap };
     }
   }
@@ -164,7 +228,7 @@ function computeRowSpacingSnap(dragged: Rect, others: FloorBooth[]) {
     if (gap > 0.1) {
       const curGapLeft = dragged.gridX - (left.gridX + left.gridW);
       const curGapRight = right.gridX - (dragged.gridX + dragged.gridW);
-      if (Math.abs(curGapLeft - gap) <= SPACING_TOLERANCE || Math.abs(curGapRight - gap) <= SPACING_TOLERANCE) {
+      if (Math.abs(curGapLeft - gap) <= spacingTolerance || Math.abs(curGapRight - gap) <= spacingTolerance) {
         return { gridX: left.gridX + left.gridW + gap };
       }
     }
@@ -173,7 +237,7 @@ function computeRowSpacingSnap(dragged: Rect, others: FloorBooth[]) {
 }
 
 /** Same as computeRowSpacingSnap but along the vertical (column) axis. */
-function computeColumnSpacingSnap(dragged: Rect, others: FloorBooth[]) {
+function computeColumnSpacingSnap(dragged: Rect, others: FloorBooth[], spacingTolerance: number) {
   const col = others
     .filter((o) => rangesOverlap(dragged.gridX, dragged.gridX + dragged.gridW, o.gridX, o.gridX + o.gridW))
     .sort((a, b) => a.gridY - b.gridY);
@@ -190,14 +254,14 @@ function computeColumnSpacingSnap(dragged: Rect, others: FloorBooth[]) {
   if (top && topOfTop) {
     const refGap = top.gridY - (topOfTop.gridY + topOfTop.gridH);
     const curGap = dragged.gridY - (top.gridY + top.gridH);
-    if (refGap > 0.1 && Math.abs(curGap - refGap) <= SPACING_TOLERANCE) {
+    if (refGap > 0.1 && Math.abs(curGap - refGap) <= spacingTolerance) {
       return { gridY: top.gridY + top.gridH + refGap };
     }
   }
   if (bottom && bottomOfBottom) {
     const refGap = bottomOfBottom.gridY - (bottom.gridY + bottom.gridH);
     const curGap = bottom.gridY - (dragged.gridY + dragged.gridH);
-    if (refGap > 0.1 && Math.abs(curGap - refGap) <= SPACING_TOLERANCE) {
+    if (refGap > 0.1 && Math.abs(curGap - refGap) <= spacingTolerance) {
       return { gridY: bottom.gridY - dragged.gridH - refGap };
     }
   }
@@ -207,7 +271,7 @@ function computeColumnSpacingSnap(dragged: Rect, others: FloorBooth[]) {
     if (gap > 0.1) {
       const curGapTop = dragged.gridY - (top.gridY + top.gridH);
       const curGapBottom = bottom.gridY - (dragged.gridY + dragged.gridH);
-      if (Math.abs(curGapTop - gap) <= SPACING_TOLERANCE || Math.abs(curGapBottom - gap) <= SPACING_TOLERANCE) {
+      if (Math.abs(curGapTop - gap) <= spacingTolerance || Math.abs(curGapBottom - gap) <= spacingTolerance) {
         return { gridY: top.gridY + top.gridH + gap };
       }
     }
@@ -224,7 +288,10 @@ function computeSnappedPosition(
   others: FloorBooth[],
   smartGuidesEnabled: boolean,
   gridSnapEnabled: boolean,
-  venueWidthM: number | null | undefined
+  venueWidthM: number | null | undefined,
+  viewBox: ViewBoxSize,
+  mode: "MM" | "LEGACY_PERCENT",
+  tuning: SnapTuning
 ): { gridX: number; gridY: number; guides: Guides | null } {
   let gridX = raw.gridX;
   let gridY = raw.gridY;
@@ -235,7 +302,7 @@ function computeSnappedPosition(
   let snappedY = false;
 
   if (smartGuidesEnabled) {
-    const align = computeAlignmentSnap({ gridX, gridY, gridW: raw.gridW, gridH: raw.gridH }, others);
+    const align = computeAlignmentSnap({ gridX, gridY, gridW: raw.gridW, gridH: raw.gridH }, others, tuning.alignThreshold);
     if (align.gridX != null) {
       gridX = align.gridX;
       snappedX = true;
@@ -247,14 +314,14 @@ function computeSnappedPosition(
       hLines.push(...align.hLines);
     }
     if (!snappedX) {
-      const rowSnap = computeRowSpacingSnap({ gridX, gridY, gridW: raw.gridW, gridH: raw.gridH }, others);
+      const rowSnap = computeRowSpacingSnap({ gridX, gridY, gridW: raw.gridW, gridH: raw.gridH }, others, tuning.spacingTolerance);
       if (rowSnap.gridX != null) {
         gridX = rowSnap.gridX;
         snappedX = true;
       }
     }
     if (!snappedY) {
-      const colSnap = computeColumnSpacingSnap({ gridX, gridY, gridW: raw.gridW, gridH: raw.gridH }, others);
+      const colSnap = computeColumnSpacingSnap({ gridX, gridY, gridW: raw.gridW, gridH: raw.gridH }, others, tuning.spacingTolerance);
       if (colSnap.gridY != null) {
         gridY = colSnap.gridY;
         snappedY = true;
@@ -263,12 +330,12 @@ function computeSnappedPosition(
   }
 
   if (gridSnapEnabled) {
-    if (!snappedX) gridX = Math.round(gridX / GRID_SIZE) * GRID_SIZE;
-    if (!snappedY) gridY = Math.round(gridY / GRID_SIZE) * GRID_SIZE;
+    if (!snappedX) gridX = Math.round(gridX / tuning.gridSize) * tuning.gridSize;
+    if (!snappedY) gridY = Math.round(gridY / tuning.gridSize) * tuning.gridSize;
   }
 
-  gridX = Math.min(100 - raw.gridW, Math.max(0, gridX));
-  gridY = Math.min(100 - raw.gridH, Math.max(0, gridY));
+  gridX = Math.min(viewBox.width - raw.gridW, Math.max(0, gridX));
+  gridY = Math.min(viewBox.height - raw.gridH, Math.max(0, gridY));
 
   if (smartGuidesEnabled) {
     const midY = gridY + raw.gridH / 2;
@@ -283,11 +350,11 @@ function computeSnappedPosition(
     const rightN = leftIdx + 1 < row.length ? row[leftIdx + 1] : null;
     if (leftN) {
       const gap = gridX - (leftN.gridX + leftN.gridW);
-      if (gap > 0.1) labels.push({ x: leftN.gridX + leftN.gridW + gap / 2, y: midY, text: formatDistance(gap, venueWidthM) });
+      if (gap > 0.1) labels.push({ x: leftN.gridX + leftN.gridW + gap / 2, y: midY, text: formatDistance(gap, mode, venueWidthM) });
     }
     if (rightN) {
       const gap = rightN.gridX - (gridX + raw.gridW);
-      if (gap > 0.1) labels.push({ x: gridX + raw.gridW + gap / 2, y: midY, text: formatDistance(gap, venueWidthM) });
+      if (gap > 0.1) labels.push({ x: gridX + raw.gridW + gap / 2, y: midY, text: formatDistance(gap, mode, venueWidthM) });
     }
 
     const midX = gridX + raw.gridW / 2;
@@ -302,11 +369,11 @@ function computeSnappedPosition(
     const botN = topIdx + 1 < col.length ? col[topIdx + 1] : null;
     if (topN) {
       const gap = gridY - (topN.gridY + topN.gridH);
-      if (gap > 0.1) labels.push({ x: midX, y: topN.gridY + topN.gridH + gap / 2, text: formatDistance(gap, venueWidthM) });
+      if (gap > 0.1) labels.push({ x: midX, y: topN.gridY + topN.gridH + gap / 2, text: formatDistance(gap, mode, venueWidthM) });
     }
     if (botN) {
       const gap = botN.gridY - (gridY + raw.gridH);
-      if (gap > 0.1) labels.push({ x: midX, y: gridY + raw.gridH + gap / 2, text: formatDistance(gap, venueWidthM) });
+      if (gap > 0.1) labels.push({ x: midX, y: gridY + raw.gridH + gap / 2, text: formatDistance(gap, mode, venueWidthM) });
     }
   }
 
@@ -377,6 +444,8 @@ export function FloorPlan({
   onHoverBooth,
   focusBoothId,
   focusNonce,
+  viewBox = DEFAULT_VIEWBOX,
+  coordinateMode = "LEGACY_PERCENT",
 }: {
   features: FloorFeature[];
   booths: FloorBooth[];
@@ -442,7 +511,20 @@ export function FloorPlan({
    *  since a hidden container measures as zero-sized and the first attempt
    *  is a no-op. */
   focusNonce?: number;
+  /** The coordinate space to render in — venueWidthMm x venueDepthMm (real
+   *  millimetres, used directly as SVG user units) once the caller's Event
+   *  has a confirmed physical scale, or the legacy 100x100 percentage
+   *  square otherwise (the default, so every existing caller that doesn't
+   *  pass this keeps rendering exactly as before). Compute with
+   *  lib/floorplan/transform.ts getFloorplanViewBox(event). */
+  viewBox?: ViewBoxSize;
+  /** "MM" pairs with a real-millimetre viewBox; "LEGACY_PERCENT" (default)
+   *  is the original 0-100 percentage canvas. Drives snap/grid/nudge sizing
+   *  and distance-label formatting — see snapTuningFor/formatDistance. */
+  coordinateMode?: "MM" | "LEGACY_PERCENT";
 }) {
+  const tuning = snapTuningFor(viewBox, coordinateMode);
+  const unitScale = unitScaleOf(viewBox);
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const [hoveredBoothId, setHoveredBoothId] = useState<string | null>(null);
@@ -461,17 +543,25 @@ export function FloorPlan({
 
   const clampScale = (s: number) => Math.min(4, Math.max(0.5, s));
 
-  const pointToPercent = useCallback((clientX: number, clientY: number) => {
-    const svg = svgRef.current;
-    if (!svg) return null;
-    const pt = svg.createSVGPoint();
-    pt.x = clientX;
-    pt.y = clientY;
-    const ctm = svg.getScreenCTM();
-    if (!ctm) return null;
-    const loc = pt.matrixTransform(ctm.inverse());
-    return { x: Math.min(100, Math.max(0, loc.x)), y: Math.min(100, Math.max(0, loc.y)) };
-  }, []);
+  // Despite the name (kept for minimal diff against the rest of this file),
+  // this resolves a screen point into the CURRENT viewBox's own coordinate
+  // space — percent units in legacy mode, real millimetres in MM mode —
+  // via the SVG's own screen-to-user-space matrix, so it's correct
+  // regardless of which viewBox is active.
+  const pointToPercent = useCallback(
+    (clientX: number, clientY: number) => {
+      const svg = svgRef.current;
+      if (!svg) return null;
+      const pt = svg.createSVGPoint();
+      pt.x = clientX;
+      pt.y = clientY;
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return null;
+      const loc = pt.matrixTransform(ctm.inverse());
+      return { x: Math.min(viewBox.width, Math.max(0, loc.x)), y: Math.min(viewBox.height, Math.max(0, loc.y)) };
+    },
+    [viewBox.width, viewBox.height]
+  );
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -516,7 +606,7 @@ export function FloorPlan({
         const x2 = Math.max(band.start.x, pct?.x ?? band.start.x);
         const y1 = Math.min(band.start.y, pct?.y ?? band.start.y);
         const y2 = Math.max(band.start.y, pct?.y ?? band.start.y);
-        if (x2 - x1 < 0.5 && y2 - y1 < 0.5) {
+        if (x2 - x1 < viewBox.width * 0.005 && y2 - y1 < viewBox.height * 0.005) {
           // Negligible drag — treat as an empty-canvas click, not a selection box.
           if (!band.additive) onDeselect?.();
           return;
@@ -538,7 +628,7 @@ export function FloorPlan({
         onDeselect();
       }
     },
-    [placementMode, onCanvasClick, pointToPercent, onDeselect, booths, selectedIds, onSelectionChange]
+    [placementMode, onCanvasClick, pointToPercent, onDeselect, booths, selectedIds, onSelectionChange, viewBox.width, viewBox.height]
   );
 
   const onWheel = useCallback((e: React.WheelEvent) => {
@@ -589,15 +679,22 @@ export function FloorPlan({
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return; // hidden — retry later, don't mark done
     lastFocusedBoothRef.current = key;
-    const size = Math.min(rect.width, rect.height);
+    // SVG user-units-per-pixel under preserveAspectRatio="xMidYMid meet":
+    // whichever axis of the viewBox is relatively larger than the
+    // container's is the one that determines the fit scale (the other axis
+    // is letterboxed) — this is correct for both the legacy square viewBox
+    // and a real non-square venue's mm viewBox.
+    const containerAspect = rect.width / rect.height;
+    const viewBoxAspect = viewBox.width / viewBox.height;
+    const pxPerUnit = viewBoxAspect > containerAspect ? rect.width / viewBox.width : rect.height / viewBox.height;
     const cx = booth.gridX + booth.gridW / 2;
     const cy = booth.gridY + booth.gridH / 2;
     const targetScale = clampScale(Math.max(scale, 1.6));
-    const unit = (size / VIEWBOX) * targetScale;
+    const unit = pxPerUnit * targetScale;
     setScale(targetScale);
-    setTranslate({ x: size / 2 - cx * unit, y: size / 2 - cy * unit });
+    setTranslate({ x: rect.width / 2 - cx * unit, y: rect.height / 2 - cy * unit });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-checks on booths/scale changes but only acts once per (focusBoothId, focusNonce) pair (see lastFocusedBoothRef guard above)
-  }, [focusBoothId, focusNonce, booths]);
+  }, [focusBoothId, focusNonce, booths, viewBox.width, viewBox.height]);
 
   // ---- booth manipulation (editable mode): drag-to-move (solo or as a
   // group), corner resize handles, and a rotate handle, all operating in
@@ -614,8 +711,8 @@ export function FloorPlan({
     (m: Extract<Manip, { kind: "move" }>, pct: { x: number; y: number }): { patches: Record<string, BoothPatch>; guides: Guides | null } => {
       const dx = pct.x - m.startPointer.x;
       const dy = pct.y - m.startPointer.y;
-      let groupX = Math.min(100 - m.groupRect.gridW, Math.max(0, m.groupRect.gridX + dx));
-      let groupY = Math.min(100 - m.groupRect.gridH, Math.max(0, m.groupRect.gridY + dy));
+      let groupX = Math.min(viewBox.width - m.groupRect.gridW, Math.max(0, m.groupRect.gridX + dx));
+      let groupY = Math.min(viewBox.height - m.groupRect.gridH, Math.max(0, m.groupRect.gridY + dy));
 
       const memberIds = new Set(m.members.map((mm) => mm.id));
       const others = booths.filter((o) => !memberIds.has(o.id));
@@ -625,7 +722,10 @@ export function FloorPlan({
         others,
         smartGuidesEnabled,
         gridSnapEnabled,
-        venueWidthM
+        venueWidthM,
+        viewBox,
+        coordinateMode,
+        tuning
       );
       groupX = snapped.gridX;
       groupY = snapped.gridY;
@@ -639,15 +739,15 @@ export function FloorPlan({
       }
       return { patches, guides: snapped.guides };
     },
-    [booths, smartGuidesEnabled, gridSnapEnabled, venueWidthM]
+    [booths, smartGuidesEnabled, gridSnapEnabled, venueWidthM, viewBox, coordinateMode, tuning]
   );
 
   const computeResizePatch = (m: Extract<Manip, { kind: "resize" }>, pct: { x: number; y: number }): BoothPatch => {
     const vx = pct.x - m.anchorWorld.x;
     const vy = pct.y - m.anchorWorld.y;
     const local = rotateVec(vx, vy, -m.rotation);
-    const newW = Math.max(MIN_BOOTH_SIZE, Math.min(100, Math.abs(local.x)));
-    const newH = Math.max(MIN_BOOTH_SIZE, Math.min(100, Math.abs(local.y)));
+    const newW = Math.max(tuning.minBoothSize, Math.min(viewBox.width, Math.abs(local.x)));
+    const newH = Math.max(tuning.minBoothSize, Math.min(viewBox.height, Math.abs(local.y)));
     const signX = m.handle === "nw" || m.handle === "sw" ? -1 : 1;
     const signY = m.handle === "nw" || m.handle === "ne" ? -1 : 1;
     const centerLocalOffset = { x: (signX * newW) / 2, y: (signY * newH) / 2 };
@@ -802,14 +902,14 @@ export function FloorPlan({
       }
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && selectedIds && selectedIds.size > 0) {
         e.preventDefault();
-        const amount = e.shiftKey ? NUDGE_AMOUNT_BIG : NUDGE_AMOUNT;
+        const amount = e.shiftKey ? tuning.nudgeAmountBig : tuning.nudgeAmount;
         const dx = e.key === "ArrowLeft" ? -amount : e.key === "ArrowRight" ? amount : 0;
         const dy = e.key === "ArrowUp" ? -amount : e.key === "ArrowDown" ? amount : 0;
         const members = booths.filter((b) => selectedIds.has(b.id));
         if (members.length === 0) return;
         const box = boundingBoxOf(members.map((b) => ({ startGridX: b.gridX, startGridY: b.gridY, gridW: b.gridW, gridH: b.gridH })));
-        const clampedX = Math.min(100 - box.gridW, Math.max(0, box.gridX + dx));
-        const clampedY = Math.min(100 - box.gridH, Math.max(0, box.gridY + dy));
+        const clampedX = Math.min(viewBox.width - box.gridW, Math.max(0, box.gridX + dx));
+        const clampedY = Math.min(viewBox.height - box.gridH, Math.max(0, box.gridY + dy));
         const finalDX = clampedX - box.gridX;
         const finalDY = clampedY - box.gridY;
         onGroupCommit?.(members.map((b) => ({ id: b.id, gridX: b.gridX + finalDX, gridY: b.gridY + finalDY })));
@@ -817,7 +917,7 @@ export function FloorPlan({
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [multiSelectMode, editable, booths, selectedIds, onSelectionChange, onGroupCommit, onDeleteSelected, onDuplicateSelected]);
+  }, [multiSelectMode, editable, booths, selectedIds, onSelectionChange, onGroupCommit, onDeleteSelected, onDuplicateSelected, tuning, viewBox]);
 
   return (
     <div className="rounded-xl border border-brown/15 bg-cream-soft overflow-hidden">
@@ -879,17 +979,26 @@ export function FloorPlan({
           ref={svgRef}
           width="100%"
           height="100%"
-          viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`}
+          viewBox={`0 0 ${viewBox.width} ${viewBox.height}`}
           preserveAspectRatio="xMidYMid meet"
           style={{
             transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
             transformOrigin: "0 0",
           }}
         >
-          <rect x={0} y={0} width={VIEWBOX} height={VIEWBOX} fill="transparent" stroke="#DDD3C3" strokeWidth={0.3} />
+          <rect x={0} y={0} width={viewBox.width} height={viewBox.height} fill="transparent" stroke="#DDD3C3" strokeWidth={0.3 * unitScale} />
 
           {backgroundImageUrl && (
-            <image href={backgroundImageUrl} x={0} y={0} width={VIEWBOX} height={VIEWBOX} preserveAspectRatio="none" />
+            // preserveAspectRatio="xMidYMid meet" (SVG's own contain-fit,
+            // the direct equivalent of CSS object-fit:contain) — NEVER
+            // "none" here. The image is placed spanning the full viewBox
+            // but the browser itself letterboxes it to the image's true
+            // aspect ratio instead of stretching, so a non-square venue
+            // photo/drawing renders undistorted regardless of the venue's
+            // own proportions. Precise admin-controlled alignment (fit/
+            // center/move/rotate/uniform-scale/lock) layers on top of this
+            // via the Floor Plan Setup Wizard's Background Alignment step.
+            <image href={backgroundImageUrl} x={0} y={0} width={viewBox.width} height={viewBox.height} preserveAspectRatio="xMidYMid meet" />
           )}
 
           {features.map((f) => (
@@ -901,15 +1010,15 @@ export function FloorPlan({
                 height={f.gridH}
                 fill={backgroundImageUrl ? "rgba(227,217,204,0.75)" : "#E3D9CC"}
                 stroke="#B79A7C"
-                strokeWidth={0.15}
-                strokeDasharray={f.type.startsWith("ENTRANCE") ? "1 0.7" : undefined}
+                strokeWidth={0.15 * unitScale}
+                strokeDasharray={f.type.startsWith("ENTRANCE") ? `${unitScale} ${0.7 * unitScale}` : undefined}
               />
               <text
                 x={f.gridX + f.gridW / 2}
                 y={f.gridY + f.gridH / 2}
                 textAnchor="middle"
                 dominantBaseline="middle"
-                fontSize={2.2}
+                fontSize={2.2 * unitScale}
                 fill="#6B4429"
               >
                 {f.label || featureLabel[f.type]}
@@ -978,12 +1087,12 @@ export function FloorPlan({
                     y={b.gridY}
                     width={b.gridW}
                     height={b.gridH}
-                    rx={0.5}
-                    ry={0.5}
+                    rx={0.5 * unitScale}
+                    ry={0.5 * unitScale}
                     fill={isGroupSelected ? shadeColor(fill, -20) : clickable && isHovered ? shadeColor(fill, -30) : fill}
                     opacity={b.status === "SOLD" ? 0.6 : backgroundImageUrl ? 0.85 : 1}
                     stroke={isGroupSelected ? "#2563EB" : isSelected || b.isMine ? "#2E7D32" : clickable && isHovered ? "#FBF8F3" : "#3A2417"}
-                    strokeWidth={isSelected || b.isMine ? 0.6 : clickable && isHovered ? 0.45 : 0.15}
+                    strokeWidth={(isSelected || b.isMine ? 0.6 : clickable && isHovered ? 0.45 : 0.15) * unitScale}
                     style={{ transition: isBeingManipulated ? "none" : "fill 0.15s ease, stroke 0.15s ease, stroke-width 0.15s ease" }}
                   />
                   <text
@@ -991,7 +1100,7 @@ export function FloorPlan({
                     y={cy}
                     textAnchor="middle"
                     dominantBaseline="middle"
-                    fontSize={2.4}
+                    fontSize={2.4 * unitScale}
                     fontWeight={600}
                     fill="#FBF8F3"
                     style={{ pointerEvents: "none" }}
@@ -1005,17 +1114,18 @@ export function FloorPlan({
                     {(["nw", "ne", "sw", "se"] as const).map((h) => {
                       const hx = h.includes("w") ? b.gridX : b.gridX + b.gridW;
                       const hy = h.includes("n") ? b.gridY : b.gridY + b.gridH;
+                      const hs = 2.2 * unitScale;
                       return (
                         <rect
                           key={h}
-                          x={hx - 1.1}
-                          y={hy - 1.1}
-                          width={2.2}
-                          height={2.2}
-                          rx={0.3}
+                          x={hx - hs / 2}
+                          y={hy - hs / 2}
+                          width={hs}
+                          height={hs}
+                          rx={0.3 * unitScale}
                           fill="#FBF8F3"
                           stroke="#2E7D32"
-                          strokeWidth={0.4}
+                          strokeWidth={0.4 * unitScale}
                           style={{ cursor: h === "nw" || h === "se" ? "nwse-resize" : "nesw-resize", touchAction: "none" }}
                           onPointerDown={(e) => beginResize(e, raw, h)}
                           onPointerMove={(e) => onManipPointerMove(e, raw)}
@@ -1027,17 +1137,17 @@ export function FloorPlan({
                       x1={cx}
                       y1={b.gridY}
                       x2={cx}
-                      y2={b.gridY - ROTATE_HANDLE_OFFSET}
+                      y2={b.gridY - tuning.rotateHandleOffset}
                       stroke="#2E7D32"
-                      strokeWidth={0.3}
+                      strokeWidth={0.3 * unitScale}
                     />
                     <circle
                       cx={cx}
-                      cy={b.gridY - ROTATE_HANDLE_OFFSET}
-                      r={1.4}
+                      cy={b.gridY - tuning.rotateHandleOffset}
+                      r={1.4 * unitScale}
                       fill="#FBF8F3"
                       stroke="#2E7D32"
-                      strokeWidth={0.4}
+                      strokeWidth={0.4 * unitScale}
                       style={{ cursor: "grab", touchAction: "none" }}
                       onPointerDown={(e) => beginRotate(e, raw)}
                       onPointerMove={(e) => onManipPointerMove(e, raw)}
@@ -1052,17 +1162,17 @@ export function FloorPlan({
           {guides && (
             <g style={{ pointerEvents: "none" }}>
               {guides.vLines.map((l, i) => (
-                <line key={`v${i}`} x1={l.pos} y1={l.from} x2={l.pos} y2={l.to} stroke="#EC4899" strokeWidth={0.25} strokeDasharray="1 0.6" />
+                <line key={`v${i}`} x1={l.pos} y1={l.from} x2={l.pos} y2={l.to} stroke="#EC4899" strokeWidth={0.25 * unitScale} strokeDasharray={`${unitScale} ${0.6 * unitScale}`} />
               ))}
               {guides.hLines.map((l, i) => (
-                <line key={`h${i}`} x1={l.from} y1={l.pos} x2={l.to} y2={l.pos} stroke="#EC4899" strokeWidth={0.25} strokeDasharray="1 0.6" />
+                <line key={`h${i}`} x1={l.from} y1={l.pos} x2={l.to} y2={l.pos} stroke="#EC4899" strokeWidth={0.25 * unitScale} strokeDasharray={`${unitScale} ${0.6 * unitScale}`} />
               ))}
               {guides.labels.map((lb, i) => {
-                const w = Math.max(4, lb.text.length * 1.4);
+                const w = Math.max(4 * unitScale, lb.text.length * 1.4 * unitScale);
                 return (
                   <g key={`lb${i}`}>
-                    <rect x={lb.x - w / 2} y={lb.y - 1.3} width={w} height={2.4} rx={0.6} fill="#1F2937" opacity={0.9} />
-                    <text x={lb.x} y={lb.y} textAnchor="middle" dominantBaseline="middle" fontSize={1.6} fill="#fff">
+                    <rect x={lb.x - w / 2} y={lb.y - 1.3 * unitScale} width={w} height={2.4 * unitScale} rx={0.6 * unitScale} fill="#1F2937" opacity={0.9} />
+                    <text x={lb.x} y={lb.y} textAnchor="middle" dominantBaseline="middle" fontSize={1.6 * unitScale} fill="#fff">
                       {lb.text}
                     </text>
                   </g>
@@ -1079,8 +1189,8 @@ export function FloorPlan({
               height={Math.abs(rubberBand.y2 - rubberBand.y1)}
               fill="rgba(37,99,235,0.12)"
               stroke="#2563EB"
-              strokeWidth={0.25}
-              strokeDasharray="1 0.6"
+              strokeWidth={0.25 * unitScale}
+              strokeDasharray={`${unitScale} ${0.6 * unitScale}`}
               style={{ pointerEvents: "none" }}
             />
           )}

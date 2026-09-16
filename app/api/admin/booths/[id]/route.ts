@@ -5,6 +5,8 @@ import { requireAdmin } from "@/lib/adminGuard";
 import { getBoothPrice } from "@/lib/pricing";
 import { BOOTH_STATUS } from "@/lib/constants";
 import { notifyVendorWhatsApp } from "@/lib/notifications/notify";
+import { hasConfirmedScale, mmToGridRect } from "@/lib/floorplan/transform";
+import { isFootprintWithinBoundary, parseVenueBoundary, BOUNDARY_VIOLATION_MESSAGE } from "@/lib/floorplan/boundary";
 
 // Admin booth management: manual status changes, assign/reassign to a
 // specific approved vendor (or a free-text walk-in name), and unassign back
@@ -51,6 +53,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if ("depthMm" in body) {
     data.depthMm = body.depthMm == null || body.depthMm === "" ? null : Math.round(Number(body.depthMm));
   }
+  if ("xMm" in body) {
+    data.xMm = body.xMm == null || body.xMm === "" ? null : Math.round(Number(body.xMm));
+  }
+  if ("yMm" in body) {
+    data.yMm = body.yMm == null || body.yMm === "" ? null : Math.round(Number(body.yMm));
+  }
   for (const key of ["gridX", "gridY", "gridW", "gridH"] as const) {
     if (body[key] !== undefined) {
       const n = Number(body[key]);
@@ -60,6 +68,49 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.rotation !== undefined) {
     const n = Math.round(Number(body.rotation));
     if (!Number.isNaN(n)) data.rotation = ((n % 360) + 360) % 360;
+  }
+  if (body.boundaryOverride !== undefined) {
+    data.boundaryOverride = body.boundaryOverride === true;
+  }
+
+  // Server-authoritative geometry derivation (same pattern as booth create/
+  // Mass Create): once this booth's event has a confirmed physical scale
+  // and this PATCH actually touches geometry, gridX/Y/W/H are ALWAYS
+  // re-derived from the effective real-world xMm/yMm/widthMm/depthMm —
+  // never trusted verbatim from a resize/move/inspector-edit payload — so a
+  // booth's rendered size can never drift out of proportion with its
+  // declared physical dimensions. Falls through unchanged (legacy
+  // behavior) when the event isn't scale-confirmed, or when this booth
+  // doesn't yet have a full xMm/yMm/widthMm/depthMm set to derive from
+  // (e.g. a pre-existing booth an admin hasn't recalibrated yet).
+  const geometryTouched = ["gridX", "gridY", "gridW", "gridH", "xMm", "yMm", "widthMm", "depthMm"].some((k) => k in body);
+  if (geometryTouched) {
+    const event = await prisma.event.findUnique({
+      where: { id: booth.eventId },
+      select: { venueScaleConfirmed: true, venueWidthMm: true, venueDepthMm: true, venueShape: true, venueBoundaryJson: true },
+    });
+    if (event && hasConfirmedScale(event)) {
+      const effectiveXMm = "xMm" in data ? (data.xMm as number | null) : booth.xMm;
+      const effectiveYMm = "yMm" in data ? (data.yMm as number | null) : booth.yMm;
+      const effectiveWidthMm = "widthMm" in data ? (data.widthMm as number | null) : booth.widthMm;
+      const effectiveDepthMm = "depthMm" in data ? (data.depthMm as number | null) : booth.depthMm;
+      if (effectiveXMm != null && effectiveYMm != null && effectiveWidthMm != null && effectiveDepthMm != null) {
+        const venue = { venueWidthMm: event.venueWidthMm, venueDepthMm: event.venueDepthMm };
+        const boundaryOverride = "boundaryOverride" in data ? (data.boundaryOverride as boolean) : booth.boundaryOverride;
+        const boundary = { widthMm: event.venueWidthMm, depthMm: event.venueDepthMm, boundary: parseVenueBoundary(event.venueShape, event.venueBoundaryJson) };
+        const rotationDeg = body.rotation !== undefined ? (data.rotation as number) : booth.rotation;
+        if (!boundaryOverride && !isFootprintWithinBoundary(boundary, { xMm: effectiveXMm, yMm: effectiveYMm, widthMm: effectiveWidthMm, depthMm: effectiveDepthMm, rotationDeg })) {
+          return NextResponse.json({ error: BOUNDARY_VIOLATION_MESSAGE, code: "OUTSIDE_BOUNDARY" }, { status: 409 });
+        }
+        const grid = mmToGridRect(venue, { xMm: effectiveXMm, yMm: effectiveYMm, widthMm: effectiveWidthMm, depthMm: effectiveDepthMm });
+        data.gridX = grid.gridX;
+        data.gridY = grid.gridY;
+        data.gridW = grid.gridW;
+        data.gridH = grid.gridH;
+        data.xMm = effectiveXMm;
+        data.yMm = effectiveYMm;
+      }
+    }
   }
   if ("assignedApplicationId" in body) {
     if (body.assignedApplicationId) {

@@ -105,6 +105,9 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
           categories: event.categories,
           floorPlanImageUrl: event.floorPlanImageUrl,
           venueWidthM: event.venueWidthM,
+          venueWidthMm: event.venueWidthMm,
+          venueDepthMm: event.venueDepthMm,
+          venueScaleConfirmed: event.venueScaleConfirmed,
           showPublicPricing: event.showPublicPricing,
           status: event.status,
           whatsappVendorGroupLink: event.whatsappVendorGroupLink,
@@ -116,6 +119,9 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
         eventId: event.id,
         floorPlanImageUrl: event.floorPlanImageUrl,
         venueWidthM: event.venueWidthM,
+        venueWidthMm: event.venueWidthMm,
+        venueDepthMm: event.venueDepthMm,
+        venueScaleConfirmed: event.venueScaleConfirmed,
         tiers: tiers.map((t) => ({ sizeKey: t.sizeKey, label: t.label, priceAedFils: t.priceAedFils })),
       }}
       termsStatus={{

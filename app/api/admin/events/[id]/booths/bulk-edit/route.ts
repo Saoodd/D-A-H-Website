@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
 import { BOOTH_STATUS } from "@/lib/constants";
+import { hasConfirmedScale, mmToGridRect } from "@/lib/floorplan/transform";
+import { isFootprintWithinBoundary, parseVenueBoundary, BOUNDARY_VIOLATION_MESSAGE } from "@/lib/floorplan/boundary";
 
 // General-purpose transactional batch edit for the floor-plan builder's
 // multi-select mode — price, physical size (width/depth mm), tier (size
@@ -115,13 +117,60 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
   }
 
-  const result = targetIds.length > 0 ? await prisma.booth.updateMany({ where: { id: { in: targetIds }, eventId }, data }) : { count: 0 };
+  // Bulk "Apply Size" (widthMm/depthMm) fix: a flat updateMany can only ever
+  // write metadata — it can never make the RENDERED rectangle (gridW/gridH)
+  // reflect the new size, which was exactly the reported bug (bulk size
+  // changes silently not affecting geometry). Once this event has a
+  // confirmed physical scale, every targeted booth that already has a real
+  // xMm/yMm position gets its gridX/Y/W/H individually re-derived from the
+  // new size (position held fixed) in one server-side transaction —
+  // booths without a positioned xMm/yMm yet (legacy/unconfigured) fall back
+  // to the plain metadata-only write below, unchanged from before.
+  const sizeChanged = "widthMm" in data || "depthMm" in data;
+  const geometryResults: { updated: number; skippedOutOfBoundary: { boothId: string; code: string; reason: string }[] } = { updated: 0, skippedOutOfBoundary: [] };
+  let plainTargetIds = targetIds;
+
+  if (sizeChanged && targetIds.length > 0) {
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { venueScaleConfirmed: true, venueWidthMm: true, venueDepthMm: true, venueShape: true, venueBoundaryJson: true },
+    });
+    if (event && hasConfirmedScale(event)) {
+      const venue = { venueWidthMm: event.venueWidthMm, venueDepthMm: event.venueDepthMm };
+      const boundary = { widthMm: event.venueWidthMm, depthMm: event.venueDepthMm, boundary: parseVenueBoundary(event.venueShape, event.venueBoundaryJson) };
+      const targetBooths = booths.filter((b) => targetIds.includes(b.id));
+      const positioned = targetBooths.filter((b) => b.xMm != null && b.yMm != null);
+      plainTargetIds = targetIds.filter((id) => !positioned.some((b) => b.id === id));
+
+      const writes: { id: string; gridX: number; gridY: number; gridW: number; gridH: number }[] = [];
+      for (const b of positioned) {
+        const widthMm = "widthMm" in data ? (data.widthMm as number | null) : b.widthMm;
+        const depthMm = "depthMm" in data ? (data.depthMm as number | null) : b.depthMm;
+        if (widthMm == null || depthMm == null) continue;
+        const withinBoundary = b.boundaryOverride || isFootprintWithinBoundary(boundary, { xMm: b.xMm!, yMm: b.yMm!, widthMm, depthMm, rotationDeg: b.rotation });
+        if (!withinBoundary) {
+          geometryResults.skippedOutOfBoundary.push({ boothId: b.id, code: b.code, reason: BOUNDARY_VIOLATION_MESSAGE });
+          plainTargetIds = plainTargetIds.filter((id) => id !== b.id); // never silently apply metadata-only either — the whole change is blocked for this booth
+          continue;
+        }
+        const grid = mmToGridRect(venue, { xMm: b.xMm!, yMm: b.yMm!, widthMm, depthMm });
+        writes.push({ id: b.id, ...grid });
+      }
+
+      if (writes.length > 0) {
+        await prisma.$transaction(writes.map((w) => prisma.booth.update({ where: { id: w.id }, data: { ...data, gridX: w.gridX, gridY: w.gridY, gridW: w.gridW, gridH: w.gridH } })));
+        geometryResults.updated = writes.length;
+      }
+    }
+  }
+
+  const result = plainTargetIds.length > 0 ? await prisma.booth.updateMany({ where: { id: { in: plainTargetIds }, eventId }, data }) : { count: 0 };
 
   return NextResponse.json({
     ok: true,
     requested: boothIds.length,
-    updated: result.count,
-    skipped: skipped.length,
-    skippedDetails: skipped,
+    updated: result.count + geometryResults.updated,
+    skipped: skipped.length + geometryResults.skippedOutOfBoundary.length,
+    skippedDetails: [...skipped, ...geometryResults.skippedOutOfBoundary],
   });
 }

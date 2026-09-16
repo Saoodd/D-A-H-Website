@@ -34,6 +34,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (Array.isArray(body.categories)) data.categories = body.categories.map(String).filter(Boolean);
   if ("floorPlanImageUrl" in body) data.floorPlanImageUrl = body.floorPlanImageUrl || null;
   if ("venueWidthM" in body) data.venueWidthM = body.venueWidthM ? Number(body.venueWidthM) : null;
+  // Physical Scale step of the Floor Plan Setup Wizard — the authoritative
+  // real-world venue size, in millimetres. venueScaleConfirmed is set
+  // TRUE only by an explicit admin action (never implied just by both mm
+  // fields being non-null), so an admin can enter provisional numbers while
+  // still iterating without the floor plan silently switching render modes
+  // underneath them; going back to false is always allowed (e.g. before
+  // recalibrating), matching the wizard's "Venue Scale Needs Configuration"
+  // fallback for anything not explicitly confirmed.
+  if ("venueWidthMm" in body) data.venueWidthMm = body.venueWidthMm ? Math.round(Number(body.venueWidthMm)) : null;
+  if ("venueDepthMm" in body) data.venueDepthMm = body.venueDepthMm ? Math.round(Number(body.venueDepthMm)) : null;
+  if ("venueScaleConfirmed" in body) data.venueScaleConfirmed = Boolean(body.venueScaleConfirmed);
   if ("showPublicPricing" in body) data.showPublicPricing = Boolean(body.showPublicPricing);
   if (["DRAFT", "PUBLISHED", "CLOSED"].includes(body.status)) {
     // An event can be saved as a Draft with no Terms at all, but it can
@@ -46,6 +57,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           { error: "Add and publish this event's Terms & Conditions before publishing the event.", code: "TERMS_REQUIRED" },
           { status: 409 }
         );
+      }
+      // Mandatory Physical Scale gate: a floor plan whose real-world size
+      // was never confirmed can't go live either — publishing on
+      // unconfirmed/guessed geometry is exactly what this whole model
+      // exists to prevent. Checks the value ABOUT TO BE SAVED (this same
+      // request may be confirming scale and publishing in one call), not
+      // just what's already in the DB.
+      const willBeConfirmed = "venueScaleConfirmed" in data ? Boolean(data.venueScaleConfirmed) : undefined;
+      if (willBeConfirmed === undefined || willBeConfirmed === false) {
+        const current = await prisma.event.findUnique({ where: { id }, select: { venueScaleConfirmed: true } });
+        if (!(willBeConfirmed ?? current?.venueScaleConfirmed)) {
+          return NextResponse.json(
+            { error: "Confirm this event's venue physical scale (Floor Plan → Physical Scale) before publishing.", code: "SCALE_REQUIRED" },
+            { status: 409 }
+          );
+        }
       }
     }
     data.status = body.status;

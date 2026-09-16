@@ -6,6 +6,7 @@ import { Legend } from "@/components/floorplan/Legend";
 import type { FloorBooth, FloorFeature, SizeStyle } from "@/components/floorplan/types";
 import { FEATURE_TYPE, formatAed } from "@/lib/constants";
 import { CadImportPanel } from "@/components/admin/CadImportPanel";
+import { getFloorplanViewBox } from "@/lib/floorplan/transform";
 
 const SIZE_PALETTE = ["#C97C4B", "#8A5A38", "#D9A066", "#6B4429"];
 const DEFAULT_BOOTH_W = 6;
@@ -42,11 +43,17 @@ export function FloorPlanBuilder({
   tiers,
   floorPlanImageUrl: initialFloorPlanImageUrl,
   venueWidthM,
+  venueWidthMm: initialVenueWidthMm,
+  venueDepthMm: initialVenueDepthMm,
+  venueScaleConfirmed: initialVenueScaleConfirmed,
 }: {
   eventId: string;
   tiers: Tier[];
   floorPlanImageUrl: string | null;
   venueWidthM: number | null;
+  venueWidthMm?: number | null;
+  venueDepthMm?: number | null;
+  venueScaleConfirmed?: boolean;
 }) {
   const [features, setFeatures] = useState<FloorFeature[]>([]);
   const [booths, setBooths] = useState<AdminBooth[]>([]);
@@ -57,6 +64,60 @@ export function FloorPlanBuilder({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [floorPlanImageUrl, setFloorPlanImageUrl] = useState(initialFloorPlanImageUrl);
   const [uploadingImage, setUploadingImage] = useState(false);
+
+  // Physical Scale (Floor Plan Setup Wizard step 2) — the authoritative
+  // real-world venue size. Once confirmed, the canvas below renders in true
+  // millimetres (viewBox = venueWidthMm x venueDepthMm) instead of the
+  // legacy 0-100 percentage square, and every geometry-writing server route
+  // (create/PATCH/Mass Create/bulk size) derives rendered size from real
+  // widthMm/depthMm instead of a fixed default box — see
+  // lib/floorplan/transform.ts. Until confirmed, everything below behaves
+  // exactly as it always has.
+  const [venueWidthMmState, setVenueWidthMmState] = useState(initialVenueWidthMm ?? null);
+  const [venueDepthMmState, setVenueDepthMmState] = useState(initialVenueDepthMm ?? null);
+  const [venueScaleConfirmedState, setVenueScaleConfirmedState] = useState(initialVenueScaleConfirmed ?? false);
+  const [scaleFormOpen, setScaleFormOpen] = useState(false);
+  const [scaleWidthInput, setScaleWidthInput] = useState(initialVenueWidthMm ? String(initialVenueWidthMm / 1000) : "");
+  const [scaleDepthInput, setScaleDepthInput] = useState(initialVenueDepthMm ? String(initialVenueDepthMm / 1000) : "");
+  const [scaleBusy, setScaleBusy] = useState(false);
+
+  const viewBox = getFloorplanViewBox({
+    venueScaleConfirmed: venueScaleConfirmedState,
+    venueWidthMm: venueWidthMmState,
+    venueDepthMm: venueDepthMmState,
+  });
+  const coordinateMode = viewBox.mode;
+
+  async function saveScale(confirmed: boolean) {
+    const widthM = Number(scaleWidthInput);
+    const depthM = Number(scaleDepthInput);
+    if (confirmed && (!widthM || widthM <= 0 || !depthM || depthM <= 0)) {
+      setNotice("Enter a valid venue width and depth in meters before confirming.");
+      return;
+    }
+    setScaleBusy(true);
+    try {
+      const widthMm = widthM > 0 ? Math.round(widthM * 1000) : null;
+      const depthMm = depthM > 0 ? Math.round(depthM * 1000) : null;
+      const res = await fetch(`/api/admin/events/${eventId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ venueWidthMm: widthMm, venueDepthMm: depthMm, venueScaleConfirmed: confirmed }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setNotice(j.error || "Couldn't save the physical scale.");
+        return;
+      }
+      setVenueWidthMmState(widthMm);
+      setVenueDepthMmState(depthMm);
+      setVenueScaleConfirmedState(confirmed);
+      setScaleFormOpen(false);
+      setNotice(confirmed ? "Physical scale confirmed — booths now render at their true size." : "Physical scale saved as draft (not yet confirmed).");
+    } finally {
+      setScaleBusy(false);
+    }
+  }
 
   const [placementOn, setPlacementOn] = useState(false);
   const [placeName, setPlaceName] = useState("");
@@ -214,6 +275,15 @@ export function FloorPlanBuilder({
         setNotice("Enter a price for the booth first.");
         return;
       }
+      // The canvas always renders/reports position in the legacy 0-100
+      // percentage space (see note on the FloorPlan call below on why the
+      // canvas itself doesn't switch to a real-mm viewBox yet). widthMm/
+      // depthMm are still the real dimensions the admin typed — the SERVER
+      // (see app/api/admin/events/[id]/booths/route.ts) derives a
+      // genuinely proportional gridW/gridH from them once this event's
+      // scale is confirmed, converting the percent position below into mm
+      // and back out again so the two stay consistent, rather than ever
+      // trusting a hardcoded default box.
       const w = DEFAULT_BOOTH_W;
       const h = DEFAULT_BOOTH_H;
       const gridX = Math.min(100 - w, Math.max(0, xPercent - w / 2));
@@ -991,12 +1061,60 @@ export function FloorPlanBuilder({
           Snap to grid
         </label>
 
+        <div className="w-px h-5 bg-brown/15 mx-1" />
+
+        {scaleFormOpen ? (
+          <div className="flex items-center gap-1.5 text-xs">
+            <input
+              type="number"
+              min="0.1"
+              step="0.1"
+              placeholder="Width (m)"
+              value={scaleWidthInput}
+              onChange={(e) => setScaleWidthInput(e.target.value)}
+              className="w-24 border border-brown/20 rounded-lg px-2 py-1 bg-cream-soft"
+            />
+            <span className="text-brown-light">×</span>
+            <input
+              type="number"
+              min="0.1"
+              step="0.1"
+              placeholder="Depth (m)"
+              value={scaleDepthInput}
+              onChange={(e) => setScaleDepthInput(e.target.value)}
+              className="w-24 border border-brown/20 rounded-lg px-2 py-1 bg-cream-soft"
+            />
+            <button type="button" disabled={scaleBusy} onClick={() => saveScale(true)} className="px-2 py-1 rounded-lg bg-brown text-cream-soft disabled:opacity-50">
+              Confirm scale
+            </button>
+            <button type="button" disabled={scaleBusy} onClick={() => saveScale(false)} className="px-2 py-1 rounded-lg border border-brown/25 disabled:opacity-50">
+              Save draft
+            </button>
+            <button type="button" onClick={() => setScaleFormOpen(false)} className="text-brown-light underline">
+              Cancel
+            </button>
+          </div>
+        ) : venueScaleConfirmedState && venueWidthMmState && venueDepthMmState ? (
+          <button type="button" onClick={() => setScaleFormOpen(true)} className="text-xs text-brown-light hover:text-brown">
+            Physical scale: {(venueWidthMmState / 1000).toFixed(1)}m × {(venueDepthMmState / 1000).toFixed(1)}m (confirmed — proportions above are true to venue)
+          </button>
+        ) : (
+          <button type="button" onClick={() => setScaleFormOpen(true)} className="text-xs text-amber-800 hover:text-amber-900 font-medium">
+            ⚠ Venue Scale Needs Configuration — set physical scale for accurate booth proportions
+          </button>
+        )}
+
         {!venueWidthM && (
           <span className="text-xs text-brown-light/70 ml-auto">
             Tip: set a venue width (meters) in Settings to show real distances while dragging.
           </span>
         )}
       </div>
+      {coordinateMode === "MM" && (
+        <p className="mb-3 -mt-2 text-[11px] text-brown-light/70">
+          New booths, Mass Create, and bulk size changes below now store true physical dimensions ({viewBox.width / 1000}m × {viewBox.height / 1000}m venue) and render at genuinely proportional size.
+        </p>
+      )}
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
         <div className="flex-1 min-w-0 w-full">

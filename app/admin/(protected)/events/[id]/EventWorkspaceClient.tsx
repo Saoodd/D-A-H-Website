@@ -201,6 +201,9 @@ export function EventWorkspaceClient({
           eventId={floorPlanProps.eventId}
           floorPlanImageUrl={floorPlanProps.floorPlanImageUrl}
           venueWidthM={floorPlanProps.venueWidthM}
+          venueWidthMm={floorPlanProps.venueWidthMm}
+          venueDepthMm={floorPlanProps.venueDepthMm}
+          venueScaleConfirmed={floorPlanProps.venueScaleConfirmed}
           tiers={floorPlanProps.tiers}
         />
       )}

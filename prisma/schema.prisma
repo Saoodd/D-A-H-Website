@@ -102,10 +102,56 @@ model Event {
   // image's width/height, so admin can click directly on a real venue photo
   // or architectural drawing to place booths instead of guessing coordinates.
   floorPlanImageUrl String?
-  // Real width, in meters, that the floor plan canvas represents — optional.
-  // When set, the floor plan builder's drag distance/spacing guides show
-  // real meters (derived from this scale) instead of a raw canvas percentage.
+  // LEGACY. Real width, in meters, that the floor plan canvas represents.
+  // Superseded by venueWidthMm/venueDepthMm below (the authoritative
+  // physical scale) but kept for events that predate that model — the
+  // builder still falls back to this for spacing labels when
+  // venueScaleConfirmed is false. Never written to by new code.
   venueWidthM       Float?
+
+  // --- Authoritative physical geometry (millimetres) ---------------------
+  // The one real-world scale for this event's floor plan. Both null (and
+  // venueScaleConfirmed false) for every event created before this model
+  // existed, and for any new event until an admin completes the Floor Plan
+  // Setup Wizard's mandatory Physical Scale step — see requirement: never
+  // silently guess real-world size from old pixel/percentage data. While
+  // false, the floor plan renders via the legacy gridX/Y/W/H percentage
+  // passthrough (components/floorplan) and the UI shows "Venue Scale Needs
+  // Configuration"; once true, gridX/Y/W/H become fully DERIVED from
+  // xMm/yMm/widthMm/depthMm (Booth/FloorPlanFeature) by
+  // lib/floorplan/transform.ts and must never be hand-edited independently.
+  venueWidthMm        Int?
+  venueDepthMm        Int?
+  venueScaleConfirmed Boolean @default(false)
+
+  // Venue boundary shape — the actual (possibly non-rectangular) usable
+  // footprint, kept deliberately separate from the venueWidthMm x
+  // venueDepthMm coordinate bounding box above (which is always a
+  // rectangle). RECTANGLE (default — matches every event's implicit
+  // behavior before this field existed, i.e. boundary == the full
+  // coordinate box) | CIRCLE | OVAL | POLYGON. venueBoundaryJson holds
+  // shape-specific params in millimetres, relative to the same (0,0)
+  // origin as Booth.xMm/yMm:
+  //   RECTANGLE: null
+  //   CIRCLE:    { "cx": number, "cy": number, "r": number }
+  //   OVAL:      { "cx": number, "cy": number, "rx": number, "ry": number }
+  //   POLYGON:   { "points": [{ "x": number, "y": number }, ...] } (closed)
+  venueShape        String  @default("RECTANGLE")
+  venueBoundaryJson String? @db.Text
+
+  // Background image alignment within the venue's mm coordinate box, set by
+  // the Setup Wizard's Background Alignment step — drives the world->screen
+  // renderer's contain-equivalent image placement so the photo is NEVER
+  // stretched (see components/floorplan render, which must derive the
+  // image's on-canvas rect from these fields, never `preserveAspectRatio=
+  // "none"`). Null until an admin aligns the image for this event.
+  venueBackgroundNaturalWidthPx  Int?
+  venueBackgroundNaturalHeightPx Int?
+  venueBackgroundOffsetXMm       Float?
+  venueBackgroundOffsetYMm       Float?
+  venueBackgroundScale           Float?
+  venueBackgroundRotationDeg     Float   @default(0)
+  venueBackgroundLocked          Boolean @default(false)
 
   whatsappVendorGroupLink String? // event-specific, payment-gated
 
@@ -149,13 +195,24 @@ model FloorPlanFeature {
   // ENTRANCE_MAIN | ENTRANCE_SIDE | TOILET_FEMALE | TOILET_MALE | OFFICE | LOADING | STAIRS | OTHER
   type     String
   label    String
-  // Position/size as a percentage (0-100) of the floor plan canvas/image.
-  // See components/floorplan.
+  // LEGACY/derived. Position/size as a percentage (0-100) of the floor plan
+  // canvas/image. See components/floorplan. Once the parent Event has
+  // venueScaleConfirmed, these are derived from xMm/yMm/widthMm/depthMm by
+  // lib/floorplan/transform.ts and must never be hand-edited independently.
   gridX    Float
   gridY    Float
   gridW    Float
   gridH    Float
   rotation Int    @default(0) // degrees, for arrow/door orientation
+
+  // Authoritative physical position/size, in millimetres, relative to the
+  // parent Event's (0,0) origin — the real-world counterpart to gridX/Y/W/H
+  // above. Null until an admin places/imports this feature under a
+  // scale-confirmed event.
+  xMm     Int?
+  yMm     Int?
+  widthMm Int?
+  depthMm Int?
 
   createdAt DateTime @default(now())
 }
@@ -187,13 +244,36 @@ model Booth {
   widthMm Int?
   depthMm Int?
 
-  // Position/size as a percentage (0-100) of the floor plan canvas/image —
-  // lets the admin click-to-place a booth instead of typing coordinates.
+  // Authoritative physical POSITION, in millimetres, relative to the parent
+  // Event's (0,0) origin — the real-world counterpart to gridX/gridY below.
+  // Null until an admin places/imports this booth under a scale-confirmed
+  // event (legacy booths, and any booth created before this field existed,
+  // stay null and keep rendering from gridX/Y/W/H — see
+  // Event.venueScaleConfirmed).
+  xMm Int?
+  yMm Int?
+
+  // LEGACY/derived. Position/size as a percentage (0-100) of the floor plan
+  // canvas/image — lets the admin click-to-place a booth instead of typing
+  // coordinates. Once the parent Event has venueScaleConfirmed, these are
+  // fully DERIVED from xMm/yMm/widthMm/depthMm by
+  // lib/floorplan/transform.ts on every write and must never be hand-edited
+  // independently — this is what fixes the historical bug where a booth's
+  // rendered size (gridW/gridH) had no relationship to its real widthMm/
+  // depthMm (e.g. Mass Create always rendering a fixed 6%x6% square
+  // regardless of entered meters).
   gridX    Float
   gridY    Float
   gridW    Float
   gridH    Float
   rotation Int   @default(0) // degrees, set by dragging the rotate handle in the floor plan builder
+
+  // Set only by an admin explicitly overriding a blocked "outside venue
+  // boundary" placement for a genuinely special case (e.g. a booth
+  // intentionally straddling an alcove the boundary polygon doesn't
+  // perfectly capture) — see requirement: boundary validation defaults to
+  // blocking placement, with an explicit, stored, and shown escape hatch.
+  boundaryOverride Boolean @default(false)
 
   status String @default("AVAILABLE") // AVAILABLE | HELD | RESERVED | SOLD
 
