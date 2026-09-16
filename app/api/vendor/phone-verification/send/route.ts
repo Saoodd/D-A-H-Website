@@ -70,11 +70,14 @@ export async function POST(req: NextRequest) {
 
   const result = await sendWhatsAppOtp(vendor.id, normalizedPhone);
   if (!result.ok) {
-    // result.code is one of CONFIG_MISSING / NO_AUTH_TEMPLATE / PROVIDER_FAILURE
-    // — the raw Infobip error is already logged server-side inside
+    // result.code is one of CONFIG_MISSING / AUTH_TEMPLATE_NOT_CONFIGURED /
+    // AUTH_TEMPLATE_NOT_APPROVED / PROVIDER_FAILURE — every one of these is
+    // a "the service isn't ready" condition from the vendor's perspective,
+    // so they all map to 503. The specific reason (missing base
+    // config, a typo'd/unapproved INFOBIP_WHATSAPP_AUTH_TEMPLATE, or a
+    // genuine Infobip failure) is already logged server-side inside
     // sendWhatsAppOtp/sendWhatsAppTemplate, never returned to the client.
-    const status = result.code === "PROVIDER_FAILURE" ? 503 : 503;
-    return NextResponse.json({ error: result.error, code: result.code }, { status });
+    return NextResponse.json({ error: result.error, code: result.code }, { status: 503 });
   }
 
   // Only now — after Infobip actually accepted the request — does the

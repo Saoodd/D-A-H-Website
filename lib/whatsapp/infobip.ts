@@ -8,16 +8,26 @@ import { prisma } from "../prisma";
 // Twilio, which was never actually used here despite some earlier stray
 // comments claiming otherwise) — phone verification, broadcast
 // Communications, and everything else Infobip-related all go through
-// this one WhatsApp channel and exactly three env vars:
-// INFOBIP_WHATSAPP_BASE_URL, INFOBIP_WHATSAPP_API_KEY,
-// INFOBIP_WHATSAPP_SENDER (the WhatsApp Business number actually
-// registered/approved on that account, MSISDN, no leading "+").
+// this one WhatsApp channel. This module (the connection/send/list
+// primitives) reads exactly three env vars: INFOBIP_WHATSAPP_BASE_URL,
+// INFOBIP_WHATSAPP_API_KEY, INFOBIP_WHATSAPP_SENDER (the WhatsApp
+// Business number actually registered/approved on that account, MSISDN,
+// no leading "+"). Phone verification additionally reads two more,
+// scoped to lib/whatsapp/otp.ts only: INFOBIP_WHATSAPP_AUTH_TEMPLATE /
+// INFOBIP_WHATSAPP_AUTH_TEMPLATE_LANGUAGE (which of the account's
+// approved templates to use for OTP — deliberately explicit, never
+// auto-picked).
 //
 // IMPORTANT — this module was built against Infobip's publicly documented
 // request/response shape for sending a template message (confirmed via
-// Infobip's own docs at build time: POST {baseUrl}/whatsapp/1/message/template
-// with a `messages[]` envelope, `content.templateName` /
-// `content.templateData.body.placeholders` / `content.language`). The
+// Infobip's own docs: POST {baseUrl}/whatsapp/1/message/template with a
+// `messages[]` envelope, `content.templateName` /
+// `content.templateData.body.placeholders` / `content.language`, and for
+// an AUTHENTICATION template's Copy Code button, a `content.templateData
+// .buttons` array of `{ type: "URL", parameter: <code> }` — Infobip
+// represents the button's dynamic parameter this way regardless of the
+// button's own display type in the template definition; the code is
+// passed as BOTH the body placeholder and the button parameter). The
 // template-LIST endpoint's exact JSON field names could not be confirmed
 // the same way (network access to infobip.com was blocked while this was
 // built), so listWhatsAppTemplates() below parses the response
@@ -180,11 +190,22 @@ export async function listWhatsAppTemplates(): Promise<ListTemplatesResult> {
 // checkFreeformEligibility below for why free-form is never used here yet).
 // ---------------------------------------------------------------------------
 
+export interface WhatsAppTemplateButton {
+  type: string;
+  parameter: string;
+}
+
 export interface SendWhatsAppTemplateOptions {
   toE164: string;
   templateName: string;
   language: string;
   placeholders: string[];
+  /** Button components with dynamic parameters — e.g. an AUTHENTICATION
+   *  template's "Copy Code" button, which (per Infobip's WhatsApp API)
+   *  needs the same code as the body placeholder passed again here as
+   *  `{ type: "URL", parameter: code }`. Omitted entirely for templates
+   *  with no dynamic buttons. */
+  buttons?: WhatsAppTemplateButton[];
   /** Delivery-log category — see WhatsAppDelivery.type in schema.prisma. */
   type: string;
   vendorId?: string;
@@ -194,6 +215,53 @@ export interface SendWhatsAppTemplateOptions {
    *  send (via WhatsAppDelivery.dedupeKey's unique constraint) and is
    *  skipped rather than sending a duplicate WhatsApp message. */
   dedupeKey?: string;
+  /** Values that must NEVER appear in a server log for this send — e.g. an
+   *  OTP code. Any log line this module would otherwise write about this
+   *  send (including a raw Infobip error body, which could echo the
+   *  submitted payload back) has these values redacted first. Never
+   *  affects what's actually sent to Infobip or stored in
+   *  WhatsAppDelivery.failReason — only console output. */
+  sensitiveValues?: string[];
+}
+
+function redact(text: string, sensitiveValues: string[] | undefined): string {
+  if (!sensitiveValues || sensitiveValues.length === 0) return text;
+  let out = text;
+  for (const value of sensitiveValues) {
+    if (value) out = out.split(value).join("[REDACTED]");
+  }
+  return out;
+}
+
+/** Pure request-body builder, split out from sendWhatsAppTemplate so the
+ *  exact JSON shape sent to Infobip can be unit-tested without a live
+ *  account or network access. */
+export function buildTemplateMessagePayload(opts: {
+  from: string;
+  to: string;
+  messageId: string;
+  templateName: string;
+  language: string;
+  placeholders: string[];
+  buttons?: WhatsAppTemplateButton[];
+}) {
+  return {
+    messages: [
+      {
+        from: opts.from,
+        to: opts.to,
+        messageId: opts.messageId,
+        content: {
+          templateName: opts.templateName,
+          templateData: {
+            body: { placeholders: opts.placeholders },
+            ...(opts.buttons && opts.buttons.length > 0 ? { buttons: opts.buttons } : {}),
+          },
+          language: opts.language,
+        },
+      },
+    ],
+  };
 }
 
 async function logQueued(opts: SendWhatsAppTemplateOptions, toPhone: string): Promise<string | null> {
@@ -261,26 +329,28 @@ export async function sendWhatsAppTemplate(opts: SendWhatsAppTemplateOptions): P
     const res = await fetch(`${config.baseUrl}/whatsapp/1/message/template`, {
       method: "POST",
       headers: authHeaders(config.apiKey),
-      body: JSON.stringify({
-        messages: [
-          {
-            from: config.sender,
-            to: toInfobipMsisdn(toPhone),
-            messageId,
-            content: {
-              templateName: opts.templateName,
-              templateData: { body: { placeholders: opts.placeholders } },
-              language: opts.language,
-            },
-          },
-        ],
-      }),
+      body: JSON.stringify(
+        buildTemplateMessagePayload({
+          from: config.sender,
+          to: toInfobipMsisdn(toPhone),
+          messageId,
+          templateName: opts.templateName,
+          language: opts.language,
+          placeholders: opts.placeholders,
+          buttons: opts.buttons,
+        })
+      ),
     });
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      console.error("[whatsapp:infobip] send failed", { status: res.status, body: text.slice(0, 300) });
-      await logOutcome(rowId, opts, toPhone, { status: "FAILED", failReason: `Infobip ${res.status}: ${text.slice(0, 200)}` });
+      const safeText = redact(text, opts.sensitiveValues).slice(0, 300);
+      // status + a redacted, truncated response body only — the request
+      // Authorization header (the API key) is never logged, and any
+      // sensitiveValues (e.g. an OTP code) are stripped even if Infobip's
+      // own error body happened to echo the submitted payload back.
+      console.error("[whatsapp:infobip] send failed", { status: res.status, body: safeText });
+      await logOutcome(rowId, opts, toPhone, { status: "FAILED", failReason: `Infobip ${res.status}: ${safeText.slice(0, 200)}` });
       return { ok: false, error: "WhatsApp send failed." };
     }
 
@@ -289,8 +359,10 @@ export async function sendWhatsAppTemplate(opts: SendWhatsAppTemplateOptions): P
     await logOutcome(rowId, opts, toPhone, { status: "SENT", providerMessageId });
     return { ok: true, whatsAppDeliveryId: rowId };
   } catch (err) {
-    console.error("[whatsapp:infobip] network error on send", { message: err instanceof Error ? err.message : String(err) });
-    await logOutcome(rowId, opts, toPhone, { status: "FAILED", failReason: err instanceof Error ? err.message : "Unknown error" });
+    const rawMessage = err instanceof Error ? err.message : String(err);
+    const safeMessage = redact(rawMessage, opts.sensitiveValues);
+    console.error("[whatsapp:infobip] network error on send", { message: safeMessage });
+    await logOutcome(rowId, opts, toPhone, { status: "FAILED", failReason: safeMessage });
     return { ok: false, error: "Couldn't reach Infobip to send this WhatsApp message." };
   }
 }
