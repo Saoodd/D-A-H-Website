@@ -39,10 +39,16 @@ interface UseCaseMapped {
   updatedAt: string;
 }
 
+interface Readiness {
+  ready: boolean;
+  missing: string[];
+}
+
 interface UseCaseRow {
   useCase: string;
   label: string;
   mapped: UseCaseMapped | null;
+  readiness: Readiness;
 }
 
 function parseButtons(json: string | null): TemplateButton[] {
@@ -111,6 +117,23 @@ export function RegistryClient() {
 
   const selectedTemplate = templates.find((t) => `${t.name}::${t.language}` === selectedKey) || null;
   const selectedButtons = selectedTemplate ? parseButtons(selectedTemplate.buttonsJson) : [];
+
+  // Client-side preview only — mirrors lib/whatsapp/notificationRegistry.ts
+  // computeMappingReadiness() so the admin sees "Ready"/"Incomplete" before
+  // saving; the server re-checks this independently and is what actually
+  // gates sending (see getMappedTemplate()).
+  const draftMissing: string[] = [];
+  if (selectedTemplate) {
+    if ((selectedTemplate.status || "").toUpperCase() !== "APPROVED") {
+      draftMissing.push(`template status is "${selectedTemplate.status || "unknown"}", not APPROVED`);
+    }
+    for (let i = 1; i <= selectedTemplate.variableCount; i++) {
+      if (!placeholderMapping[String(i)]) draftMissing.push(`{{${i}}} has not been mapped`);
+    }
+    selectedButtons.forEach((b, idx) => {
+      if (b.hasPlaceholder && !buttonMapping[String(idx)]) draftMissing.push(`the "${b.text || b.type}" button's parameter has not been mapped`);
+    });
+  }
 
   async function save(useCase: string) {
     if (!selectedTemplate) return;
@@ -195,14 +218,18 @@ export function RegistryClient() {
                     <p className="font-medium text-brown-dark">{row.label}</p>
                     <p className="text-xs text-brown-light mt-0.5">{row.useCase}</p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {row.mapped ? (
                       <>
                         <StatusBadge
                           label={`${row.mapped.templateName} (${row.mapped.templateLanguage})`}
                           tone={mappedTemplate && (mappedTemplate.status || "").toUpperCase() === "APPROVED" ? "positive" : "attention"}
                         />
+                        {mappedTemplate?.category && (
+                          <StatusBadge label={mappedTemplate.category} tone={mappedTemplate.category.toUpperCase() === "MARKETING" ? "attention" : "neutral"} />
+                        )}
                         {!row.mapped.enabled && <StatusBadge label="Disabled" tone="attention" />}
+                        <StatusBadge label={row.readiness.ready ? "Ready" : "Incomplete"} tone={row.readiness.ready ? "positive" : "attention"} />
                       </>
                     ) : (
                       <StatusBadge label="Not configured" tone="attention" />
@@ -212,6 +239,15 @@ export function RegistryClient() {
                     </Button>
                   </div>
                 </div>
+                {row.mapped && !row.readiness.ready && (
+                  <p className="mt-2 text-xs text-amber-800">Incomplete — {row.readiness.missing.join("; ")}</p>
+                )}
+                {mappedTemplate?.category?.toUpperCase() === "MARKETING" && (
+                  <p className="mt-1 text-xs text-amber-800">
+                    This is a Marketing-category template, not Utility — Infobip/Meta may restrict when it can be sent, and it&apos;s
+                    subject to the same WhatsApp opt-in requirement. Confirm this is intentional for this use case.
+                  </p>
+                )}
 
                 {isOpen && (
                   <div className="mt-4 pt-4 border-t border-brown/10 space-y-3">
@@ -227,10 +263,16 @@ export function RegistryClient() {
                       <option value="">Select a real template…</option>
                       {templates.map((t) => (
                         <option key={`${t.name}::${t.language}`} value={`${t.name}::${t.language}`}>
-                          {t.name} ({t.language}) — {t.status || "unknown status"}
+                          {t.name} ({t.language}) — {t.category || "uncategorized"} — {t.status || "unknown status"}
                         </option>
                       ))}
                     </select>
+                    {selectedTemplate?.category?.toUpperCase() === "MARKETING" && (
+                      <p className="text-xs text-amber-800 bg-amber-500/10 rounded-[8px] px-3 py-2">
+                        This template is categorized MARKETING by Infobip/Meta, not UTILITY. It can still be mapped, but confirm
+                        that&apos;s correct for a transactional notification before saving.
+                      </p>
+                    )}
 
                     {selectedTemplate && (
                       <div className="space-y-3">
@@ -344,6 +386,10 @@ export function RegistryClient() {
                           />
                         </div>
 
+                        <p className={`text-sm ${draftMissing.length === 0 ? "text-green-700" : "text-amber-800"}`}>
+                          {draftMissing.length === 0 ? "Ready" : `Incomplete — ${draftMissing.join("; ")}`}
+                        </p>
+
                         <div className="flex items-center gap-2 pt-2">
                           <Button size="sm" onClick={() => save(row.useCase)} loading={saving}>
                             Save mapping
@@ -354,6 +400,10 @@ export function RegistryClient() {
                             </Button>
                           )}
                         </div>
+                        <p className="text-xs text-brown-light">
+                          Saving always persists the mapping as a draft — it only actually sends once it shows &quot;Ready&quot;
+                          above (and stays Ready live, since Infobip&apos;s approval status is re-checked at send time).
+                        </p>
                       </div>
                     )}
                   </div>

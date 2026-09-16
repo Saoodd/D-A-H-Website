@@ -53,6 +53,9 @@ export function buildVariableContext(recipient: AudienceRecipient, ctx: Recipien
     booth_new: "—",
     setup_date: "—",
     setup_time: "—",
+    event_time: "—",
+    payment_deadline: "—",
+    event_url: "—",
   };
 }
 

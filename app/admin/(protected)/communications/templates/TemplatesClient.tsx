@@ -5,6 +5,12 @@ import { Card, EmptyState } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
+interface TemplateButton {
+  type: string;
+  text: string | null;
+  url: string | null;
+  hasPlaceholder: boolean;
+}
 interface Template {
   id: string;
   name: string;
@@ -12,9 +18,22 @@ interface Template {
   category: string | null;
   status: string | null;
   bodyText: string | null;
+  headerText: string | null;
+  footerText: string | null;
+  buttonsJson: string | null;
   variableCount: number;
   source: string;
   syncedAt: string;
+}
+
+function parseButtons(json: string | null): TemplateButton[] {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 export function TemplatesClient() {
@@ -28,6 +47,7 @@ export function TemplatesClient() {
   const [mLanguage, setMLanguage] = useState("en");
   const [mBody, setMBody] = useState("");
   const [mCategory, setMCategory] = useState("MARKETING");
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -105,23 +125,75 @@ export function TemplatesClient() {
         <EmptyState title="No templates yet" description="Sync from Infobip or register one manually below." />
       ) : (
         <div className="space-y-3">
-          {templates.map((t) => (
-            <Card key={t.id} className="p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <p className="font-medium text-brown-dark">{t.name}</p>
-                  <span className="text-xs text-brown-light">{t.language}</span>
-                  {t.category && <StatusBadge label={t.category} tone="neutral" />}
-                  <StatusBadge
-                    label={t.source === "SYNCED" ? t.status || "Synced" : "Manually registered — unverified"}
-                    tone={t.source === "SYNCED" && (t.status || "").toUpperCase() === "APPROVED" ? "positive" : "attention"}
-                  />
-                </div>
-                <span className="text-xs text-brown-light">{t.variableCount} variable{t.variableCount === 1 ? "" : "s"}</span>
-              </div>
-              {t.bodyText && <p className="mt-2 text-sm text-brown-dark bg-cream-deep/30 rounded-[6px] px-3 py-2 whitespace-pre-wrap">{t.bodyText}</p>}
-            </Card>
-          ))}
+          {templates.map((t) => {
+            const isOpen = expanded === t.id;
+            const buttons = parseButtons(t.buttonsJson);
+            return (
+              <Card key={t.id} className="p-4">
+                <button
+                  type="button"
+                  onClick={() => setExpanded(isOpen ? null : t.id)}
+                  className="w-full flex flex-wrap items-center justify-between gap-2 text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-brown-light">{isOpen ? "▾" : "▸"}</span>
+                    <p className="font-medium text-brown-dark">{t.name}</p>
+                    <span className="text-xs text-brown-light">{t.language}</span>
+                    {t.category && (
+                      <StatusBadge label={t.category} tone={t.category.toUpperCase() === "MARKETING" ? "attention" : "neutral"} />
+                    )}
+                    <StatusBadge
+                      label={t.source === "SYNCED" ? t.status || "Synced" : "Manually registered — unverified"}
+                      tone={t.source === "SYNCED" && (t.status || "").toUpperCase() === "APPROVED" ? "positive" : "attention"}
+                    />
+                  </div>
+                  <span className="text-xs text-brown-light">{t.variableCount} variable{t.variableCount === 1 ? "" : "s"}</span>
+                </button>
+
+                {isOpen && (
+                  <div className="mt-3 pt-3 border-t border-brown/10 space-y-3">
+                    {t.headerText && (
+                      <div>
+                        <p className="label-caps text-xs">Header</p>
+                        <p className="mt-1 text-sm text-brown-dark bg-cream-deep/30 rounded-[6px] px-3 py-2 whitespace-pre-wrap">{t.headerText}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="label-caps text-xs">Body</p>
+                      <p className="mt-1 text-sm text-brown-dark bg-cream-deep/30 rounded-[6px] px-3 py-2 whitespace-pre-wrap">{t.bodyText || "—"}</p>
+                    </div>
+                    {t.variableCount > 0 && (
+                      <div>
+                        <p className="label-caps text-xs">Variables</p>
+                        <p className="mt-1 text-sm text-brown-dark font-mono">
+                          {Array.from({ length: t.variableCount }, (_, i) => `{{${i + 1}}}`).join("  ")}
+                        </p>
+                      </div>
+                    )}
+                    {t.footerText && (
+                      <div>
+                        <p className="label-caps text-xs">Footer</p>
+                        <p className="mt-1 text-sm text-brown-dark bg-cream-deep/30 rounded-[6px] px-3 py-2 whitespace-pre-wrap">{t.footerText}</p>
+                      </div>
+                    )}
+                    {buttons.length > 0 && (
+                      <div>
+                        <p className="label-caps text-xs">Button{buttons.length === 1 ? "" : "s"}</p>
+                        <div className="mt-1 space-y-1">
+                          {buttons.map((b, i) => (
+                            <p key={i} className="text-sm text-brown-dark">
+                              {b.text || b.type} {b.hasPlaceholder && <span className="text-xs text-brown-light">— dynamic URL parameter</span>}
+                              {b.url && <span className="text-xs text-brown-light"> ({b.url})</span>}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </Card>
+            );
+          })}
         </div>
       )}
 

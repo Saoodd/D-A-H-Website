@@ -41,7 +41,7 @@ export interface NotifyVendorWhatsAppInput {
 
 export type NotifyVendorWhatsAppResult =
   | { ok: true; skipped?: boolean; reason?: string }
-  | { ok: false; code: "OPT_OUT" | "INVALID_PHONE" | "NOT_CONFIGURED" | "NOT_APPROVED" | "DISABLED" | "PROVIDER_FAILURE" | "VENDOR_NOT_FOUND"; error: string };
+  | { ok: false; code: "OPT_OUT" | "INVALID_PHONE" | "NOT_CONFIGURED" | "NOT_APPROVED" | "DISABLED" | "INCOMPLETE_MAPPING" | "PROVIDER_FAILURE" | "VENDOR_NOT_FOUND"; error: string };
 
 function resolvePlaceholders(mapping: WhatsAppVariableMapping, count: number, data: Partial<Record<EmailVariable, string>>): string[] {
   const out: string[] = [];

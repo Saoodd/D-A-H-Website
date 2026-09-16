@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
 import { syncAndListTemplates } from "@/lib/whatsapp/templateSync";
+import { computeMappingReadiness } from "@/lib/whatsapp/notificationRegistry";
 import { NOTIFICATION_USE_CASES, NOTIFICATION_USE_CASE_LABELS, type NotificationUseCase } from "@/lib/notifications/useCases";
 import type { WhatsAppVariableMapping } from "@/lib/communications/variables";
 
@@ -19,22 +20,29 @@ export async function GET() {
   ]);
 
   const mappingByUseCase = new Map(mappings.map((m) => [m.useCase, m]));
+  const templateByKey = new Map(templates.map((t) => [`${t.name}::${t.language}`, t]));
   const useCases = NOTIFICATION_USE_CASES.map((useCase) => {
     const m = mappingByUseCase.get(useCase);
+    if (!m) return { useCase, label: NOTIFICATION_USE_CASE_LABELS[useCase], mapped: null, readiness: { ready: false, missing: ["no template mapped yet"] } };
+
+    const placeholderMapping = m.placeholderMappingJson ? (JSON.parse(m.placeholderMappingJson) as WhatsAppVariableMapping) : {};
+    const buttonMapping = m.buttonMappingJson ? (JSON.parse(m.buttonMappingJson) as WhatsAppVariableMapping) : {};
+    const cached = templateByKey.get(`${m.templateName}::${m.templateLanguage}`) || null;
+    const readiness = computeMappingReadiness(cached, placeholderMapping, buttonMapping);
+
     return {
       useCase,
       label: NOTIFICATION_USE_CASE_LABELS[useCase],
-      mapped: m
-        ? {
-            templateName: m.templateName,
-            templateLanguage: m.templateLanguage,
-            enabled: m.enabled,
-            placeholderMapping: m.placeholderMappingJson ? (JSON.parse(m.placeholderMappingJson) as WhatsAppVariableMapping) : {},
-            buttonMapping: m.buttonMappingJson ? (JSON.parse(m.buttonMappingJson) as WhatsAppVariableMapping) : {},
-            updatedByName: m.updatedByName,
-            updatedAt: m.updatedAt,
-          }
-        : null,
+      mapped: {
+        templateName: m.templateName,
+        templateLanguage: m.templateLanguage,
+        enabled: m.enabled,
+        placeholderMapping,
+        buttonMapping,
+        updatedByName: m.updatedByName,
+        updatedAt: m.updatedAt,
+      },
+      readiness,
     };
   });
 

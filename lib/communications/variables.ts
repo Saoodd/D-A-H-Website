@@ -23,6 +23,12 @@ export const EMAIL_VARIABLES = [
   "booth_new",
   "setup_date",
   "setup_time",
+  // Added for the Template Registry's controlled variable list (spec item
+  // 7): event_time, payment_deadline, event_url — distinct from the
+  // existing event_date/acceptance_deadline/booking_url.
+  "event_time",
+  "payment_deadline",
+  "event_url",
 ] as const;
 export type EmailVariable = (typeof EMAIL_VARIABLES)[number];
 
@@ -52,4 +58,7 @@ export const VARIABLE_LABEL: Record<EmailVariable, string> = {
   booth_new: "New Booth",
   setup_date: "Setup Date",
   setup_time: "Setup Time",
+  event_time: "Event Time",
+  payment_deadline: "Payment Deadline",
+  event_url: "Event URL",
 };

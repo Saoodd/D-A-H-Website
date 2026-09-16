@@ -67,6 +67,35 @@ function authHeaders(apiKey: string): Record<string, string> {
   return { Authorization: `App ${apiKey}`, "Content-Type": "application/json", Accept: "application/json" };
 }
 
+export type RawTemplateListResult = { ok: true; raw: unknown } | { ok: false; code: "CONFIG_MISSING" | "PROVIDER_FAILURE"; error: string };
+
+/** Diagnostic-only: the exact same call listWhatsAppTemplates() makes, but
+ *  returns Infobip's response completely unparsed — no shape assumptions,
+ *  no field-name guessing. Exists so a real production response can be
+ *  inspected directly (via the admin-only debug route) when the parsed
+ *  result looks wrong (e.g. every template showing 0 variables) — the
+ *  fastest way to find out whether the list endpoint even returns body/
+ *  structure data at all, or whether a per-template detail call is
+ *  required, without guessing further. Never used by any real send/sync
+ *  path — listWhatsAppTemplates() remains the one parsed source of truth. */
+export async function fetchRawTemplateList(): Promise<RawTemplateListResult> {
+  const config = getConfig();
+  if (!config) return { ok: false, code: "CONFIG_MISSING", error: WHATSAPP_NOT_CONFIGURED_MESSAGE };
+  try {
+    const res = await fetch(`${config.baseUrl}/whatsapp/1/senders/${encodeURIComponent(config.sender)}/templates`, {
+      method: "GET",
+      headers: authHeaders(config.apiKey),
+    });
+    const raw = await res.json().catch(async () => ({ __nonJsonBody: (await res.text().catch(() => "")).slice(0, 2000) }));
+    if (!res.ok) {
+      return { ok: false, code: "PROVIDER_FAILURE", error: `Infobip returned ${res.status}` };
+    }
+    return { ok: true, raw };
+  } catch (err) {
+    return { ok: false, code: "PROVIDER_FAILURE", error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Template listing — live-synced, never hardcoded.
 // ---------------------------------------------------------------------------

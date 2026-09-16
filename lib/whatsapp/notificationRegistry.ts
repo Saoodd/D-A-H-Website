@@ -26,11 +26,59 @@ export interface MappedTemplate {
   buttonMapping: WhatsAppVariableMapping; // keyed by the button's index (as a string) in `buttons`
 }
 
-export type MappedTemplateFailureCode = "NOT_CONFIGURED" | "NOT_APPROVED" | "DISABLED";
+export type MappedTemplateFailureCode = "NOT_CONFIGURED" | "NOT_APPROVED" | "DISABLED" | "INCOMPLETE_MAPPING";
 export type MappedTemplateResult = { ok: true; template: MappedTemplate } | { ok: false; code: MappedTemplateFailureCode; error: string };
 
 function genericError(useCase: string): string {
   return `WhatsApp notifications for "${useCase}" aren't set up yet — map a real approved template in Admin → Communications → Template Registry.`;
+}
+
+export interface MappingReadiness {
+  ready: boolean;
+  missing: string[]; // human-readable, e.g. "{{3}} has not been mapped" — safe to show an admin directly
+}
+
+interface ReadinessInput {
+  status: string | null;
+  isAuthTemplate: boolean;
+  variableCount: number;
+  buttonsJson: string | null;
+}
+
+/** The one completeness check for a use-case mapping — used both to show
+ *  "Ready"/"Incomplete" in the Template Registry UI and as the hard gate
+ *  inside getMappedTemplate() below. A mapping that exists and points at
+ *  an APPROVED template is not enough on its own: every body placeholder
+ *  and every dynamic button parameter must actually be mapped, or this
+ *  app would silently send an empty string in their place — never
+ *  acceptable for a live vendor-facing message. */
+export function computeMappingReadiness(
+  cached: ReadinessInput | null,
+  placeholderMapping: WhatsAppVariableMapping,
+  buttonMapping: WhatsAppVariableMapping
+): MappingReadiness {
+  const missing: string[] = [];
+  if (!cached) {
+    missing.push("the mapped template was not found in the live-synced list — refresh from Infobip");
+    return { ready: false, missing };
+  }
+  if (cached.isAuthTemplate) {
+    missing.push("this is the Authentication template used for phone verification — it can't be used for a Utility notification");
+  }
+  const status = (cached.status || "").toUpperCase();
+  if (status !== "APPROVED") {
+    missing.push(`template status is "${cached.status || "unknown"}", not APPROVED`);
+  }
+  for (let i = 1; i <= cached.variableCount; i++) {
+    if (!placeholderMapping[String(i)]) missing.push(`{{${i}}} has not been mapped`);
+  }
+  const buttons = parseButtonsJson(cached.buttonsJson);
+  buttons.forEach((b, idx) => {
+    if (b.hasPlaceholder && !buttonMapping[String(idx)]) {
+      missing.push(`the "${b.text || b.type}" button's dynamic parameter has not been mapped`);
+    }
+  });
+  return { ready: missing.length === 0, missing };
 }
 
 /** Refreshes WhatsAppTemplateCache from Infobip's live template list —
@@ -114,15 +162,24 @@ export async function getMappedTemplate(useCase: NotificationUseCase): Promise<M
     return { ok: false, code: "NOT_APPROVED", error: genericError(useCase) };
   }
 
+  const placeholderMapping: WhatsAppVariableMapping = mapping.placeholderMappingJson ? JSON.parse(mapping.placeholderMappingJson) : {};
+  const buttonMapping: WhatsAppVariableMapping = mapping.buttonMappingJson ? JSON.parse(mapping.buttonMappingJson) : {};
+
+  const readiness = computeMappingReadiness(cached, placeholderMapping, buttonMapping);
+  if (!readiness.ready) {
+    console.error(`[whatsapp:notifications] mapping for "${useCase}" is incomplete: ${readiness.missing.join("; ")}`);
+    return { ok: false, code: "INCOMPLETE_MAPPING", error: genericError(useCase) };
+  }
+
   return {
     ok: true,
     template: {
       templateName: name,
       templateLanguage: language,
       variableCount: cached.variableCount,
-      placeholderMapping: mapping.placeholderMappingJson ? (JSON.parse(mapping.placeholderMappingJson) as WhatsAppVariableMapping) : {},
+      placeholderMapping,
       buttons: parseButtonsJson(cached.buttonsJson),
-      buttonMapping: mapping.buttonMappingJson ? (JSON.parse(mapping.buttonMappingJson) as WhatsAppVariableMapping) : {},
+      buttonMapping,
     },
   };
 }
