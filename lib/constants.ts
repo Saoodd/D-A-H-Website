@@ -51,22 +51,22 @@ export const VENDOR_CATEGORIES = [
 ] as const;
 export type VendorCategory = (typeof VENDOR_CATEGORIES)[number];
 
-// Timing rules (see build spec: "Booth reservation & holds"). There are
-// three independent timers and only the shortest applicable one governs at
-// any moment — see lib/expiry.ts and the booth hold/checkout routes:
+// Timing rules (see build spec: "Booth reservation & holds"). Two
+// independent timers, and only the shorter applicable one governs at any
+// moment — see lib/expiry.ts and the booth hold/checkout routes:
 //   A. Application.acceptanceExpiresAt — the absolute 3-hour (default)
 //      outer deadline for the whole booking process, set on admin accept.
-//   B. BOOTH_SELECTION_SESSION_MINUTES — a 2-minute session on the booth
-//      SELECTOR screen itself, before any booth is held. Browsing doesn't
-//      reserve anything; only an explicit Confirm Booth progresses into a
-//      hold. Never extends the acceptance deadline.
-//   C. BOOTH_PAYMENT_HOLD_MINUTES — once Event Terms are accepted and the
-//      vendor enters the payment stage, the booth is held exclusively for
-//      this shorter window. Never extends the acceptance deadline either.
+//      Vendors may browse the floor plan/booth list freely under this
+//      deadline alone — there is deliberately NO separate browsing/
+//      selection timer: clicking or reviewing a booth never reserves it,
+//      and only reaching the payment stage starts a shorter hold (below).
+//   B. BOOTH_PAYMENT_HOLD_MINUTES — once a booth is confirmed, Event Terms
+//      are accepted, and the vendor enters the payment stage, the booth is
+//      held exclusively for this shorter window. Never extends the
+//      acceptance deadline.
 // Between a confirmed booth and reaching the payment stage (i.e. while
 // reviewing the booking / accepting Event Terms), the booth's hold is
 // bounded by the outer acceptance deadline only — see the hold route.
-export const BOOTH_SELECTION_SESSION_MINUTES = 2;
 export const BOOTH_PAYMENT_HOLD_MINUTES = 5;
 
 // UAE VAT rate, used only to back out a Booth Price / VAT / Total display

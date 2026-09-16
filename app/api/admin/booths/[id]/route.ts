@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
 import { getBoothPrice } from "@/lib/pricing";
@@ -101,6 +102,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
-  await prisma.booth.delete({ where: { id } });
+  try {
+    await prisma.booth.delete({ where: { id } });
+  } catch (err) {
+    // Payment.boothId / PaymentBooth.boothId are ON DELETE RESTRICT — a
+    // booth with real payment history can never be deleted, by design.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2003") {
+      return NextResponse.json({ error: "This booth has payment history on file and can't be deleted." }, { status: 409 });
+    }
+    throw err;
+  }
   return NextResponse.json({ ok: true });
 }

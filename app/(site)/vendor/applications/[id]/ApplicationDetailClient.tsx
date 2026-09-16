@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useLocale } from "@/lib/i18n/context";
 import { Countdown } from "@/components/Countdown";
@@ -60,16 +60,11 @@ export function ApplicationDetailClient({
   const [multiMode, setMultiMode] = useState(false);
   const [editingSetupSize, setEditingSetupSize] = useState(false);
   const [mapFocusNonce, setMapFocusNonce] = useState(1);
-  // Whether the 2-minute booth-selection session has run out client-side —
-  // blocks further clicks and prompts a restart. The server independently
-  // re-checks this at confirm time regardless of what the client believes.
-  const [selectionExpired, setSelectionExpired] = useState(false);
-  // Server-side phone-verification gate — set when starting a booth
-  // selection session, confirming a booth, or starting checkout is refused
-  // because the vendor's mobile number isn't verified yet. Opens the inline
-  // PhoneVerifyModal; on success, resumes whichever action was blocked.
-  const [verifyIntent, setVerifyIntent] = useState<"start-selection" | "confirm-booth" | "checkout" | null>(null);
-  const startingSelectionRef = useRef(false);
+  // Server-side phone-verification gate — set when confirming a booth or
+  // starting checkout is refused because the vendor's mobile number isn't
+  // verified yet. Opens the inline PhoneVerifyModal; on success, resumes
+  // whichever action was blocked.
+  const [verifyIntent, setVerifyIntent] = useState<"confirm-booth" | "checkout" | null>(null);
 
   const refreshStatus = useCallback(async () => {
     const res = await fetch(`/api/applications/${applicationId}/status`);
@@ -101,44 +96,44 @@ export function ApplicationDetailClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- floorplan presence checked intentionally, not tracked as a dep (would refetch on every set)
   }, [view.displayStatus, hasHold, loadFloorplan]);
 
-  // Keep the map/list availability live while the vendor is actively
-  // browsing (not yet holding anything) — the same authoritative data the
-  // hold endpoint itself checks, just refreshed proactively here so a booth
-  // someone else just took visibly updates instead of only being caught at
-  // confirm time. Deliberately NOT polled once a hold exists (that stage
-  // has its own countdown-driven refreshStatus already).
+  // Silent live/background availability refresh: keep the map/list up to
+  // date while the vendor is actively browsing (not yet holding anything) —
+  // the same authoritative data the hold endpoint itself checks, just
+  // refreshed proactively here so a booth someone else just took visibly
+  // updates without a page reload, without resetting zoom/pan/search/filter
+  // (this only ever calls setFloorplan on data already flowing into
+  // FloorPlan/BoothSelector as props — neither component is remounted by
+  // it). No browsing timer gates this anymore — browsing simply never
+  // reserves anything, so there's no session to expire. Deliberately NOT
+  // polled once a hold exists (that stage has its own countdown-driven
+  // refreshStatus already).
   useEffect(() => {
-    if (view.displayStatus !== "ACCEPTED_UNPAID" || hasHold || selectionExpired) return;
+    if (view.displayStatus !== "ACCEPTED_UNPAID" || hasHold) return;
     const id = setInterval(loadFloorplan, 6000);
     return () => clearInterval(id);
-  }, [view.displayStatus, hasHold, selectionExpired, loadFloorplan]);
+  }, [view.displayStatus, hasHold, loadFloorplan]);
 
-  const startBoothSelectionSession = useCallback(async () => {
-    if (startingSelectionRef.current) return;
-    startingSelectionRef.current = true;
-    try {
-      const res = await fetch(`/api/applications/${applicationId}/booth-selection/start`, { method: "POST" });
-      if (res.ok) {
-        const data = await res.json();
-        setSelectionExpired(false);
-        setView((v) => ({ ...v, boothSelectionExpiresAt: data.boothSelectionExpiresAt }));
-      } else {
-        const body = await res.json().catch(() => ({}));
-        if (body.code === "VERIFICATION_REQUIRED") setVerifyIntent("start-selection");
-      }
-    } finally {
-      startingSelectionRef.current = false;
-    }
-  }, [applicationId]);
-
-  // Opening the booth selector (accepted, no active hold) starts — or
-  // idempotently resumes — the 2-minute selection session. A page refresh
-  // resumes the same server-tracked session rather than granting fresh time.
+  // A booth the vendor has already confirmed-in-modal but not yet held
+  // server-side (multi-booth staging — see stagedBooths above) can still be
+  // taken by someone else in the meantime. Every time the live background
+  // refresh brings in fresh availability, drop any staged booth that's no
+  // longer available and surface the same notice a single-booth selection
+  // gets — this is UX only; the atomic hold at "Confirm Booths" is the real
+  // authoritative check either way.
   useEffect(() => {
-    if (view.displayStatus === "ACCEPTED_UNPAID" && !hasHold && !view.boothSelectionExpiresAt) {
-      startBoothSelectionSession();
-    }
-  }, [view.displayStatus, hasHold, view.boothSelectionExpiresAt, startBoothSelectionSession]);
+    if (!floorplan || stagedBooths.length === 0) return;
+    const stillAvailable = new Set(floorplan.booths.filter((b) => b.status === "AVAILABLE" || b.isMine).map((b) => b.id));
+    const lost = stagedBooths.filter((b) => !stillAvailable.has(b.id));
+    if (lost.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reacting to fresh external availability data landing via polling, not deriving from own render
+    setStagedBooths((prev) => prev.filter((b) => stillAvailable.has(b.id)));
+    setNotice(
+      isAr
+        ? `أصبح ${lost.map((b) => b.code).join(" + ")} غير متاح للتو. يرجى اختيار كشك آخر.`
+        : `${lost.map((b) => b.code).join(" + ")} has just become unavailable. Please choose another booth.`
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally re-derives only from fresh floorplan data, not stagedBooths itself (would loop)
+  }, [floorplan, isAr]);
 
   const sizeStyles: Record<string, SizeStyle> = {};
   (floorplan?.tiers || []).forEach((tr, i) => {
@@ -184,12 +179,6 @@ export function ApplicationDetailClient({
           setVerifyIntent("confirm-booth");
           return;
         }
-        if (body.code === "SELECTION_EXPIRED") {
-          setNotice(isAr ? "انتهت جلسة اختيار الكشك. يرجى البدء من جديد." : "Your booth selection session has expired. Please start again.");
-          setSelectionExpired(true);
-          setPendingBooth(null);
-          return;
-        }
         setNotice(body.error || (isAr ? `الكشك ${booth.code} لم يعد متاحاً. يرجى اختيار كشك آخر.` : `Booth ${booth.code} is no longer available. Please choose another booth.`));
         setPendingBooth(null);
         await loadFloorplan();
@@ -214,12 +203,6 @@ export function ApplicationDetailClient({
         const body = await res.json().catch(() => ({}));
         if (body.code === "VERIFICATION_REQUIRED") {
           setVerifyIntent("confirm-booth");
-          return;
-        }
-        if (body.code === "SELECTION_EXPIRED") {
-          setNotice(isAr ? "انتهت جلسة اختيار الكشك. يرجى البدء من جديد." : "Your booth selection session has expired. Please start again.");
-          setSelectionExpired(true);
-          setStagedBooths([]);
           return;
         }
         if (body.code === "BOOTH_UNAVAILABLE" && body.boothCode) {
@@ -432,12 +415,6 @@ export function ApplicationDetailClient({
             <div>
               <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
                 <h2 className="font-heading text-xl text-brown-dark">{t("vendor.selectBooth")}</h2>
-                {!selectionExpired && view.boothSelectionExpiresAt && (
-                  <span className="text-sm">
-                    <span className="text-brown-light">{isAr ? "اختر كشكك خلال" : "Choose your booth within"}</span>{" "}
-                    <Countdown target={view.boothSelectionExpiresAt} variant="mmss" onExpire={() => setSelectionExpired(true)} className="font-semibold text-brown-dark text-base" />
-                  </span>
-                )}
               </div>
 
               {(view.setupWidthMm == null || view.setupDepthMm == null) && !editingSetupSize && (
@@ -467,14 +444,7 @@ export function ApplicationDetailClient({
                 />
               )}
 
-              {selectionExpired ? (
-                <div className="rounded-xl border border-brown/10 bg-cream p-8 text-center">
-                  <p className="text-brown-dark mb-4">{isAr ? "انتهت جلسة اختيار الكشك. يمكنك البدء من جديد." : "Your booth-selection session has expired. You can start again."}</p>
-                  <button onClick={startBoothSelectionSession} className="px-6 py-2.5 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark">
-                    {isAr ? "البدء من جديد" : "Start Again"}
-                  </button>
-                </div>
-              ) : stagedBooths.length >= maxBooths ? null : floorplan ? (
+              {stagedBooths.length >= maxBooths ? null : floorplan ? (
                 <>
                   {floorplan.allowMultipleBooths && stagedBooths.length === 0 && !multiMode && (
                     <button type="button" onClick={() => setMultiMode(true)} className="mb-3 text-sm underline text-brown">
@@ -490,15 +460,21 @@ export function ApplicationDetailClient({
                     excludeIds={stagedBooths.map((b) => b.id)}
                     confirmLabel={multiMode ? () => (isAr ? "إضافة هذا الكشك" : "Add This Booth") : undefined}
                     onConfirmBooth={setPendingBooth}
-                    onBoothBecameUnavailable={() =>
-                      setNotice(isAr ? "أصبح هذا الكشك غير متاح للتو. يرجى اختيار كشك آخر." : "This booth has just become unavailable. Please choose another booth.")
-                    }
+                    onBoothBecameUnavailable={(booth) => {
+                      setNotice(
+                        isAr
+                          ? `أصبح ${booth.code} غير متاح للتو. يرجى اختيار كشك آخر.`
+                          : `${booth.code} has just become unavailable. Please choose another booth.`
+                      );
+                      // Also close the confirm modal if it was open for this exact booth.
+                      setPendingBooth((cur) => (cur?.id === booth.id ? null : cur));
+                    }}
                   />
                 </>
               ) : (
                 <p className="text-brown-light text-sm">{isAr ? "جارٍ التحميل…" : "Loading floor plan…"}</p>
               )}
-              {pendingBooth && !selectionExpired && (
+              {pendingBooth && (
                 <BoothConfirmModal
                   booth={pendingBooth}
                   tiers={floorplan?.tiers || []}
@@ -709,8 +685,7 @@ export function ApplicationDetailClient({
           onVerified={() => {
             const intent = verifyIntent;
             setVerifyIntent(null);
-            if (intent === "start-selection") startBoothSelectionSession();
-            else if (intent === "confirm-booth") confirmPendingBooth();
+            if (intent === "confirm-booth") confirmPendingBooth();
             else if (intent === "checkout") proceedToPayment();
           }}
         />

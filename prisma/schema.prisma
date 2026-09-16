@@ -559,12 +559,6 @@ model Application {
   expiredAt           DateTime?
   rejectedAt          DateTime?
 
-  // Server-authoritative 2-minute booth-selection session: set when the
-  // vendor opens the booth selector (or resumed if still valid), consumed
-  // (cleared) once a booth is actually confirmed. Purely a UI-focus timer —
-  // never extends acceptanceExpiresAt, which remains the absolute deadline.
-  boothSelectionExpiresAt DateTime?
-
   cancellationRequests CancellationRequest[]
   adjustments          Adjustment[]
   payments             Payment[]

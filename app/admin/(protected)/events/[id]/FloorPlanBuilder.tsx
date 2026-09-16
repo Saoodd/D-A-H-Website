@@ -5,6 +5,7 @@ import { FloorPlan } from "@/components/floorplan/FloorPlan";
 import { Legend } from "@/components/floorplan/Legend";
 import type { FloorBooth, FloorFeature, SizeStyle } from "@/components/floorplan/types";
 import { FEATURE_TYPE, formatAed } from "@/lib/constants";
+import { CadImportPanel } from "@/components/admin/CadImportPanel";
 
 const SIZE_PALETTE = ["#C97C4B", "#8A5A38", "#D9A066", "#6B4429"];
 const DEFAULT_BOOTH_W = 6;
@@ -65,8 +66,33 @@ export function FloorPlanBuilder({
   const [placeDepthM, setPlaceDepthM] = useState("");
 
   const [selectionPrice, setSelectionPrice] = useState("");
+  const [selectionWidthM, setSelectionWidthM] = useState("");
+  const [selectionDepthM, setSelectionDepthM] = useState("");
+  const [selectionTierKey, setSelectionTierKey] = useState("");
+  const [selectionStatus, setSelectionStatus] = useState<"" | "AVAILABLE" | "RESERVED">("");
   const [applyingSelectionPrice, setApplyingSelectionPrice] = useState(false);
   const [busyAction, setBusyAction] = useState(false);
+
+  const [autoNumberOpen, setAutoNumberOpen] = useState(false);
+  const [autoNumberPrefix, setAutoNumberPrefix] = useState("B");
+  const [autoNumberStart, setAutoNumberStart] = useState("1");
+  const [autoNumberPadding, setAutoNumberPadding] = useState<"none" | "2" | "3">("none");
+  const [autoNumberOrder, setAutoNumberOrder] = useState<"row" | "column">("row");
+  const [autoNumberBusy, setAutoNumberBusy] = useState(false);
+
+  const [massCreateOpen, setMassCreateOpen] = useState(false);
+  const [mcPrefix, setMcPrefix] = useState("B");
+  const [mcStart, setMcStart] = useState("1");
+  const [mcEnd, setMcEnd] = useState("10");
+  const [mcPadding, setMcPadding] = useState<"none" | "2" | "3">("none");
+  const [mcTier, setMcTier] = useState("");
+  const [mcWidthM, setMcWidthM] = useState("2");
+  const [mcDepthM, setMcDepthM] = useState("2");
+  const [mcPrice, setMcPrice] = useState("");
+  const [mcColor, setMcColor] = useState("#C97C4B");
+  const [mcPlacement, setMcPlacement] = useState<"row" | "grid">("grid");
+  const [mcColumns, setMcColumns] = useState("10");
+  const [mcBusy, setMcBusy] = useState(false);
 
   const [smartGuidesEnabled, setSmartGuidesEnabled] = useState(true);
   const [gridSnapEnabled, setGridSnapEnabled] = useState(false);
@@ -432,81 +458,380 @@ export function FloorPlanBuilder({
   async function deleteSelection() {
     const members = selectionMembers();
     if (members.length === 0) return;
-    if (!confirm(`Delete ${members.length} booth${members.length === 1 ? "" : "s"}?`)) return;
+    if (!confirm(`Delete ${members.length} booth${members.length === 1 ? "" : "s"}? Booths with a confirmed booking or payment history are never deleted, even if selected.`)) return;
     setBusyAction(true);
     try {
-      const snapshot = members.map((b) => ({ ...b }));
-      await Promise.all(members.map((b) => fetch(`/api/admin/booths/${b.id}`, { method: "DELETE" })));
+      const requestedIds = members.map((b) => b.id);
+      const res = await fetch(`/api/admin/events/${eventId}/booths/bulk-delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ boothIds: requestedIds }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNotice(data.error || "Could not delete those booths");
+        return;
+      }
+      const skippedIds = new Set<string>((data.skippedDetails || []).map((s: { boothId: string }) => s.boothId));
+      const deletedSnapshot = members.filter((b) => !skippedIds.has(b.id)).map((b) => ({ ...b }));
+      let msg = `Deleted ${data.deleted} of ${data.requested} booth${data.requested === 1 ? "" : "s"}.`;
+      if (data.skipped > 0) {
+        const reasons = (data.skippedDetails || []).map((s: { code: string; reason: string }) => `${s.code} (${s.reason})`).join(", ");
+        msg += ` ${data.skipped} skipped: ${reasons}.`;
+      }
+      setNotice(msg);
       setSelectedIds(new Set());
       await load();
-      pushUndo({
-        label: "Delete",
-        undo: async () => {
-          await Promise.all(
-            snapshot.map((b) =>
-              fetch(`/api/admin/events/${eventId}/booths`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  code: b.code,
-                  size: b.size,
-                  priceAedFils: b.priceAedFils,
-                  colorHex: b.colorHex,
-                  gridX: b.gridX,
-                  gridY: b.gridY,
-                  gridW: b.gridW,
-                  gridH: b.gridH,
-                  rotation: b.rotation ?? 0,
-                }),
-              })
-            )
-          );
-          await load();
-        },
-        redo: async () => {
-          const res = await fetch(`/api/admin/events/${eventId}/floorplan`);
-          const data = await res.json().catch(() => ({ booths: [] as AdminBooth[] }));
-          const toDelete = (data.booths as AdminBooth[]).filter((b) => snapshot.some((s) => s.code === b.code));
-          await Promise.all(toDelete.map((b) => fetch(`/api/admin/booths/${b.id}`, { method: "DELETE" })));
-          await load();
-        },
+      if (deletedSnapshot.length > 0) {
+        pushUndo({
+          label: "Delete",
+          undo: async () => {
+            await Promise.all(
+              deletedSnapshot.map((b) =>
+                fetch(`/api/admin/events/${eventId}/booths`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    code: b.code,
+                    size: b.size,
+                    priceAedFils: b.priceAedFils,
+                    colorHex: b.colorHex,
+                    widthMm: b.widthMm,
+                    depthMm: b.depthMm,
+                    gridX: b.gridX,
+                    gridY: b.gridY,
+                    gridW: b.gridW,
+                    gridH: b.gridH,
+                    rotation: b.rotation ?? 0,
+                  }),
+                })
+              )
+            );
+          },
+          redo: async () => {
+            const res2 = await fetch(`/api/admin/events/${eventId}/floorplan`);
+            const data2 = await res2.json().catch(() => ({ booths: [] as AdminBooth[] }));
+            const toDelete = (data2.booths as AdminBooth[]).filter((b) => deletedSnapshot.some((s) => s.code === b.code));
+            await fetch(`/api/admin/events/${eventId}/booths/bulk-delete`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ boothIds: toDelete.map((b) => b.id) }),
+            });
+          },
+        });
+      }
+    } finally {
+      setBusyAction(false);
+    }
+  }
+
+  // Shared engine behind every "N booths selected" bulk field edit (price,
+  // size, tier, status) — one transactional server call per action, undo
+  // integration, and a notice summarizing what actually happened including
+  // any skipped/protected booths. Only booths the server actually touched
+  // are ever replayed by undo/redo's patchBoothRaw calls — a booth the
+  // server skipped (e.g. a confirmed booking, protected from bulk status
+  // changes) must never be included, since patchBoothRaw's underlying PATCH
+  // route unconditionally clears any active hold on whatever it touches.
+  async function runBulkEdit(patch: Record<string, unknown>, label: string, confirmText: string): Promise<boolean> {
+    const requestedIds = Array.from(selectedIds);
+    if (requestedIds.length === 0) return false;
+    if (!confirm(confirmText)) return false;
+    setBusyAction(true);
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/admin/events/${eventId}/booths/bulk-edit`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ boothIds: requestedIds, patch }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNotice(data.error || "Could not update those booths");
+        return false;
+      }
+      const skippedIds = new Set<string>((data.skippedDetails || []).map((s: { boothId: string }) => s.boothId));
+      const updatedIds = requestedIds.filter((rid) => !skippedIds.has(rid));
+      const fields = Object.keys(patch);
+      const before = booths
+        .filter((b) => updatedIds.includes(b.id))
+        .map((b) => {
+          const snap: Record<string, unknown> = { id: b.id };
+          const record = b as unknown as Record<string, unknown>;
+          fields.forEach((f) => {
+            snap[f] = record[f] ?? null;
+          });
+          // Bulk tier-assignment implicitly clears priceAedFils server-side
+          // (see bulk-edit route) unless price was also explicitly set —
+          // snapshot it too so undo restores the exact prior override.
+          if ("size" in patch && !("priceAedFils" in patch)) snap.priceAedFils = b.priceAedFils ?? null;
+          return snap;
+        });
+
+      let msg = `${label}: updated ${data.updated} of ${data.requested} booth${data.requested === 1 ? "" : "s"}.`;
+      if (data.skipped > 0) {
+        const reasons = (data.skippedDetails || []).map((s: { code: string; reason: string }) => `${s.code} (${s.reason})`).join(", ");
+        msg += ` ${data.skipped} skipped: ${reasons}.`;
+      }
+      setNotice(msg);
+      await load();
+
+      if (updatedIds.length > 0) {
+        pushUndo({
+          label,
+          undo: async () => {
+            await Promise.all(
+              before.map((b) => patchBoothRaw(b.id as string, Object.fromEntries(Object.entries(b).filter(([k]) => k !== "id"))))
+            );
+          },
+          redo: async () => {
+            await fetch(`/api/admin/events/${eventId}/booths/bulk-edit`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ boothIds: updatedIds, patch }),
+            });
+          },
+        });
+      }
+      return true;
     } finally {
       setBusyAction(false);
     }
   }
 
   async function applySelectionPrice() {
-    if (selectedIds.size === 0 || !selectionPrice.trim()) return;
-    const members = selectionMembers();
-    const before = members.map((b) => ({ id: b.id, priceAedFils: b.priceAedFils }));
+    if (!selectionPrice.trim()) return;
+    const priceAedFils = Math.round(Number(selectionPrice) * 100);
+    if (Number.isNaN(priceAedFils) || priceAedFils < 0) {
+      setNotice("Invalid price.");
+      return;
+    }
     setApplyingSelectionPrice(true);
     try {
-      const priceAedFils = Math.round(Number(selectionPrice) * 100);
-      const res = await fetch(`/api/admin/events/${eventId}/booths/bulk-price`, {
-        method: "PATCH",
+      const ok = await runBulkEdit(
+        { priceAedFils },
+        "Bulk price",
+        `Apply AED ${selectionPrice} to ${selectionCountLabel()}?`
+      );
+      if (ok) setSelectionPrice("");
+    } finally {
+      setApplyingSelectionPrice(false);
+    }
+  }
+
+  async function applySelectionSize() {
+    if (!selectionWidthM.trim() || !selectionDepthM.trim()) return;
+    const widthMm = Math.round(Number(selectionWidthM) * 1000);
+    const depthMm = Math.round(Number(selectionDepthM) * 1000);
+    if (Number.isNaN(widthMm) || widthMm <= 0 || Number.isNaN(depthMm) || depthMm <= 0) {
+      setNotice("Invalid size.");
+      return;
+    }
+    const ok = await runBulkEdit(
+      { widthMm, depthMm },
+      "Bulk size",
+      `Apply ${selectionWidthM} × ${selectionDepthM} m to ${selectionCountLabel()}?`
+    );
+    if (ok) {
+      setSelectionWidthM("");
+      setSelectionDepthM("");
+    }
+  }
+
+  async function applySelectionTier() {
+    if (!selectionTierKey) return;
+    const tier = tiers.find((t) => t.sizeKey === selectionTierKey);
+    const ok = await runBulkEdit(
+      { size: selectionTierKey },
+      "Bulk tier",
+      `Assign ${tier?.label ?? selectionTierKey} to ${selectionCountLabel()}? This clears any per-booth price override on those booths so the tier's price applies.`
+    );
+    if (ok) setSelectionTierKey("");
+  }
+
+  async function applySelectionStatus() {
+    if (!selectionStatus) return;
+    const ok = await runBulkEdit(
+      { status: selectionStatus },
+      "Bulk status",
+      `Set ${selectionCountLabel()} to ${selectionStatus === "AVAILABLE" ? "Available" : "Reserved"}? Booths with a confirmed booking or an active vendor hold are skipped automatically.`
+    );
+    if (ok) setSelectionStatus("");
+  }
+
+  function selectionCountLabel() {
+    return `${selectedIds.size} booth${selectedIds.size === 1 ? "" : "s"}`;
+  }
+
+  function padNumber(n: number, padding: "none" | "2" | "3") {
+    if (padding === "none") return String(n);
+    return String(n).padStart(padding === "2" ? 2 : 3, "0");
+  }
+
+  // Left→right-then-top→bottom (or the transposed top→bottom-then-left→
+  // right) reading order for Auto Number Selected — buckets booths into
+  // rows/columns by proximity (5% of canvas) rather than sorting purely by
+  // one axis, so booths that are roughly level with each other land in the
+  // same row/column even with small drag imprecision, instead of an order
+  // that looks arbitrary.
+  function orderedSelectionForAutoNumber(): AdminBooth[] {
+    const members = selectionMembers();
+    return [...members].sort((a, b) => {
+      if (autoNumberOrder === "row") {
+        const rowA = Math.round(a.gridY / 5);
+        const rowB = Math.round(b.gridY / 5);
+        if (rowA !== rowB) return rowA - rowB;
+        return a.gridX - b.gridX;
+      }
+      const colA = Math.round(a.gridX / 5);
+      const colB = Math.round(b.gridX / 5);
+      if (colA !== colB) return colA - colB;
+      return a.gridY - b.gridY;
+    });
+  }
+
+  function autoNumberPreview(): { id: string; from: string; to: string }[] {
+    const prefix = autoNumberPrefix.trim();
+    const start = parseInt(autoNumberStart, 10);
+    if (!prefix || Number.isNaN(start)) return [];
+    return orderedSelectionForAutoNumber().map((b, i) => ({ id: b.id, from: b.code, to: `${prefix}${padNumber(start + i, autoNumberPadding)}` }));
+  }
+
+  async function applyAutoNumber() {
+    const preview = autoNumberPreview();
+    if (preview.length === 0) {
+      setNotice("Enter a prefix and starting number.");
+      return;
+    }
+    if (!confirm(`Rename ${preview.length} booths: ${preview[0].to} → ${preview[preview.length - 1].to}?`)) return;
+    setAutoNumberBusy(true);
+    try {
+      const renames = preview.map((p) => ({ boothId: p.id, code: p.to }));
+      const before = preview.map((p) => ({ boothId: p.id, code: p.from }));
+      const res = await fetch(`/api/admin/events/${eventId}/booths/rename-batch`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ boothIds: Array.from(selectedIds), priceAedFils }),
+        body: JSON.stringify({ renames }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setNotice(data.error || "Could not update those booths");
+        setNotice(data.error || "Could not auto-number those booths");
         return;
       }
-      setNotice(`Updated the price on ${data.updated} booth${data.updated === 1 ? "" : "s"}.`);
-      setSelectionPrice("");
+      setNotice(`Renamed ${data.renamed} booth${data.renamed === 1 ? "" : "s"}.`);
+      setAutoNumberOpen(false);
       await load();
       pushUndo({
-        label: "Bulk price",
+        label: "Auto number",
         undo: async () => {
-          await Promise.all(before.map((b) => patchBoothRaw(b.id, { priceAedFils: b.priceAedFils })));
+          await fetch(`/api/admin/events/${eventId}/booths/rename-batch`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ renames: before }),
+          });
         },
         redo: async () => {
-          await Promise.all(Array.from(selectedIds).map((id) => patchBoothRaw(id, { priceAedFils })));
+          await fetch(`/api/admin/events/${eventId}/booths/rename-batch`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ renames }),
+          });
         },
       });
     } finally {
-      setApplyingSelectionPrice(false);
+      setAutoNumberBusy(false);
+    }
+  }
+
+  function mcGenerateCodes(): string[] {
+    const start = parseInt(mcStart, 10);
+    const end = parseInt(mcEnd, 10);
+    const prefix = mcPrefix.trim();
+    if (!prefix || Number.isNaN(start) || Number.isNaN(end) || end < start) return [];
+    const codes: string[] = [];
+    for (let n = start; n <= end; n++) codes.push(`${prefix}${padNumber(n, mcPadding)}`);
+    return codes;
+  }
+
+  function mcGenerateRows(): { code: string; gridX: number; gridY: number; gridW: number; gridH: number }[] {
+    const codes = mcGenerateCodes();
+    const cols = mcPlacement === "row" ? Math.max(codes.length, 1) : Math.max(1, parseInt(mcColumns, 10) || 1);
+    const cellW = 8;
+    const cellH = 10;
+    return codes.map((code, i) => {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      return {
+        code,
+        gridX: Math.min(100 - DEFAULT_BOOTH_W, col * cellW),
+        gridY: Math.min(100 - DEFAULT_BOOTH_H, row * cellH),
+        gridW: DEFAULT_BOOTH_W,
+        gridH: DEFAULT_BOOTH_H,
+      };
+    });
+  }
+
+  async function submitMassCreate() {
+    const rows = mcGenerateRows();
+    if (rows.length === 0) {
+      setNotice("Enter a valid prefix and number range.");
+      return;
+    }
+    if (rows.length > 500) {
+      setNotice("Mass create is limited to 500 booths at a time.");
+      return;
+    }
+    const priceAedFils = mcPrice.trim() ? Math.round(Number(mcPrice) * 100) : null;
+    const widthMm = mcWidthM.trim() ? Math.round(Number(mcWidthM) * 1000) : null;
+    const depthMm = mcDepthM.trim() ? Math.round(Number(mcDepthM) * 1000) : null;
+    if (!confirm(`Create ${rows.length} booths: ${rows[0].code} → ${rows[rows.length - 1].code}?`)) return;
+    setMcBusy(true);
+    try {
+      const basePayload = { rows, size: mcTier || "custom", priceAedFils, colorHex: mcColor, widthMm, depthMm };
+      let res = await fetch(`/api/admin/events/${eventId}/booths/mass-create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(basePayload),
+      });
+      let data = await res.json().catch(() => ({}));
+      let skippedCodes: string[] = [];
+      if (res.status === 409 && data.code === "DUPLICATE_CODES") {
+        const proceed = confirm(`These booth codes already exist: ${data.duplicateCodes.join(", ")}.\n\nSkip those and create the rest?`);
+        if (!proceed) return;
+        res = await fetch(`/api/admin/events/${eventId}/booths/mass-create`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...basePayload, skipConflicts: true }),
+        });
+        data = await res.json().catch(() => ({}));
+        skippedCodes = data.skippedCodes || [];
+      }
+      if (!res.ok) {
+        setNotice(data.error || "Mass create failed");
+        return;
+      }
+      setNotice(`Created ${data.created} booth${data.created === 1 ? "" : "s"}.${data.skipped ? ` ${data.skipped} skipped (already existed).` : ""}`);
+      setMassCreateOpen(false);
+      const createdCodes = rows.filter((r) => !skippedCodes.includes(r.code)).map((r) => r.code);
+      await load();
+      pushUndo({
+        label: "Mass create",
+        undo: async () => {
+          const res3 = await fetch(`/api/admin/events/${eventId}/floorplan`);
+          const d3 = await res3.json().catch(() => ({ booths: [] as AdminBooth[] }));
+          const toDelete = (d3.booths as AdminBooth[]).filter((b) => createdCodes.includes(b.code));
+          await Promise.all(toDelete.map((b) => fetch(`/api/admin/booths/${b.id}`, { method: "DELETE" })));
+        },
+        redo: async () => {
+          await fetch(`/api/admin/events/${eventId}/booths/mass-create`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...basePayload, rows: rows.filter((r) => createdCodes.includes(r.code)), skipConflicts: true }),
+          });
+        },
+      });
+    } finally {
+      setMcBusy(false);
     }
   }
 
@@ -575,7 +900,12 @@ export function FloorPlanBuilder({
     const selected = selectedIds.size === 1 ? booths.find((b) => selectedIds.has(b.id)) : null;
     if (!selected) return;
     if (!confirm(`Delete booth ${selected.code}?`)) return;
-    await fetch(`/api/admin/booths/${selected.id}`, { method: "DELETE" });
+    const res = await fetch(`/api/admin/booths/${selected.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setNotice(data.error || "Could not delete this booth");
+      return;
+    }
     setSelectedIds(new Set());
     await load();
   }
@@ -700,6 +1030,14 @@ export function FloorPlanBuilder({
 
           {showAdvanced && (
             <div className="mt-4 space-y-6">
+              <div className="rounded-[10px] border border-brown/10 bg-cream p-5">
+                <p className="text-sm font-medium text-brown-dark mb-1">Import from CAD (DXF)</p>
+                <p className="text-xs text-brown-light mb-3">
+                  Detects booth-shaped rectangles and their labels from a DXF floor-plan export and turns them into real, interactive DAH booths — identical to a manually-created booth. Nothing is created until you review the preview below.
+                </p>
+                <CadImportPanel eventId={eventId} existingCodes={booths.map((b) => b.code)} onImported={load} />
+              </div>
+
               <form onSubmit={addFeature} className="rounded-[10px] border border-brown/10 bg-cream p-5">
                 <p className="text-sm font-medium text-brown-dark mb-3">
                   Add a structural feature (entrance, toilets, office, loading, stairs)
@@ -723,6 +1061,109 @@ export function FloorPlanBuilder({
                   Add feature
                 </button>
               </form>
+
+              <div className="rounded-[10px] border border-brown/10 bg-cream p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium text-brown-dark">Mass Create Booths</p>
+                  <button type="button" onClick={() => setMassCreateOpen((v) => !v)} className="text-xs text-brown-light underline">
+                    {massCreateOpen ? "Hide" : "Open"}
+                  </button>
+                </div>
+                <p className="text-xs text-brown-light mb-3">Create a numbered run of booths — e.g. B1 → B67 — with shared starting price, size and tier, without adding them one by one.</p>
+                {massCreateOpen && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-4 gap-2 text-sm">
+                      <label className="flex flex-col gap-1 text-xs text-brown-light">
+                        Prefix
+                        <input value={mcPrefix} onChange={(e) => setMcPrefix(e.target.value)} className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs text-brown-light">
+                        Start
+                        <input value={mcStart} onChange={(e) => setMcStart(e.target.value)} type="number" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs text-brown-light">
+                        End
+                        <input value={mcEnd} onChange={(e) => setMcEnd(e.target.value)} type="number" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs text-brown-light">
+                        Padding
+                        <select value={mcPadding} onChange={(e) => setMcPadding(e.target.value as typeof mcPadding)} className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft">
+                          <option value="none">None</option>
+                          <option value="2">2 digits</option>
+                          <option value="3">3 digits</option>
+                        </select>
+                      </label>
+                    </div>
+                    <p className="text-xs text-brown-light">
+                      Preview: {mcGenerateCodes().slice(0, 3).join(", ")}
+                      {mcGenerateCodes().length > 3 ? ` … ${mcGenerateCodes()[mcGenerateCodes().length - 1]}` : ""}
+                      {mcGenerateCodes().length > 0 ? ` (${mcGenerateCodes().length} booths)` : ""}
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      {tiers.length > 0 ? (
+                        <label className="flex flex-col gap-1 text-xs text-brown-light">
+                          Tier
+                          <select value={mcTier} onChange={(e) => setMcTier(e.target.value)} className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft">
+                            <option value="">Custom (use price below)</option>
+                            {tiers.map((t) => (
+                              <option key={t.sizeKey} value={t.sizeKey}>
+                                {t.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : (
+                        <div />
+                      )}
+                      <label className="flex flex-col gap-1 text-xs text-brown-light">
+                        Price (AED, optional override)
+                        <input value={mcPrice} onChange={(e) => setMcPrice(e.target.value)} type="number" step="0.01" min="0" placeholder="1837.5" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs text-brown-light">
+                        Width (m)
+                        <input value={mcWidthM} onChange={(e) => setMcWidthM(e.target.value)} type="number" step="0.1" min="0" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs text-brown-light">
+                        Depth (m)
+                        <input value={mcDepthM} onChange={(e) => setMcDepthM(e.target.value)} type="number" step="0.1" min="0" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs text-brown-light">
+                        Color
+                        <input value={mcColor} onChange={(e) => setMcColor(e.target.value)} type="color" className="border border-brown/20 rounded-lg h-9 bg-cream-soft" />
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-sm items-end">
+                      <label className="flex flex-col gap-1 text-xs text-brown-light">
+                        Placement
+                        <select value={mcPlacement} onChange={(e) => setMcPlacement(e.target.value as typeof mcPlacement)} className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft">
+                          <option value="grid">Grid</option>
+                          <option value="row">Single row</option>
+                        </select>
+                      </label>
+                      {mcPlacement === "grid" && (
+                        <label className="flex flex-col gap-1 text-xs text-brown-light">
+                          Columns
+                          <input value={mcColumns} onChange={(e) => setMcColumns(e.target.value)} type="number" min="1" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                        </label>
+                      )}
+                    </div>
+                    <p className="text-xs text-brown-light">
+                      New booths are placed in a staging {mcPlacement === "grid" ? "grid" : "row"} so they never land on top of each other — reposition them afterward with drag, align and group-move like any other booth.
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={submitMassCreate}
+                      disabled={mcBusy || mcGenerateCodes().length === 0}
+                      className="w-full px-4 py-2 rounded-[6px] bg-brown text-cream-soft text-sm disabled:opacity-50"
+                    >
+                      {mcBusy ? "Creating…" : `Import ${mcGenerateCodes().length} Booths`}
+                    </button>
+                  </div>
+                )}
+              </div>
 
               <div className="rounded-[10px] border border-brown/10 bg-cream p-5">
                 <p className="text-sm font-medium text-brown-dark mb-2">Bulk import booths (paste JSON)</p>
@@ -806,27 +1247,178 @@ export function FloorPlanBuilder({
                 </div>
               </div>
 
-              <label className="flex flex-col gap-1 text-xs text-blue-900">
-                New price (AED) for all selected
-                <input
-                  value={selectionPrice}
-                  onChange={(e) => setSelectionPrice(e.target.value)}
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="1837.5"
-                  className="border border-blue-300 rounded-lg px-2 py-1.5 bg-white text-sm w-full"
-                />
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={applySelectionPrice}
-                  disabled={applyingSelectionPrice || !selectionPrice.trim()}
-                  className="px-3 py-1.5 rounded-[6px] bg-blue-700 text-white text-xs disabled:opacity-50"
-                >
-                  {applyingSelectionPrice ? "Applying…" : "Apply price"}
+              <div className="border-t border-blue-200 pt-3 space-y-3">
+                <p className="text-xs font-medium text-blue-900">Bulk edit {selectionCount} booths</p>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex flex-col gap-1 text-xs text-blue-900">
+                    Price (AED)
+                    <input
+                      value={selectionPrice}
+                      onChange={(e) => setSelectionPrice(e.target.value)}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="1837.5"
+                      className="border border-blue-300 rounded-lg px-2 py-1.5 bg-white text-sm w-full"
+                    />
+                  </label>
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={applySelectionPrice}
+                      disabled={applyingSelectionPrice || !selectionPrice.trim()}
+                      className="w-full px-3 py-1.5 rounded-[6px] bg-blue-700 text-white text-xs disabled:opacity-50"
+                    >
+                      {applyingSelectionPrice ? "Applying…" : "Apply Price"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
+                  <label className="flex flex-col gap-1 text-xs text-blue-900">
+                    Width (m)
+                    <input
+                      value={selectionWidthM}
+                      onChange={(e) => setSelectionWidthM(e.target.value)}
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="2.0"
+                      className="border border-blue-300 rounded-lg px-2 py-1.5 bg-white text-sm w-full"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs text-blue-900">
+                    Depth (m)
+                    <input
+                      value={selectionDepthM}
+                      onChange={(e) => setSelectionDepthM(e.target.value)}
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="2.0"
+                      className="border border-blue-300 rounded-lg px-2 py-1.5 bg-white text-sm w-full"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={applySelectionSize}
+                    disabled={busyAction || !selectionWidthM.trim() || !selectionDepthM.trim()}
+                    className="px-3 py-1.5 rounded-[6px] bg-blue-700 text-white text-xs disabled:opacity-50"
+                  >
+                    Apply Size
+                  </button>
+                </div>
+
+                {tiers.length > 0 && (
+                  <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
+                    <label className="flex flex-col gap-1 text-xs text-blue-900">
+                      Tier
+                      <select
+                        value={selectionTierKey}
+                        onChange={(e) => setSelectionTierKey(e.target.value)}
+                        className="border border-blue-300 rounded-lg px-2 py-1.5 bg-white text-sm w-full"
+                      >
+                        <option value="">— Choose a tier —</option>
+                        {tiers.map((t) => (
+                          <option key={t.sizeKey} value={t.sizeKey}>
+                            {t.label} — {formatAed(t.priceAedFils)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={applySelectionTier}
+                      disabled={busyAction || !selectionTierKey}
+                      className="px-3 py-1.5 rounded-[6px] bg-blue-700 text-white text-xs disabled:opacity-50"
+                    >
+                      Apply Tier
+                    </button>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
+                  <label className="flex flex-col gap-1 text-xs text-blue-900">
+                    Status
+                    <select
+                      value={selectionStatus}
+                      onChange={(e) => setSelectionStatus(e.target.value as typeof selectionStatus)}
+                      className="border border-blue-300 rounded-lg px-2 py-1.5 bg-white text-sm w-full"
+                    >
+                      <option value="">— Choose a status —</option>
+                      <option value="AVAILABLE">Available</option>
+                      <option value="RESERVED">Admin Reserved (Unavailable)</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={applySelectionStatus}
+                    disabled={busyAction || !selectionStatus}
+                    className="px-3 py-1.5 rounded-[6px] bg-blue-700 text-white text-xs disabled:opacity-50"
+                  >
+                    Apply Status
+                  </button>
+                </div>
+                <p className="text-[11px] text-blue-800/70">
+                  Booths with a confirmed booking or an active vendor hold are always skipped by a status change, never released.
+                </p>
+              </div>
+
+              <div className="border-t border-blue-200 pt-3">
+                <button type="button" onClick={() => setAutoNumberOpen((v) => !v)} className="text-xs font-medium text-blue-900 underline">
+                  {autoNumberOpen ? "Hide Auto Number Selected" : "Auto Number Selected"}
                 </button>
+                {autoNumberOpen && (
+                  <div className="mt-2 space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      <label className="flex flex-col gap-1 text-xs text-blue-900">
+                        Prefix
+                        <input value={autoNumberPrefix} onChange={(e) => setAutoNumberPrefix(e.target.value)} className="border border-blue-300 rounded-lg px-2 py-1.5 bg-white text-sm" />
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs text-blue-900">
+                        Start
+                        <input value={autoNumberStart} onChange={(e) => setAutoNumberStart(e.target.value)} type="number" className="border border-blue-300 rounded-lg px-2 py-1.5 bg-white text-sm" />
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs text-blue-900">
+                        Padding
+                        <select value={autoNumberPadding} onChange={(e) => setAutoNumberPadding(e.target.value as typeof autoNumberPadding)} className="border border-blue-300 rounded-lg px-2 py-1.5 bg-white text-sm">
+                          <option value="none">None</option>
+                          <option value="2">2 digits</option>
+                          <option value="3">3 digits</option>
+                        </select>
+                      </label>
+                    </div>
+                    <label className="flex flex-col gap-1 text-xs text-blue-900">
+                      Order
+                      <select value={autoNumberOrder} onChange={(e) => setAutoNumberOrder(e.target.value as typeof autoNumberOrder)} className="border border-blue-300 rounded-lg px-2 py-1.5 bg-white text-sm">
+                        <option value="row">Left → Right, then Top → Bottom</option>
+                        <option value="column">Top → Bottom, then Left → Right</option>
+                      </select>
+                    </label>
+                    {autoNumberPreview().length > 0 && (
+                      <div className="rounded-[8px] border border-blue-200 bg-white p-2 max-h-32 overflow-y-auto text-xs text-blue-900 space-y-0.5">
+                        {autoNumberPreview().map((p) => (
+                          <div key={p.id} className="flex items-center justify-between">
+                            <span className="text-blue-800/60">{p.from}</span>
+                            <span>→ {p.to}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={applyAutoNumber}
+                      disabled={autoNumberBusy || autoNumberPreview().length === 0}
+                      className="w-full px-3 py-1.5 rounded-[6px] bg-blue-700 text-white text-xs disabled:opacity-50"
+                    >
+                      {autoNumberBusy ? "Renaming…" : `Apply Auto Number to ${selectionCount} Booths`}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2 border-t border-blue-200 pt-3">
                 <button
                   type="button"
                   onClick={duplicateSelection}

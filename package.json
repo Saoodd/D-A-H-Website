@@ -23,6 +23,7 @@
     "@tiptap/starter-kit": "^3.31.3",
     "@vercel/blob": "^2.8.0",
     "bcryptjs": "^3.0.3",
+    "dxf-parser": "^1.1.2",
     "exceljs": "^4.4.0",
     "isomorphic-dompurify": "^4.2.0",
     "jose": "^6.2.12",

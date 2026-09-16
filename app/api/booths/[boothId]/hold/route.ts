@@ -9,12 +9,15 @@ import { requirePhoneVerifiedVendor } from "@/lib/verification";
 // booth/application state fresh from the DB right before writing, inside
 // logic that never trusts a client-provided "it's still available".
 //
-// Confirming requires an active 2-minute booth-selection session (see
-// /api/applications/[id]/booth-selection/start) so a stale selector tab
-// can't confirm long after the vendor walked away. Once claimed, the hold
-// itself is bounded by the application's outer acceptance deadline, not a
-// short fixed timer — the review/terms stage isn't meant to be rushed, only
-// the payment stage (tightened separately at /api/checkout/[id]/start) is.
+// NOTE: no active UI calls this single-booth route anymore — the vendor
+// flow goes through /api/applications/[id]/booths/hold (atomic 1-2 booth
+// hold) instead. Left in place, kept correct, in case anything external
+// still references it. Once claimed, the hold itself is bounded by the
+// application's outer acceptance deadline, not a short fixed timer — the
+// review/terms stage isn't meant to be rushed, only the payment stage
+// (tightened separately at /api/checkout/[id]/start) is. There is
+// deliberately no browsing/selection timer — clicking or reviewing a booth
+// never reserves it.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ boothId: string }> }) {
   const session = await getVendorSession();
   if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -46,18 +49,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ boo
 
   const freshBooth = await prisma.booth.findUniqueOrThrow({ where: { id: boothId } });
   const alreadyMine = freshBooth.heldByApplicationId === applicationId;
-
-  // A brand-new claim requires an active, unexpired booth-selection session
-  // — re-affirming a booth this application already holds does not (that's
-  // not a new selection). This is what keeps a stale/abandoned selector tab
-  // from confirming long after the vendor walked away, distinct from the
-  // "someone else took it" race below.
-  if (!alreadyMine && (!freshApp.boothSelectionExpiresAt || freshApp.boothSelectionExpiresAt < new Date())) {
-    return NextResponse.json(
-      { error: "Your booth selection session has expired. Please start again.", code: "SELECTION_EXPIRED" },
-      { status: 410 }
-    );
-  }
 
   if (freshBooth.status !== "AVAILABLE" && !alreadyMine) {
     return NextResponse.json({ error: "That booth is no longer available." }, { status: 409 });
@@ -97,10 +88,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ boo
     where: { heldByApplicationId: applicationId, id: { not: boothId }, status: "HELD" },
     data: { status: "AVAILABLE", holdStage: null, holdExpiresAt: null, heldByApplicationId: null },
   });
-
-  // The selection phase is done — clear the session so it can't linger or
-  // be mistaken for still being active on a later fresh selection.
-  await prisma.application.update({ where: { id: applicationId }, data: { boothSelectionExpiresAt: null } });
 
   return NextResponse.json({ ok: true, holdExpiresAt: holdExpiresAt.toISOString() });
 }

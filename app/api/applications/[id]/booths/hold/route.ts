@@ -60,17 +60,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Your acceptance is not currently active." }, { status: 403 });
   }
 
-  const alreadyHeldIds = new Set(
-    (await prisma.booth.findMany({ where: { heldByApplicationId: applicationId, status: "HELD" }, select: { id: true } })).map((b) => b.id)
-  );
-  const isBrandNewSelection = uniqueBoothIds.some((id) => !alreadyHeldIds.has(id));
-  if (isBrandNewSelection && (!freshApp.boothSelectionExpiresAt || freshApp.boothSelectionExpiresAt < new Date())) {
-    return NextResponse.json(
-      { error: "Your booth selection session has expired. Please start again.", code: "SELECTION_EXPIRED" },
-      { status: 410 }
-    );
-  }
-
   // Authoritative size-fit check — never trust the client. Only enforced as
   // a hard block for a SINGLE booth: with two booths selected, DAH's own
   // business rule (see lib/boothFit.ts checkMultiBoothFit) is to caution
@@ -113,8 +102,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           throw new BoothUnavailableError(failed?.code ?? boothId);
         }
       }
-
-      await tx.application.update({ where: { id: applicationId }, data: { boothSelectionExpiresAt: null } });
     });
   } catch (err) {
     if (err instanceof BoothUnavailableError) {

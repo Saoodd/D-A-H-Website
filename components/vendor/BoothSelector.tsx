@@ -66,9 +66,12 @@ export function BoothSelector({
   onConfirmBooth: (booth: FloorBooth) => void;
   /** Fires once if the vendor's current browsing selection is taken by
    *  someone else (or otherwise stops being available) while they're still
-   *  deciding — before they ever pressed Confirm. The caller shows the
-   *  actual notice text (same banner used for the confirm-time race). */
-  onBoothBecameUnavailable?: () => void;
+   *  deciding — before they ever pressed Confirm, including while the
+   *  confirm modal itself is still open (selectedId stays set the whole
+   *  time it's open). The caller shows the actual notice text (same banner
+   *  used for the confirm-time race) and, if a confirm modal for this exact
+   *  booth is open, should close it too — passed the booth so it can tell. */
+  onBoothBecameUnavailable?: (booth: FloorBooth) => void;
   /** Booths already picked in a multi-booth selection round — rendered as
    *  "Added" rather than a normal available/unavailable status, and never
    *  re-selectable (the vendor removes them from the parent's staged list
@@ -103,7 +106,7 @@ export function BoothSelector({
     if (b && b.status !== "AVAILABLE" && !b.isMine) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- reacting to external data (a periodic floorplan re-fetch), not a render-time derivation
       setSelectedId(null);
-      onBoothBecameUnavailable?.();
+      onBoothBecameUnavailable?.(b);
     }
   }, [booths, selectedId, onBoothBecameUnavailable]);
 
