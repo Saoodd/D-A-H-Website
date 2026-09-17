@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 import { FloorFeature, FloorBooth, SizeStyle } from "./types";
+import { BackgroundAlignment, computeBackgroundRect } from "@/lib/floorplan/transform";
 
 function shadeColor(hex: string, amount: number): string {
   const m = hex.replace("#", "");
@@ -428,6 +429,7 @@ export function FloorPlan({
   interactive = true,
   allowAnyStatusClick = false,
   backgroundImageUrl,
+  backgroundAlignment,
   placementMode = false,
   onCanvasClick,
   editable = false,
@@ -462,6 +464,14 @@ export function FloorPlan({
   allowAnyStatusClick?: boolean;
   /** URL of a real venue photo/drawing to place behind the plan. */
   backgroundImageUrl?: string | null;
+  /** Event.venueBackground* alignment fields (Background Alignment wizard
+   *  step) — when present AND coordinateMode is "MM", the image is placed
+   *  at the EXACT rect lib/floorplan/transform.ts computeBackgroundRect()
+   *  derives from these, instead of the naive full-viewBox contain-fit
+   *  below. Omit (or leave naturalWidthPx/HeightPx null) to keep that
+   *  auto-fit fallback — every caller that doesn't pass this renders
+   *  exactly as before. */
+  backgroundAlignment?: BackgroundAlignment | null;
   /** When true, clicking empty canvas calls onCanvasClick instead of panning. */
   placementMode?: boolean;
   onCanvasClick?: (xPercent: number, yPercent: number) => void;
@@ -546,6 +556,14 @@ export function FloorPlan({
 }) {
   const tuning = snapTuningFor(viewBox, coordinateMode);
   const unitScale = unitScaleOf(viewBox);
+  // Only meaningful once real mm venue geometry exists — in legacy percent
+  // mode there's no physical size for computeBackgroundRect to place the
+  // image against, so it always falls back to the naive full-viewBox
+  // contain-fit below regardless of what backgroundAlignment holds.
+  const alignedBackgroundRect =
+    coordinateMode === "MM" && backgroundAlignment
+      ? computeBackgroundRect({ venueWidthMm: viewBox.width, venueDepthMm: viewBox.height }, backgroundAlignment)
+      : null;
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const [hoveredBoothId, setHoveredBoothId] = useState<string | null>(null);
@@ -1066,16 +1084,36 @@ export function FloorPlan({
         >
           <rect x={0} y={0} width={viewBox.width} height={viewBox.height} fill="transparent" stroke="#DDD3C3" strokeWidth={0.3 * unitScale} />
 
-          {backgroundImageUrl && (
+          {backgroundImageUrl && alignedBackgroundRect && (
+            // Precise admin-controlled placement from the Background
+            // Alignment wizard step: computeBackgroundRect already applies
+            // a single UNIFORM scale (never separate x/y), so this rect is
+            // never stretched — rotate around its own center via `rotate`,
+            // the same convention booths/features use.
+            <image
+              href={backgroundImageUrl}
+              x={alignedBackgroundRect.x}
+              y={alignedBackgroundRect.y}
+              width={alignedBackgroundRect.width}
+              height={alignedBackgroundRect.height}
+              transform={
+                alignedBackgroundRect.rotationDeg
+                  ? `rotate(${alignedBackgroundRect.rotationDeg} ${alignedBackgroundRect.x + alignedBackgroundRect.width / 2} ${alignedBackgroundRect.y + alignedBackgroundRect.height / 2})`
+                  : undefined
+              }
+              preserveAspectRatio="none"
+            />
+          )}
+
+          {backgroundImageUrl && !alignedBackgroundRect && (
+            // Fallback before an admin has aligned the image (or in legacy
+            // percent mode, where there's no mm venue box to align against):
             // preserveAspectRatio="xMidYMid meet" (SVG's own contain-fit,
             // the direct equivalent of CSS object-fit:contain) — NEVER
-            // "none" here. The image is placed spanning the full viewBox
-            // but the browser itself letterboxes it to the image's true
-            // aspect ratio instead of stretching, so a non-square venue
-            // photo/drawing renders undistorted regardless of the venue's
-            // own proportions. Precise admin-controlled alignment (fit/
-            // center/move/rotate/uniform-scale/lock) layers on top of this
-            // via the Floor Plan Setup Wizard's Background Alignment step.
+            // "none" here. The image spans the full viewBox but the browser
+            // itself letterboxes it to the image's true aspect ratio instead
+            // of stretching, so a non-square venue photo/drawing renders
+            // undistorted regardless of the venue's own proportions.
             <image href={backgroundImageUrl} x={0} y={0} width={viewBox.width} height={viewBox.height} preserveAspectRatio="xMidYMid meet" />
           )}
 

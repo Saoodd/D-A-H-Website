@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
 import { getPublishedAgreement } from "@/lib/agreements";
 import { deletePublicBlobIfOwned } from "@/lib/blob";
+import { parseVenueBoundary, serializeVenueBoundary } from "@/lib/floorplan/boundary";
 
 // Duplicating an event can carry the SAME floorPlanImageUrl into a new
 // Event row (see POST /api/admin/events) — so before deleting a blob this
@@ -45,6 +46,41 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if ("venueWidthMm" in body) data.venueWidthMm = body.venueWidthMm ? Math.round(Number(body.venueWidthMm)) : null;
   if ("venueDepthMm" in body) data.venueDepthMm = body.venueDepthMm ? Math.round(Number(body.venueDepthMm)) : null;
   if ("venueScaleConfirmed" in body) data.venueScaleConfirmed = Boolean(body.venueScaleConfirmed);
+  // Venue Boundary step of the Floor Plan Setup Wizard — venueShape and
+  // venueBoundaryJson are written together (never independently) so a
+  // half-updated shape/params pair can never land in the DB. Validated
+  // through the same parse/serialize round-trip lib/floorplan/boundary.ts
+  // uses everywhere else, so malformed params never get stored as if valid.
+  if ("venueShape" in body || "venueBoundaryJson" in body) {
+    const shape = typeof body.venueShape === "string" ? body.venueShape : "RECTANGLE";
+    if (!["RECTANGLE", "CIRCLE", "OVAL", "POLYGON"].includes(shape)) {
+      return NextResponse.json({ error: "Invalid venueShape." }, { status: 400 });
+    }
+    const boundary = parseVenueBoundary(shape, typeof body.venueBoundaryJson === "string" ? body.venueBoundaryJson : null);
+    data.venueShape = boundary.shape;
+    data.venueBoundaryJson = serializeVenueBoundary(boundary);
+  }
+  // Background Alignment step — the image's natural pixel size plus the
+  // admin's chosen offset/scale/rotation/lock, all read together by
+  // lib/floorplan/transform.ts computeBackgroundRect(). Naturally falls
+  // back to null (auto "contain" fit) until an admin explicitly aligns it.
+  if ("venueBackgroundNaturalWidthPx" in body) {
+    data.venueBackgroundNaturalWidthPx = body.venueBackgroundNaturalWidthPx ? Math.round(Number(body.venueBackgroundNaturalWidthPx)) : null;
+  }
+  if ("venueBackgroundNaturalHeightPx" in body) {
+    data.venueBackgroundNaturalHeightPx = body.venueBackgroundNaturalHeightPx ? Math.round(Number(body.venueBackgroundNaturalHeightPx)) : null;
+  }
+  if ("venueBackgroundOffsetXMm" in body) {
+    data.venueBackgroundOffsetXMm = body.venueBackgroundOffsetXMm != null ? Number(body.venueBackgroundOffsetXMm) : null;
+  }
+  if ("venueBackgroundOffsetYMm" in body) {
+    data.venueBackgroundOffsetYMm = body.venueBackgroundOffsetYMm != null ? Number(body.venueBackgroundOffsetYMm) : null;
+  }
+  if ("venueBackgroundScale" in body) {
+    data.venueBackgroundScale = body.venueBackgroundScale ? Number(body.venueBackgroundScale) : null;
+  }
+  if ("venueBackgroundRotationDeg" in body) data.venueBackgroundRotationDeg = Number(body.venueBackgroundRotationDeg) || 0;
+  if ("venueBackgroundLocked" in body) data.venueBackgroundLocked = Boolean(body.venueBackgroundLocked);
   if ("showPublicPricing" in body) data.showPublicPricing = Boolean(body.showPublicPricing);
   if (["DRAFT", "PUBLISHED", "CLOSED"].includes(body.status)) {
     // An event can be saved as a Draft with no Terms at all, but it can
