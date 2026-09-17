@@ -13,11 +13,18 @@ interface DetectedBooth {
   rotation: number;
   widthMm: number | null;
   depthMm: number | null;
+  xMm: number | null;
+  yMm: number | null;
   layer: string;
   source: "polyline" | "insert";
 }
 
 interface CadArchitectureLine {
+  layer: string;
+  points: { x: number; y: number }[];
+}
+
+interface VenueBoundaryCandidate {
   layer: string;
   points: { x: number; y: number }[];
 }
@@ -31,6 +38,7 @@ interface ParseResult {
   detected: DetectedBooth[];
   unlabeledCount: number;
   architecture: CadArchitectureLine[];
+  venueBoundaryCandidate: VenueBoundaryCandidate | null;
   warnings: string[];
 }
 
@@ -62,6 +70,8 @@ export function CadImportPanel({
   const [notice, setNotice] = useState<string | null>(null);
   const [mode, setMode] = useState<"matchUpdate" | "newOnly" | "replace">("matchUpdate");
   const [importing, setImporting] = useState(false);
+  const [applyBoundary, setApplyBoundary] = useState(true);
+  const [boundaryOverride, setBoundaryOverride] = useState(false);
 
   const existingCodeSet = useMemo(() => new Set(existingCodes), [existingCodes]);
   const includedRows = rows.filter((r) => r.include);
@@ -123,6 +133,8 @@ export function CadImportPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode,
+          boundaryOverride,
+          applyVenueBoundary: applyBoundary && result?.venueBoundaryCandidate ? { points: result.venueBoundaryCandidate.points } : undefined,
           rows: toImport.map((r) => ({
             code: r.code.trim(),
             gridX: r.gridX,
@@ -132,6 +144,8 @@ export function CadImportPanel({
             rotation: r.rotation,
             widthMm: r.widthMm,
             depthMm: r.depthMm,
+            xMm: r.xMm,
+            yMm: r.yMm,
           })),
         }),
       });
@@ -225,6 +239,13 @@ export function CadImportPanel({
             )}
           </div>
 
+          {result.venueBoundaryCandidate && (
+            <label className="flex items-center gap-2 text-xs text-brown-dark rounded-[8px] border border-brown/10 bg-cream p-3">
+              <input type="checkbox" checked={applyBoundary} onChange={(e) => setApplyBoundary(e.target.checked)} />
+              Detected a venue outline on layer &ldquo;{result.venueBoundaryCandidate.layer}&rdquo; — apply it as this event&apos;s Venue Boundary
+            </label>
+          )}
+
           <CadPreviewCanvas rows={rows} architecture={result.architecture} />
 
           <div className="max-h-72 overflow-y-auto space-y-1.5">
@@ -283,6 +304,13 @@ export function CadImportPanel({
                 </label>
               </div>
             </div>
+          )}
+
+          {result.detected.some((d) => d.xMm != null) && (
+            <label className="flex items-center gap-1.5 text-xs text-brown-light">
+              <input type="checkbox" checked={boundaryOverride} onChange={(e) => setBoundaryOverride(e.target.checked)} />
+              Allow booths outside the venue boundary (skips the safety check — not recommended)
+            </label>
           )}
 
           <div className="flex flex-wrap gap-2">

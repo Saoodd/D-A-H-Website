@@ -6,6 +6,7 @@ import { Legend } from "@/components/floorplan/Legend";
 import type { FloorBooth, FloorFeature, SizeStyle } from "@/components/floorplan/types";
 import { FEATURE_TYPE, formatAed } from "@/lib/constants";
 import { CadImportPanel } from "@/components/admin/CadImportPanel";
+import { JsonImportPanel } from "@/components/admin/JsonImportPanel";
 import { VenueBoundaryEditor } from "@/components/admin/VenueBoundaryEditor";
 import { BackgroundAlignmentEditor } from "@/components/admin/BackgroundAlignmentEditor";
 import { getFloorplanViewBox, mmToGridRect, worldRectOf, worldPatchToServerPatch } from "@/lib/floorplan/transform";
@@ -1653,6 +1654,11 @@ export function FloorPlanBuilder({
                   Detects booth-shaped rectangles and their labels from a DXF floor-plan export and turns them into real, interactive DAH booths — identical to a manually-created booth. Nothing is created until you review the preview below.
                 </p>
                 <CadImportPanel eventId={eventId} existingCodes={booths.map((b) => b.code)} onImported={load} />
+              </div>
+
+              <div className="rounded-[10px] border border-brown/10 bg-cream p-5">
+                <p className="text-sm font-medium text-brown-dark mb-1">Import Layout Data (JSON)</p>
+                <JsonImportPanel eventId={eventId} existingCodes={booths.map((b) => b.code)} onImported={load} />
               </div>
 
               <form onSubmit={addFeature} className="rounded-[10px] border border-brown/10 bg-cream p-5">

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
+import { hasConfirmedScale } from "@/lib/floorplan/transform";
+import { isFootprintWithinBoundary, parseVenueBoundary, serializeVenueBoundary } from "@/lib/floorplan/boundary";
 
 interface ImportRow {
   code: string;
@@ -11,6 +13,8 @@ interface ImportRow {
   rotation?: number;
   widthMm?: number | null;
   depthMm?: number | null;
+  xMm?: number | null;
+  yMm?: number | null;
 }
 
 // Commits an already-reviewed CAD Import Preview into real Booth records —
@@ -38,6 +42,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const body = await req.json().catch(() => ({}));
   const mode = body.mode === "newOnly" || body.mode === "replace" ? body.mode : "matchUpdate";
   const rows: ImportRow[] = Array.isArray(body.rows) ? body.rows : [];
+  const boundaryOverride = body.boundaryOverride === true;
+  // Optional one-click apply of a detected venue-boundary candidate (see
+  // lib/cadImport.ts VenueBoundaryCandidate) — same POLYGON shape/JSON the
+  // Venue Boundary wizard step writes, just pre-filled from the drawing
+  // instead of hand-drawn. Applied BEFORE the boundary check below so an
+  // import that both defines and uses a new boundary in one step is
+  // validated against its own new shape, not the event's old one.
+  const applyVenueBoundary = body.applyVenueBoundary as { points: { x: number; y: number }[] } | undefined;
 
   if (rows.length === 0) {
     return NextResponse.json({ error: "Nothing to import." }, { status: 400 });
@@ -51,6 +63,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: `Duplicate code in this import: ${dupeWithinRequest}. Correct labels in the preview first.` }, { status: 400 });
   }
 
+  let event = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: { venueScaleConfirmed: true, venueWidthMm: true, venueDepthMm: true, venueShape: true, venueBoundaryJson: true },
+  });
+  if (!event) return NextResponse.json({ error: "Event not found." }, { status: 404 });
+
+  if (applyVenueBoundary && Array.isArray(applyVenueBoundary.points) && applyVenueBoundary.points.length >= 3 && hasConfirmedScale(event)) {
+    const boundaryJson = serializeVenueBoundary({ shape: "POLYGON", points: applyVenueBoundary.points });
+    await prisma.event.update({ where: { id: eventId }, data: { venueShape: "POLYGON", venueBoundaryJson: boundaryJson } });
+    event = { ...event, venueShape: "POLYGON", venueBoundaryJson: boundaryJson };
+  }
+
+  const venueBox = hasConfirmedScale(event)
+    ? { widthMm: event.venueWidthMm, depthMm: event.venueDepthMm, boundary: parseVenueBoundary(event.venueShape, event.venueBoundaryJson) }
+    : null;
+
   const existing = await prisma.booth.findMany({ where: { eventId, code: { in: codes } } });
   const existingByCode = new Map(existing.map((b) => [b.code, b]));
 
@@ -62,12 +90,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const code = r.code.trim();
     const widthMm = r.widthMm == null ? null : Math.round(r.widthMm);
     const depthMm = r.depthMm == null ? null : Math.round(r.depthMm);
+    const xMm = r.xMm == null ? null : Math.round(r.xMm);
+    const yMm = r.yMm == null ? null : Math.round(r.yMm);
     const rotation = ((Math.round(r.rotation ?? 0) % 360) + 360) % 360;
     const match = existingByCode.get(code);
 
+    // Every geometry-writing import path must check the real venue
+    // boundary before persisting (see lib/floorplan/boundary.ts) — never
+    // just the coordinate box. Only checkable once real mm geometry exists
+    // for this row; a legacy/unconfirmed-scale event has nothing to check
+    // against, same as every other booth-geometry path in this codebase.
+    if (venueBox && xMm != null && yMm != null && widthMm != null && depthMm != null && !boundaryOverride) {
+      if (!isFootprintWithinBoundary(venueBox, { xMm, yMm, widthMm, depthMm, rotationDeg: rotation })) {
+        skipped.push({ code, reason: "outside venue boundary" });
+        continue;
+      }
+    }
+
     if (!match) {
       await prisma.booth.create({
-        data: { eventId, code, size: "custom", gridX: r.gridX, gridY: r.gridY, gridW: r.gridW, gridH: r.gridH, rotation, widthMm, depthMm, status: "AVAILABLE" },
+        data: { eventId, code, size: "custom", gridX: r.gridX, gridY: r.gridY, gridW: r.gridW, gridH: r.gridH, rotation, widthMm, depthMm, xMm, yMm, status: "AVAILABLE" },
       });
       created++;
       continue;
@@ -83,7 +125,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
     await prisma.booth.update({
       where: { id: match.id },
-      data: { gridX: r.gridX, gridY: r.gridY, gridW: r.gridW, gridH: r.gridH, rotation, widthMm, depthMm },
+      data: { gridX: r.gridX, gridY: r.gridY, gridW: r.gridW, gridH: r.gridH, rotation, widthMm, depthMm, xMm, yMm },
     });
     updated++;
   }

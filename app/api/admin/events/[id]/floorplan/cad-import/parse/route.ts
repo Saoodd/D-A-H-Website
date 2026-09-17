@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
 import { parseDxf } from "@/lib/cadImport";
+import { hasConfirmedScale } from "@/lib/floorplan/transform";
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10MB — generous for a booth floor-plan DXF (plain text)
 
@@ -11,7 +13,13 @@ const MAX_BYTES = 10 * 1024 * 1024; // 10MB — generous for a booth floor-plan 
 // file: it's only needed transiently to detect geometry.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  await params; // eventId isn't needed for parsing itself — kept for route symmetry with commit
+  const { id: eventId } = await params;
+  // Real xMm/yMm + a venue-boundary candidate are only meaningful once
+  // this event has a confirmed physical scale to place them into — see
+  // lib/cadImport.ts's `venue` option. Omitted entirely otherwise, which
+  // keeps parseDxf's legacy percent-only behavior unchanged.
+  const event = await prisma.event.findUnique({ where: { id: eventId }, select: { venueScaleConfirmed: true, venueWidthMm: true, venueDepthMm: true } });
+  const venue = event && hasConfirmedScale(event) ? { widthMm: event.venueWidthMm, depthMm: event.venueDepthMm } : null;
 
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
@@ -43,7 +51,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
-    const result = parseDxf(text, { boothLayers });
+    const result = parseDxf(text, { boothLayers, venue });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Couldn't parse that DXF file." }, { status: 400 });

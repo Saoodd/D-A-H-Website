@@ -35,8 +35,30 @@ export interface DetectedBooth {
   rotation: number; // degrees, 0-360
   widthMm: number | null;
   depthMm: number | null;
+  // Real position in millimetres, relative to the drawing's own top-left
+  // extent — populated ONLY when the target event's physical scale is
+  // confirmed (a `venue` option was passed to parseDxf), matching every
+  // other booth-geometry-writing path's "never fabricate mm without a real
+  // confirmed venue to place it in" rule. widthMm/depthMm above are always
+  // populated from the DXF's own declared units regardless, since a
+  // booth's physical SIZE is meaningful on its own; xMm/yMm are only
+  // meaningful once there's a real venue box to be positioned inside.
+  xMm: number | null;
+  yMm: number | null;
   layer: string;
   source: "polyline" | "insert";
+}
+
+/** A candidate venue boundary detected from a polyline on a
+ *  BORDER/OUTLINE/BOUNDARY/PERIMETER/VENUE-named layer — offered to the
+ *  admin as a one-click starting point for the Venue Boundary wizard step,
+ *  never applied automatically. Points are real mm, same convention as
+ *  lib/floorplan/boundary.ts's POLYGON shape (relative to the drawing's own
+ *  top-left extent, which becomes the venue's 0,0 once applied). Only
+ *  returned when `venue` was passed to parseDxf. */
+export interface VenueBoundaryCandidate {
+  layer: string;
+  points: { x: number; y: number }[]; // mm
 }
 
 export interface CadArchitectureLine {
@@ -53,11 +75,16 @@ export interface CadParseResult {
   detected: DetectedBooth[];
   unlabeledCount: number;
   architecture: CadArchitectureLine[];
+  venueBoundaryCandidate: VenueBoundaryCandidate | null;
   warnings: string[];
 }
 
 const BOOTH_LAYER_PATTERN = /BOOTH|STALL|KIOSK|EXHIBITOR|VENDOR/i;
 const BOOTH_BLOCK_PATTERN = /BOOTH|STALL|KIOSK/i;
+// A layer named like this is treated as the venue's own outline, never a
+// booth candidate — checked BEFORE booth detection so a "VENUE_OUTLINE"
+// layer can never be misread as one giant booth.
+const VENUE_BOUNDARY_LAYER_PATTERN = /BORDER|OUTLINE|BOUNDARY|PERIMETER|VENUE/i;
 // Common architecture/furniture layer names to exclude from auto-detected
 // booth candidates when no explicit booth layer is known — never turn a
 // wall, door, table, toilet, column or dimension line into a vendor slot.
@@ -112,7 +139,20 @@ function bboxOf(points: Point[]): { minX: number; minY: number; maxX: number; ma
   };
 }
 
-export function parseDxf(source: string, opts?: { boothLayers?: string[] }): CadParseResult {
+/** Shoelace formula — used only to pick the LARGEST candidate when more
+ *  than one layer matches VENUE_BOUNDARY_LAYER_PATTERN (e.g. an inner
+ *  "OUTLINE" detail vs. the real outer venue outline). */
+function polygonArea(points: Point[]): number {
+  let sum = 0;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    sum += a.x * b.y - b.x * a.y;
+  }
+  return Math.abs(sum) / 2;
+}
+
+export function parseDxf(source: string, opts?: { boothLayers?: string[]; venue?: { widthMm: number; depthMm: number } | null }): CadParseResult {
   const parser = new DxfParser();
   const dxf = parser.parseSync(source);
   if (!dxf) {
@@ -141,6 +181,7 @@ export function parseDxf(source: string, opts?: { boothLayers?: string[] }): Cad
   const detected: DetectedBooth[] = [];
   const architectureRaw: { layer: string; points: Point[] }[] = [];
   const labelCandidates: { text: string; x: number; y: number }[] = [];
+  const boundaryCandidatesRaw: { layer: string; points: Point[] }[] = [];
 
   for (const e of entities) {
     if (e.type === "TEXT") {
@@ -199,6 +240,8 @@ export function parseDxf(source: string, opts?: { boothLayers?: string[] }): Cad
       rotation,
       widthMm: Math.round(widthUnits * unitToMm),
       depthMm: Math.round(depthUnits * unitToMm),
+      xMm: null,
+      yMm: null,
       layer,
       source,
     });
@@ -208,7 +251,14 @@ export function parseDxf(source: string, opts?: { boothLayers?: string[] }): Cad
     if (e.type === "LWPOLYLINE") {
       const poly = e as unknown as { vertices: Point[]; shape: boolean; layer: string; handle: number };
       const vertices = poly.vertices ?? [];
-      if (poly.shape && vertices.length >= 3) {
+      if (VENUE_BOUNDARY_LAYER_PATTERN.test(poly.layer) && vertices.length >= 3) {
+        // Checked BEFORE booth detection: a layer named like the venue's
+        // own outline is never a booth candidate, even if it happens to be
+        // a rectangle. Also logged as architecture so it still shows as a
+        // faint reference line in the preview overlay either way.
+        boundaryCandidatesRaw.push({ layer: poly.layer, points: vertices });
+        architectureRaw.push({ layer: poly.layer, points: vertices });
+      } else if (poly.shape && vertices.length >= 3) {
         considerBoothCandidate(poly.layer, vertices, `h${poly.handle}`, "polyline");
       } else if (vertices.length >= 2) {
         architectureRaw.push({ layer: poly.layer, points: vertices });
@@ -262,6 +312,7 @@ export function parseDxf(source: string, opts?: { boothLayers?: string[] }): Cad
       detected: [],
       unlabeledCount: 0,
       architecture: [],
+      venueBoundaryCandidate: null,
       warnings: [...warnings, "No booth-shaped geometry or architecture lines were found in this file."],
     };
   }
@@ -275,17 +326,50 @@ export function parseDxf(source: string, opts?: { boothLayers?: string[] }): Cad
     x: (p.x - box.minX) * scale + offsetX,
     y: (p.y - box.minY) * scale + offsetY,
   });
+  // Real mm, relative to the drawing's own top-left extent (box.minX/minY)
+  // — independent of the percent-canvas fit above, and independent of any
+  // target venue: this is just "the DXF's own declared units, converted,"
+  // the same trusted conversion widthMm/depthMm already use. Only
+  // surfaced (xMm/yMm populated, not left null) when the caller confirms
+  // there's a real venue to place these into — see the `venue` option.
+  const toMm = (p: Point) => ({ xMm: Math.round((p.x - box.minX) * unitToMm), yMm: Math.round((p.y - box.minY) * unitToMm) });
 
+  const venue = opts?.venue ?? null;
   const normalizedDetected = detected.map((d) => {
     const topLeft = toPercent({ x: d.gridX, y: d.gridY });
+    const mm = venue ? toMm({ x: d.gridX, y: d.gridY }) : null;
     return {
       ...d,
       gridX: Math.max(0, Math.min(100, topLeft.x)),
       gridY: Math.max(0, Math.min(100, topLeft.y)),
       gridW: d.gridW * scale,
       gridH: d.gridH * scale,
+      xMm: mm?.xMm ?? null,
+      yMm: mm?.yMm ?? null,
     };
   });
+
+  if (venue) {
+    const drawingWidthMm = spanX * unitToMm;
+    const drawingDepthMm = spanY * unitToMm;
+    const widthOff = Math.abs(drawingWidthMm - venue.widthMm) / venue.widthMm;
+    const depthOff = Math.abs(drawingDepthMm - venue.depthMm) / venue.depthMm;
+    if (widthOff > 0.15 || depthOff > 0.15) {
+      warnings.push(
+        `This drawing's real-world extent (${(drawingWidthMm / 1000).toFixed(1)}m × ${(drawingDepthMm / 1000).toFixed(1)}m) doesn't closely match this event's declared venue size (${(venue.widthMm / 1000).toFixed(1)}m × ${(venue.depthMm / 1000).toFixed(1)}m) — double-check the DXF's units before importing, or positions may not line up with the real venue.`
+      );
+    }
+  }
+
+  // Largest boundary-layer candidate wins (an inner detail on the same
+  // pattern shouldn't beat the real outer venue outline). Real mm, same
+  // origin convention as booth xMm/yMm above — only when a venue exists to
+  // apply it to.
+  let venueBoundaryCandidate: VenueBoundaryCandidate | null = null;
+  if (venue && boundaryCandidatesRaw.length > 0) {
+    const largest = boundaryCandidatesRaw.reduce((best, c) => (polygonArea(c.points) > polygonArea(best.points) ? c : best));
+    venueBoundaryCandidate = { layer: largest.layer, points: largest.points.map(toMm).map((p) => ({ x: p.xMm, y: p.yMm })) };
+  }
 
   let architecturePoints = 0;
   const architecture: CadArchitectureLine[] = [];
@@ -307,6 +391,7 @@ export function parseDxf(source: string, opts?: { boothLayers?: string[] }): Cad
     detected: normalizedDetected,
     unlabeledCount: normalizedDetected.filter((d) => d.labelConfidence === "unlabeled").length,
     architecture,
+    venueBoundaryCandidate,
     warnings,
   };
 }
