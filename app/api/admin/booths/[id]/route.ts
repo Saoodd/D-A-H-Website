@@ -5,7 +5,7 @@ import { requireAdmin } from "@/lib/adminGuard";
 import { getBoothPrice } from "@/lib/pricing";
 import { BOOTH_STATUS } from "@/lib/constants";
 import { notifyVendorWhatsApp } from "@/lib/notifications/notify";
-import { hasConfirmedScale, mmToGridRect } from "@/lib/floorplan/transform";
+import { hasConfirmedScale, mmToGridRect, gridRectToMm } from "@/lib/floorplan/transform";
 import { isFootprintWithinBoundary, parseVenueBoundary, BOUNDARY_VIOLATION_MESSAGE } from "@/lib/floorplan/boundary";
 
 // Admin booth management: manual status changes, assign/reassign to a
@@ -90,10 +90,37 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       select: { venueScaleConfirmed: true, venueWidthMm: true, venueDepthMm: true, venueShape: true, venueBoundaryJson: true },
     });
     if (event && hasConfirmedScale(event)) {
-      const effectiveXMm = "xMm" in data ? (data.xMm as number | null) : booth.xMm;
-      const effectiveYMm = "yMm" in data ? (data.yMm as number | null) : booth.yMm;
-      const effectiveWidthMm = "widthMm" in data ? (data.widthMm as number | null) : booth.widthMm;
-      const effectiveDepthMm = "depthMm" in data ? (data.depthMm as number | null) : booth.depthMm;
+      const venueForGrid = { venueWidthMm: event.venueWidthMm, venueDepthMm: event.venueDepthMm };
+      // The interactive canvas (drag/resize) still operates in grid/percent
+      // space and PATCHes gridX/Y/W/H directly, NOT xMm/yMm/widthMm/depthMm.
+      // When the caller sent grid fields without the corresponding mm
+      // fields, that grid position/size IS the real new value the client
+      // intends and must be converted to mm here — falling back to the
+      // booth's STALE stored xMm/yMm/widthMm/depthMm whenever mm fields
+      // weren't explicitly sent (as this block used to) silently discarded
+      // every drag/resize on a scale-confirmed event: it re-derived gridX/Y
+      // from the OLD position and clobbered the client's actual move with
+      // it, a no-op the client could never observe.
+      const anyGridFieldSent = ["gridX", "gridY", "gridW", "gridH"].some((k) => k in body);
+      let derivedFromGrid: { xMm: number; yMm: number; widthMm: number; depthMm: number } | null = null;
+      if (anyGridFieldSent) {
+        const current = mmToGridRect(venueForGrid, {
+          xMm: booth.xMm ?? 0,
+          yMm: booth.yMm ?? 0,
+          widthMm: booth.widthMm ?? 0,
+          depthMm: booth.depthMm ?? 0,
+        });
+        derivedFromGrid = gridRectToMm(venueForGrid, {
+          gridX: "gridX" in body ? Number(body.gridX) : current.gridX,
+          gridY: "gridY" in body ? Number(body.gridY) : current.gridY,
+          gridW: "gridW" in body ? Number(body.gridW) : current.gridW,
+          gridH: "gridH" in body ? Number(body.gridH) : current.gridH,
+        });
+      }
+      const effectiveXMm = ("xMm" in data ? (data.xMm as number | null) : null) ?? derivedFromGrid?.xMm ?? booth.xMm;
+      const effectiveYMm = ("yMm" in data ? (data.yMm as number | null) : null) ?? derivedFromGrid?.yMm ?? booth.yMm;
+      const effectiveWidthMm = ("widthMm" in data ? (data.widthMm as number | null) : null) ?? derivedFromGrid?.widthMm ?? booth.widthMm;
+      const effectiveDepthMm = ("depthMm" in data ? (data.depthMm as number | null) : null) ?? derivedFromGrid?.depthMm ?? booth.depthMm;
       if (effectiveXMm != null && effectiveYMm != null && effectiveWidthMm != null && effectiveDepthMm != null) {
         const venue = { venueWidthMm: event.venueWidthMm, venueDepthMm: event.venueDepthMm };
         const boundaryOverride = "boundaryOverride" in data ? (data.boundaryOverride as boolean) : booth.boundaryOverride;
@@ -109,6 +136,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         data.gridH = grid.gridH;
         data.xMm = effectiveXMm;
         data.yMm = effectiveYMm;
+        data.widthMm = effectiveWidthMm;
+        data.depthMm = effectiveDepthMm;
       }
     }
   }

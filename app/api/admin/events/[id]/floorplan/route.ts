@@ -37,6 +37,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       priceAedFils: b.priceAedFils,
       widthMm: b.widthMm,
       depthMm: b.depthMm,
+      xMm: b.xMm,
+      yMm: b.yMm,
       holdStage: b.holdStage,
       holdExpiresAt: b.holdExpiresAt ? b.holdExpiresAt.toISOString() : null,
       heldBy: b.heldByApplication?.businessName || null,

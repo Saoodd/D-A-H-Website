@@ -122,6 +122,15 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
         venueWidthMm: event.venueWidthMm,
         venueDepthMm: event.venueDepthMm,
         venueScaleConfirmed: event.venueScaleConfirmed,
+        venueShape: event.venueShape,
+        venueBoundaryJson: event.venueBoundaryJson,
+        venueBackgroundNaturalWidthPx: event.venueBackgroundNaturalWidthPx,
+        venueBackgroundNaturalHeightPx: event.venueBackgroundNaturalHeightPx,
+        venueBackgroundOffsetXMm: event.venueBackgroundOffsetXMm,
+        venueBackgroundOffsetYMm: event.venueBackgroundOffsetYMm,
+        venueBackgroundScale: event.venueBackgroundScale,
+        venueBackgroundRotationDeg: event.venueBackgroundRotationDeg,
+        venueBackgroundLocked: event.venueBackgroundLocked,
         tiers: tiers.map((t) => ({ sizeKey: t.sizeKey, label: t.label, priceAedFils: t.priceAedFils })),
       }}
       termsStatus={{

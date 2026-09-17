@@ -6,6 +6,8 @@ import { Legend } from "@/components/floorplan/Legend";
 import type { FloorBooth, FloorFeature, SizeStyle } from "@/components/floorplan/types";
 import { FEATURE_TYPE, formatAed } from "@/lib/constants";
 import { CadImportPanel } from "@/components/admin/CadImportPanel";
+import { VenueBoundaryEditor } from "@/components/admin/VenueBoundaryEditor";
+import { BackgroundAlignmentEditor } from "@/components/admin/BackgroundAlignmentEditor";
 import { getFloorplanViewBox } from "@/lib/floorplan/transform";
 
 const SIZE_PALETTE = ["#C97C4B", "#8A5A38", "#D9A066", "#6B4429"];
@@ -46,6 +48,15 @@ export function FloorPlanBuilder({
   venueWidthMm: initialVenueWidthMm,
   venueDepthMm: initialVenueDepthMm,
   venueScaleConfirmed: initialVenueScaleConfirmed,
+  venueShape: initialVenueShape,
+  venueBoundaryJson: initialVenueBoundaryJson,
+  venueBackgroundNaturalWidthPx: initialVenueBackgroundNaturalWidthPx,
+  venueBackgroundNaturalHeightPx: initialVenueBackgroundNaturalHeightPx,
+  venueBackgroundOffsetXMm: initialVenueBackgroundOffsetXMm,
+  venueBackgroundOffsetYMm: initialVenueBackgroundOffsetYMm,
+  venueBackgroundScale: initialVenueBackgroundScale,
+  venueBackgroundRotationDeg: initialVenueBackgroundRotationDeg,
+  venueBackgroundLocked: initialVenueBackgroundLocked,
 }: {
   eventId: string;
   tiers: Tier[];
@@ -54,6 +65,15 @@ export function FloorPlanBuilder({
   venueWidthMm?: number | null;
   venueDepthMm?: number | null;
   venueScaleConfirmed?: boolean;
+  venueShape?: string;
+  venueBoundaryJson?: string | null;
+  venueBackgroundNaturalWidthPx?: number | null;
+  venueBackgroundNaturalHeightPx?: number | null;
+  venueBackgroundOffsetXMm?: number | null;
+  venueBackgroundOffsetYMm?: number | null;
+  venueBackgroundScale?: number | null;
+  venueBackgroundRotationDeg?: number;
+  venueBackgroundLocked?: boolean;
 }) {
   const [features, setFeatures] = useState<FloorFeature[]>([]);
   const [booths, setBooths] = useState<AdminBooth[]>([]);
@@ -80,6 +100,24 @@ export function FloorPlanBuilder({
   const [scaleWidthInput, setScaleWidthInput] = useState(initialVenueWidthMm ? String(initialVenueWidthMm / 1000) : "");
   const [scaleDepthInput, setScaleDepthInput] = useState(initialVenueDepthMm ? String(initialVenueDepthMm / 1000) : "");
   const [scaleBusy, setScaleBusy] = useState(false);
+
+  // Venue Boundary (Floor Plan Setup Wizard step 3) — see
+  // components/admin/VenueBoundaryEditor.tsx and lib/floorplan/boundary.ts.
+  const [venueShapeState, setVenueShapeState] = useState(initialVenueShape ?? "RECTANGLE");
+  const [venueBoundaryJsonState, setVenueBoundaryJsonState] = useState(initialVenueBoundaryJson ?? null);
+  const [boundaryEditorOpen, setBoundaryEditorOpen] = useState(false);
+
+  // Background Alignment (Floor Plan Setup Wizard step 4) — see
+  // components/admin/BackgroundAlignmentEditor.tsx and computeBackgroundRect
+  // in lib/floorplan/transform.ts.
+  const [bgNaturalWidthPx, setBgNaturalWidthPx] = useState(initialVenueBackgroundNaturalWidthPx ?? null);
+  const [bgNaturalHeightPx, setBgNaturalHeightPx] = useState(initialVenueBackgroundNaturalHeightPx ?? null);
+  const [bgOffsetXMm, setBgOffsetXMm] = useState(initialVenueBackgroundOffsetXMm ?? null);
+  const [bgOffsetYMm, setBgOffsetYMm] = useState(initialVenueBackgroundOffsetYMm ?? null);
+  const [bgScale, setBgScale] = useState(initialVenueBackgroundScale ?? null);
+  const [bgRotationDeg, setBgRotationDeg] = useState(initialVenueBackgroundRotationDeg ?? 0);
+  const [bgLocked, setBgLocked] = useState(initialVenueBackgroundLocked ?? false);
+  const [backgroundEditorOpen, setBackgroundEditorOpen] = useState(false);
 
   const viewBox = getFloorplanViewBox({
     venueScaleConfirmed: venueScaleConfirmedState,
@@ -1104,6 +1142,18 @@ export function FloorPlanBuilder({
           </button>
         )}
 
+        {coordinateMode === "MM" && (
+          <>
+            <div className="w-px h-5 bg-brown/15 mx-1" />
+            <button type="button" onClick={() => setBoundaryEditorOpen((v) => !v)} className="text-xs text-brown-light hover:text-brown">
+              {venueShapeState === "RECTANGLE" ? "Venue boundary: rectangle" : `Venue boundary: ${venueShapeState.toLowerCase()} (custom)`}
+            </button>
+            <button type="button" onClick={() => setBackgroundEditorOpen((v) => !v)} disabled={!floorPlanImageUrl} className="text-xs text-brown-light hover:text-brown disabled:opacity-40 disabled:cursor-not-allowed">
+              {bgNaturalWidthPx ? "Background: aligned" : "Background: not aligned"}
+            </button>
+          </>
+        )}
+
         {!venueWidthM && (
           <span className="text-xs text-brown-light/70 ml-auto">
             Tip: set a venue width (meters) in Settings to show real distances while dragging.
@@ -1114,6 +1164,54 @@ export function FloorPlanBuilder({
         <p className="mb-3 -mt-2 text-[11px] text-brown-light/70">
           New booths, Mass Create, and bulk size changes below now store true physical dimensions ({viewBox.width / 1000}m × {viewBox.height / 1000}m venue) and render at genuinely proportional size.
         </p>
+      )}
+
+      {boundaryEditorOpen && coordinateMode === "MM" && (
+        <VenueBoundaryEditor
+          eventId={eventId}
+          venueWidthMm={viewBox.width}
+          venueDepthMm={viewBox.height}
+          initialShape={venueShapeState}
+          initialBoundaryJson={venueBoundaryJsonState}
+          booths={booths.map((b) => ({ id: b.id, code: b.code, xMm: b.xMm ?? null, yMm: b.yMm ?? null, widthMm: b.widthMm ?? null, depthMm: b.depthMm ?? null, rotation: b.rotation ?? null }))}
+          onSaved={(shape, boundaryJson) => {
+            setVenueShapeState(shape);
+            setVenueBoundaryJsonState(boundaryJson);
+            setBoundaryEditorOpen(false);
+            setNotice("Venue boundary saved.");
+          }}
+          onClose={() => setBoundaryEditorOpen(false)}
+        />
+      )}
+
+      {backgroundEditorOpen && coordinateMode === "MM" && floorPlanImageUrl && (
+        <BackgroundAlignmentEditor
+          eventId={eventId}
+          venueWidthMm={viewBox.width}
+          venueDepthMm={viewBox.height}
+          imageUrl={floorPlanImageUrl}
+          initial={{
+            naturalWidthPx: bgNaturalWidthPx,
+            naturalHeightPx: bgNaturalHeightPx,
+            offsetXMm: bgOffsetXMm,
+            offsetYMm: bgOffsetYMm,
+            scale: bgScale,
+            rotationDeg: bgRotationDeg,
+            locked: bgLocked,
+          }}
+          onSaved={(next) => {
+            setBgNaturalWidthPx(next.naturalWidthPx);
+            setBgNaturalHeightPx(next.naturalHeightPx);
+            setBgOffsetXMm(next.offsetXMm);
+            setBgOffsetYMm(next.offsetYMm);
+            setBgScale(next.scale);
+            setBgRotationDeg(next.rotationDeg);
+            setBgLocked(next.locked);
+            setBackgroundEditorOpen(false);
+            setNotice("Background alignment saved.");
+          }}
+          onClose={() => setBackgroundEditorOpen(false)}
+        />
       )}
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
@@ -1137,6 +1235,25 @@ export function FloorPlanBuilder({
             smartGuidesEnabled={smartGuidesEnabled}
             gridSnapEnabled={gridSnapEnabled}
             venueWidthM={venueWidthM}
+            // NOT passing viewBox/coordinateMode here yet: FloorPlan's
+            // drag/resize/rotate manipulation math (computeGroupMovePatch /
+            // computeResizePatch / computeRotatePatch) still emits patches
+            // in raw viewBox units and writes them into gridX/gridY/gridW/
+            // gridH — correct in legacy percent mode (0-100), where those
+            // units already match what the server expects, but WRONG in
+            // real mm mode (0-venueWidthMm), where the server still treats
+            // gridX/Y/W/H as 0-100 percentages (see mmToGridRect in
+            // lib/floorplan/transform.ts) and xMm/yMm as the authoritative
+            // position. Flipping coordinateMode to "MM" here without first
+            // updating that manipulation code to emit real xMm/yMm (or
+            // percent-converted) patches silently corrupts booth positions
+            // on drag/resize — confirmed live. This is the actual remaining
+            // Phase 7 work; until it's done, the interactive canvas stays
+            // in legacy percent mode (gridX/Y/W/H are already populated as
+            // percentages regardless of scale confirmation, so booths still
+            // render correctly here) while the Venue Boundary and
+            // Background Alignment editors below use their own independent,
+            // already-mm-correct math.
           />
           <Legend sizeStyles={sizeStyles} />
 
