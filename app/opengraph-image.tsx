@@ -1,10 +1,14 @@
 import { ImageResponse } from "next/og";
-import { DAH_IVORY, DAH_OLIVE, DAH_TERRACOTTA } from "@/lib/theme/brand";
+import { readFileSync } from "fs";
+import { join } from "path";
+import { DAH_IVORY, DAH_TERRACOTTA } from "@/lib/theme/brand";
 
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 export default function OpengraphImage() {
+  const badge = readFileSync(join(process.cwd(), "public/brand/logo-dark-lg.png")).toString("base64");
+
   return new ImageResponse(
     (
       <div
@@ -18,15 +22,8 @@ export default function OpengraphImage() {
           background: DAH_IVORY,
         }}
       >
-        <svg width="72" height="90" viewBox="0 0 120 150" fill={DAH_OLIVE}>
-          <path d="M18,148 C18,95 24,50 60,10 C52,48 46,95 44,148 Z" />
-          <path d="M102,148 C102,95 96,50 60,10 C68,48 74,95 76,148 Z" />
-          <path d="M60,84 L71,97 L60,110 L49,97 Z" />
-        </svg>
-        <div style={{ fontSize: 56, color: DAH_OLIVE, letterSpacing: 14, fontWeight: 300, marginTop: 28 }}>
-          DAR AL HAY
-        </div>
-        <div style={{ fontSize: 22, color: DAH_TERRACOTTA, letterSpacing: 6, marginTop: 18 }}>
+        <img src={`data:image/png;base64,${badge}`} width={220} height={220} alt="" />
+        <div style={{ fontSize: 22, color: DAH_TERRACOTTA, letterSpacing: 6, marginTop: 22 }}>
           EVENTS &amp; POP-UPS · DUBAI
         </div>
       </div>

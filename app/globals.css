@@ -133,6 +133,26 @@ html[dir="rtl"] .label-caps {
   letter-spacing: 0.04em;
 }
 
+/* Theme-conditional visibility for the two real logo image variants (see
+   Logo.tsx) — plain CSS keyed off the [data-theme] attribute rather than
+   Tailwind's dark: variant (which here defaults to prefers-color-scheme,
+   not this app's manual toggle) or a client-only theme hook, so it works
+   identically in server-rendered pages (e.g. printable receipts) with no
+   hydration mismatch: the blocking theme script in layout.tsx already sets
+   [data-theme] before first paint. */
+.theme-light-only {
+  display: block;
+}
+.theme-dark-only {
+  display: none;
+}
+:root[data-theme="dark"] .theme-light-only {
+  display: none;
+}
+:root[data-theme="dark"] .theme-dark-only {
+  display: block;
+}
+
 ::selection {
   background: var(--color-brown);
   color: var(--color-cream-soft);

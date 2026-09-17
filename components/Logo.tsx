@@ -1,51 +1,46 @@
-// The Dar Al Hay mark: a symmetric pointed arch (evoking traditional
-// Emirati/Islamic architectural doorways) with a small diamond suspended
-// in the gap between its two legs — hand-vectorized from the brand
-// reference the user provided. Image attachments pasted into chat aren't
-// retrievable as file bytes by this component's tooling, only viewable, so
-// this is a faithful redraw by eye rather than the literal source file
-// (the user was told this and asked for this approach explicitly). Fill
-// uses currentColor so it inherits whatever text-color class is passed in
-// via `className`, keeping it correct in both themes without extra work.
-// If an exact vector/AI/EPS export of the original mark becomes available,
-// swapping this path data for the real one is a drop-in improvement.
-function LogoMark({ className = "" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 120 150" className={className} fill="currentColor">
-      <path d="M18,148 C18,95 24,50 60,10 C52,48 46,95 44,148 Z" />
-      <path d="M102,148 C102,95 96,50 60,10 C68,48 74,95 76,148 Z" />
-      <path d="M60,84 L71,97 L60,110 L49,97 Z" />
-    </svg>
-  );
-}
+import Image from "next/image";
 
+// The real Dar Al Hay brand mark — sourced directly from the supplied
+// brand artwork (public/brand/logo-{dark,light}{,-sm,-lg}.png), not a
+// redraw. "dark" = the olive-circle/ivory-mark badge, used against the
+// app's light theme (ivory page background) for contrast; "light" = the
+// cream-circle/dark-mark badge, used against the app's dark theme
+// (charcoal page background). Swapped via plain CSS (.theme-light-only /
+// .theme-dark-only in globals.css) keyed off [data-theme], not a client
+// hook, so this stays usable in server-rendered contexts (e.g. the
+// printable receipt page) with no hydration mismatch.
 interface LogoProps {
-  /** "full" (default) renders the mark plus the DAR AL HAY / دار الحي /
-   *  EVENTS wordmark stack — use wherever there's room (header, footer,
-   *  auth pages, receipts). "mark" renders just the glyph — use at small
-   *  sizes or where a text lockup would be redundant/cramped (compact nav
-   *  chrome, favicon-equivalent contexts). */
+  /** "full" (default) — the badge at a size where its baked-in DAR AL
+   *  HAY / دار الحي / EVENTS wordmark reads clearly. "mark" — the same
+   *  badge at a smaller size, for compact chrome (mobile top bars). Both
+   *  variants show the same artwork; there is no separate icon-only
+   *  export, so "mark" is simply a smaller rendering of the full badge. */
   variant?: "full" | "mark";
   className?: string;
 }
 
 export function Logo({ variant = "full", className = "" }: LogoProps) {
-  if (variant === "mark") {
-    return <LogoMark className={`w-8 h-auto text-brown-dark ${className}`} />;
-  }
+  const px = variant === "full" ? 72 : 32;
+  const srcSize = variant === "full" ? "" : "-sm";
 
   return (
-    <div className={`inline-flex flex-col items-center leading-none select-none ${className}`}>
-      <LogoMark className="w-14 h-auto text-brown-dark" />
-      <span className="mt-2.5 text-sm tracking-[0.28em] text-brown-dark font-heading">
-        DAR AL HAY
-      </span>
-      <span className="mt-1 text-[11px] tracking-[0.15em] text-brown-light" dir="rtl">
-        دار الحي
-      </span>
-      <span className="mt-1 text-[9px] font-semibold tracking-[0.3em] text-brown-light">
-        EVENTS
-      </span>
-    </div>
+    <span className={`inline-flex items-center ${className}`}>
+      <Image
+        src={`/brand/logo-dark${srcSize}.png`}
+        alt="Dar Al Hay"
+        width={px}
+        height={px}
+        className="theme-light-only rounded-full"
+        priority
+      />
+      <Image
+        src={`/brand/logo-light${srcSize}.png`}
+        alt="Dar Al Hay"
+        width={px}
+        height={px}
+        className="theme-dark-only rounded-full"
+        priority
+      />
+    </span>
   );
 }
