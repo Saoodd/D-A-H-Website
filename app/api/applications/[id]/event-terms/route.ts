@@ -4,6 +4,7 @@ import { getVendorSession } from "@/lib/auth";
 import { getPublishedAgreement, recordAcceptance } from "@/lib/agreements";
 import { clientIp } from "@/lib/rateLimit";
 import { requirePhoneVerifiedVendor } from "@/lib/verification";
+import { getBoothPrice } from "@/lib/pricing";
 
 // Read the currently published Event Terms & Conditions for this
 // application's event — every event has its own independent agreement,
@@ -63,6 +64,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "There is no Terms & Conditions to accept for this event." }, { status: 404 });
   }
 
+  // Immutable booth snapshot: exactly which booth(s) this acceptance
+  // covers, with their physical dimensions and price AT THIS MOMENT — see
+  // schema comment on AgreementAcceptance.snapshotBoothsJson. Read from
+  // whichever booths this application currently holds (REVIEW-stage,
+  // pre-payment — this is accepted before checkout/start).
+  const heldBooths = await prisma.booth.findMany({
+    where: { heldByApplicationId: application.id, status: "HELD" },
+  });
+  const boothSnapshot = await Promise.all(
+    heldBooths.map(async (b) => ({
+      code: b.code,
+      widthMm: b.widthMm,
+      depthMm: b.depthMm,
+      priceAedFils: await getBoothPrice(b, application.eventId),
+    }))
+  );
+
   const acceptance = await recordAcceptance({
     agreementId: agreement.id,
     vendorId: session.vendorId,
@@ -73,6 +91,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     eventName: application.event.name,
     ipAddress: clientIp(req.headers),
     userAgent: req.headers.get("user-agent"),
+    booths: boothSnapshot,
   });
 
   return NextResponse.json({ ok: true, acceptedAt: acceptance.acceptedAt.toISOString(), representativeName: acceptance.representativeName });

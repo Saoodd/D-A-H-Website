@@ -7,24 +7,39 @@ import { useLocale } from "@/lib/i18n/context";
 import { LuxeCheckbox } from "@/components/ui/LuxeCheckbox";
 import { sanitizeAgreementHtml } from "@/lib/sanitizeHtml";
 import { PhoneVerifyModal } from "@/components/vendor/PhoneVerifyModal";
+import { formatAed } from "@/lib/constants";
+import { FloorPlan } from "@/components/floorplan/FloorPlan";
+import { Legend } from "@/components/floorplan/Legend";
+import type { FloorFeature, FloorBooth } from "@/components/floorplan/types";
+
+interface BookingSummary {
+  lines: { code: string; priceAedFils: number | null; baseAedFils: number | null; vatAedFils: number | null }[];
+  subtotalAedFils: number;
+  vatAedFils: number;
+  totalAedFils: number;
+}
 
 export function EventTermsClient({
   applicationId,
+  eventId,
   eventName,
   eventDate,
   venue,
   businessName,
   boothCode,
+  bookingSummary,
   title,
   version,
   bodyHtml,
 }: {
   applicationId: string;
+  eventId: string;
   eventName: string;
   eventDate: string;
   venue: string;
   businessName: string;
   boothCode: string | null;
+  bookingSummary: BookingSummary;
   title: string;
   version: number;
   bodyHtml: string;
@@ -40,8 +55,38 @@ export function EventTermsClient({
   const [accepted, setAccepted] = useState<{ representativeName: string; acceptedAt: string } | null>(null);
   const [continuing, setContinuing] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [mapData, setMapData] = useState<{
+    features: FloorFeature[];
+    booths: FloorBooth[];
+    floorPlanImageUrl: string | null;
+    tiers: { sizeKey: string; label: string; priceAedFils: number }[];
+  } | null>(null);
+  const [mapLoading, setMapLoading] = useState(false);
+
+  async function toggleMap() {
+    if (mapOpen) {
+      setMapOpen(false);
+      return;
+    }
+    setMapOpen(true);
+    if (mapData) return;
+    setMapLoading(true);
+    try {
+      const res = await fetch(`/api/events/${eventId}/floorplan?applicationId=${applicationId}`);
+      if (res.ok) setMapData(await res.json());
+    } finally {
+      setMapLoading(false);
+    }
+  }
 
   const scrolledToBottom = readProgress >= 100;
+
+  const SIZE_PALETTE = ["#C97C4B", "#8A5A38", "#D9A066", "#6B4429"];
+  const mapSizeStyles: Record<string, { color: string; label: string }> = {};
+  (mapData?.tiers || []).forEach((t, i) => {
+    mapSizeStyles[t.sizeKey] = { color: SIZE_PALETTE[i % SIZE_PALETTE.length], label: t.label };
+  });
 
   function measureScroll() {
     const el = scrollRef.current;
@@ -127,12 +172,74 @@ export function EventTermsClient({
         </p>
       </div>
 
-      <dl className="grid grid-cols-2 sm:grid-cols-4 gap-px rounded-xl border border-brown/12 bg-brown/12 overflow-hidden mb-10 text-center">
+      <dl className="grid grid-cols-2 sm:grid-cols-4 gap-px rounded-xl border border-brown/12 bg-brown/12 overflow-hidden mb-6 text-center">
         <MetaCell label={locale === "ar" ? "تاريخ الفعالية" : "Event date"} value={dateFmt(eventDate)} />
         <MetaCell label={locale === "ar" ? "الموقع" : "Venue"} value={venue} />
         <MetaCell label={locale === "ar" ? "اسم النشاط" : "Business"} value={businessName} />
         <MetaCell label={locale === "ar" ? "الكشك" : "Booth"} value={boothCode ?? "—"} />
       </dl>
+
+      {/* Persistent booking summary + read-only map access — kept visible
+          throughout Terms review, per requirement: Event Terms shows a
+          booking summary and [View Booth on Map] access, never just a bare
+          booth code. */}
+      {bookingSummary.lines.length > 0 && (
+        <div className="mb-10 rounded-xl border border-brown/15 bg-cream-soft/70 p-5 md:p-6">
+          <div className="flex items-center justify-between mb-3">
+            <p className="label-caps">{locale === "ar" ? "ملخص الحجز" : "Booking Summary"}</p>
+            <button type="button" onClick={toggleMap} className="text-xs underline text-brown hover:text-brown-dark">
+              {mapOpen ? (locale === "ar" ? "إخفاء الخريطة" : "Hide Map") : locale === "ar" ? "عرض الكشك على الخريطة" : "View Booth on Map"}
+            </button>
+          </div>
+          <div className="space-y-1.5 text-sm">
+            {bookingSummary.lines.map((l) => (
+              <div key={l.code} className="flex items-center justify-between">
+                <span className="text-brown-dark font-medium">{l.code}</span>
+                <span className="text-brown-dark">{l.priceAedFils != null ? formatAed(l.priceAedFils) : "—"}</span>
+              </div>
+            ))}
+          </div>
+          {bookingSummary.lines.length > 1 && (
+            <div className="space-y-1 mt-3 pt-3 border-t border-brown/10 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-brown-light">{locale === "ar" ? "المجموع الفرعي" : "Subtotal"}</span>
+                <span className="text-brown-dark">{formatAed(bookingSummary.subtotalAedFils)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-brown-light">{locale === "ar" ? "ضريبة القيمة المضافة" : "VAT"}</span>
+                <span className="text-brown-dark">{formatAed(bookingSummary.vatAedFils)}</span>
+              </div>
+            </div>
+          )}
+          <div className="flex items-center justify-between mt-2 pt-2 border-t border-brown/10">
+            <span className="text-brown-dark font-medium">{locale === "ar" ? "الإجمالي" : "Total"}</span>
+            <span className="text-brown-dark font-semibold">{formatAed(bookingSummary.totalAedFils)}</span>
+          </div>
+
+          {mapOpen && (
+            <div className="mt-5">
+              {mapLoading ? (
+                <p className="text-sm text-brown-light">{locale === "ar" ? "جارٍ التحميل…" : "Loading…"}</p>
+              ) : mapData ? (
+                <>
+                  <FloorPlan
+                    features={mapData.features}
+                    booths={mapData.booths}
+                    sizeStyles={mapSizeStyles}
+                    backgroundImageUrl={mapData.floorPlanImageUrl}
+                    interactive
+                    focusBoothId={mapData.booths.find((b) => b.isMine)?.id ?? null}
+                    focusNonce={1}
+                  />
+                  <Legend sizeStyles={mapSizeStyles} showMineKey />
+                </>
+              ) : (
+                <p className="text-sm text-red-700">{locale === "ar" ? "تعذر تحميل الخريطة" : "Could not load the map"}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* The agreement document itself */}
       <div

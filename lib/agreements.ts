@@ -146,6 +146,13 @@ export async function publishDraft(agreementId: string) {
   });
 }
 
+export interface AcceptanceBoothSnapshot {
+  code: string;
+  widthMm: number | null;
+  depthMm: number | null;
+  priceAedFils: number | null;
+}
+
 export async function recordAcceptance(params: {
   agreementId: string;
   vendorId: string;
@@ -156,6 +163,10 @@ export async function recordAcceptance(params: {
   eventName?: string | null;
   ipAddress?: string | null;
   userAgent?: string | null;
+  // EVENT_TERMS only — the booth(s) this acceptance is being made against,
+  // captured immutably at the moment of acceptance. See schema comment on
+  // AgreementAcceptance.snapshotBoothsJson.
+  booths?: AcceptanceBoothSnapshot[] | null;
 }) {
   const agreement = await prisma.agreement.findUnique({ where: { id: params.agreementId } });
   if (!agreement || agreement.status !== "PUBLISHED") {
@@ -174,6 +185,7 @@ export async function recordAcceptance(params: {
       snapshotBusinessName: params.businessName,
       snapshotContactName: params.contactName,
       snapshotEventName: params.eventName ?? null,
+      snapshotBoothsJson: params.booths && params.booths.length > 0 ? JSON.stringify(params.booths) : null,
       ipAddress: params.ipAddress ?? null,
       userAgent: params.userAgent ?? null,
     },

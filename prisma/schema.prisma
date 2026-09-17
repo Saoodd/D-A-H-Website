@@ -824,6 +824,15 @@ model AgreementAcceptance {
   snapshotBusinessName String
   snapshotContactName  String
   snapshotEventName    String? // EVENT_TERMS only
+  // EVENT_TERMS only — an immutable capture of exactly which booth(s) this
+  // acceptance was made against: code, physical dimensions (widthMm/
+  // depthMm), and price at the moment of acceptance. JSON array of
+  // { code, widthMm, depthMm, priceAedFils }. Never re-derived later from
+  // the live Booth rows — a booth's geometry/price/assignment can keep
+  // changing after this acceptance, but this snapshot must always read
+  // exactly as it did the moment the vendor accepted, same reasoning as
+  // snapshotBodyHtml above for the agreement text itself.
+  snapshotBoothsJson String? @db.Text
 
   ipAddress String?
   userAgent String?
