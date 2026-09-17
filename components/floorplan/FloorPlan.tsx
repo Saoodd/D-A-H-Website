@@ -631,6 +631,23 @@ export function FloorPlan({
 
   const clampScale = (s: number) => Math.min(4, Math.max(0.5, s));
 
+  // Bounded pan: the venue can never be dragged so far that empty space
+  // shows past its edge — when zoomed in, translate is clamped so the
+  // scaled content always still fully covers the container; when zoomed
+  // out below 100% coverage on an axis (content smaller than the
+  // container), that axis is instead centered exactly, which is what
+  // makes scale=1/translate=0 ("Fit Venue", the ⤾ button) always land on
+  // a clean, fully-visible view regardless of prior pan state.
+  const clampTranslate = useCallback((t: { x: number; y: number }, s: number) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return t;
+    const contentW = rect.width * s;
+    const contentH = rect.height * s;
+    const x = contentW >= rect.width ? Math.min(0, Math.max(rect.width - contentW, t.x)) : (rect.width - contentW) / 2;
+    const y = contentH >= rect.height ? Math.min(0, Math.max(rect.height - contentH, t.y)) : (rect.height - contentH) / 2;
+    return { x, y };
+  }, []);
+
   // Despite the name (kept for minimal diff against the rest of this file),
   // this resolves a screen point into the CURRENT viewBox's own coordinate
   // space — percent units in legacy mode, real millimetres in MM mode —
@@ -678,9 +695,9 @@ export function FloorPlan({
       const dx = e.clientX - dragState.current.x;
       const dy = e.clientY - dragState.current.y;
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragState.current.moved = true;
-      setTranslate({ x: dragState.current.startTranslate.x + dx, y: dragState.current.startTranslate.y + dy });
+      setTranslate(clampTranslate({ x: dragState.current.startTranslate.x + dx, y: dragState.current.startTranslate.y + dy }, scale));
     },
-    [pointToPercent]
+    [pointToPercent, clampTranslate, scale]
   );
 
   const onPointerUp = useCallback(
@@ -726,6 +743,15 @@ export function FloorPlan({
     e.preventDefault();
     setScale((s) => clampScale(s - e.deltaY * 0.0015));
   }, []);
+
+  // Re-clamps translate whenever scale changes (wheel, pinch, +/− buttons,
+  // or the ⤾ reset) — a translate that was valid at the old scale can put
+  // the venue partly off-screen at the new one, e.g. panned near an edge
+  // then zoomed out below the point where that pan is still in-bounds.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- re-derives translate from the new scale + container size, not a plain render-time computation
+    setTranslate((t) => clampTranslate(t, scale));
+  }, [scale, clampTranslate]);
 
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 2) {
@@ -1095,6 +1121,8 @@ export function FloorPlan({
               setScale(1);
               setTranslate({ x: 0, y: 0 });
             }}
+            title="Fit Venue"
+            aria-label="Fit Venue"
             className="w-7 h-7 rounded-full border border-brown/30 hover:bg-brown/10 text-[10px]"
           >
             ⤾
@@ -1207,6 +1235,14 @@ export function FloorPlan({
             const fcx = gridX + f.gridW / 2;
             const fcy = gridY + f.gridH / 2;
             const isSelectedFeature = featureEditable && selectedFeatureId === f.id;
+            // "Landmarks as hero": on the vendor-facing read-only map (never
+            // in the admin editor, where every feature must stay equally
+            // legible/clickable for editing), an entrance gets a visually
+            // dominant treatment — a vendor orienting themselves on the
+            // venue map cares far more about "where do I walk in" than
+            // about the loading dock or a stairwell, so it should read at a
+            // glance, not require hunting for a small labeled box.
+            const isHeroFeature = !editable && f.type.startsWith("ENTRANCE");
             return (
               <g key={f.id} transform={rotation ? `rotate(${rotation} ${fcx} ${fcy})` : undefined}>
                 <rect
@@ -1214,9 +1250,10 @@ export function FloorPlan({
                   y={gridY}
                   width={f.gridW}
                   height={f.gridH}
-                  fill={backgroundImageUrl ? "rgba(227,217,204,0.75)" : "#E3D9CC"}
-                  stroke={isSelectedFeature ? "#2E7D32" : "#B79A7C"}
-                  strokeWidth={(isSelectedFeature ? 0.35 : 0.15) * unitScale}
+                  fill={isHeroFeature ? "#C9A050" : backgroundImageUrl ? "rgba(227,217,204,0.75)" : "#E3D9CC"}
+                  fillOpacity={isHeroFeature ? 0.9 : 1}
+                  stroke={isSelectedFeature ? "#2E7D32" : isHeroFeature ? "#8A5A38" : "#B79A7C"}
+                  strokeWidth={(isSelectedFeature ? 0.35 : isHeroFeature ? 0.3 : 0.15) * unitScale}
                   strokeDasharray={f.type.startsWith("ENTRANCE") ? `${unitScale} ${0.7 * unitScale}` : undefined}
                   style={featureEditable ? { cursor: "move", touchAction: "none" } : undefined}
                   onPointerDown={
@@ -1262,7 +1299,16 @@ export function FloorPlan({
                       : undefined
                   }
                 />
-                <text x={fcx} y={fcy} textAnchor="middle" dominantBaseline="middle" fontSize={2.2 * unitScale} fill="#6B4429" style={{ pointerEvents: "none" }}>
+                <text
+                  x={fcx}
+                  y={fcy}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize={(isHeroFeature ? 3.2 : 2.2) * unitScale}
+                  fontWeight={isHeroFeature ? 700 : 400}
+                  fill={isHeroFeature ? "#4A2E18" : "#6B4429"}
+                  style={{ pointerEvents: "none" }}
+                >
                   {f.label || featureLabel[f.type]}
                 </text>
                 {isSelectedFeature && (

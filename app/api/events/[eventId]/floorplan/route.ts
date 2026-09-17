@@ -34,13 +34,41 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ even
     prisma.floorPlanFeature.findMany({ where: { eventId } }),
     prisma.booth.findMany({ where: { eventId } }),
     getEventPricingTiers(eventId),
-    prisma.event.findUnique({ where: { id: eventId }, select: { floorPlanImageUrl: true, allowMultipleBooths: true } }),
+    prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        floorPlanImageUrl: true,
+        allowMultipleBooths: true,
+        venueScaleConfirmed: true,
+        venueWidthMm: true,
+        venueDepthMm: true,
+        venueBackgroundNaturalWidthPx: true,
+        venueBackgroundNaturalHeightPx: true,
+        venueBackgroundOffsetXMm: true,
+        venueBackgroundOffsetYMm: true,
+        venueBackgroundScale: true,
+        venueBackgroundRotationDeg: true,
+      },
+    }),
   ]);
 
   return NextResponse.json({
     features,
     floorPlanImageUrl: event?.floorPlanImageUrl ?? null,
     allowMultipleBooths: await getAllowMultipleBooths(event?.allowMultipleBooths ?? null),
+    // Real venue geometry (see lib/floorplan/transform.ts) — the same
+    // fields the admin builder and View Booking's Fit-Venue view use, now
+    // also reaching the vendor's own booth-selection map for the first
+    // time (previously LEGACY_PERCENT-only regardless of confirmed scale).
+    venueScaleConfirmed: event?.venueScaleConfirmed ?? false,
+    venueWidthMm: event?.venueWidthMm ?? null,
+    venueDepthMm: event?.venueDepthMm ?? null,
+    venueBackgroundNaturalWidthPx: event?.venueBackgroundNaturalWidthPx ?? null,
+    venueBackgroundNaturalHeightPx: event?.venueBackgroundNaturalHeightPx ?? null,
+    venueBackgroundOffsetXMm: event?.venueBackgroundOffsetXMm ?? null,
+    venueBackgroundOffsetYMm: event?.venueBackgroundOffsetYMm ?? null,
+    venueBackgroundScale: event?.venueBackgroundScale ?? null,
+    venueBackgroundRotationDeg: event?.venueBackgroundRotationDeg ?? 0,
     setupWidthMm: refreshed.setupWidthMm,
     setupDepthMm: refreshed.setupDepthMm,
     booths: booths.map((b) => ({

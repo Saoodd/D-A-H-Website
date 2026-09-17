@@ -16,6 +16,7 @@ import { Legend } from "@/components/floorplan/Legend";
 import type { FloorBooth, FloorFeature, SizeStyle } from "@/components/floorplan/types";
 import type { ApplicationView } from "@/lib/applicationView";
 import { checkMultiBoothFit, isProvablyAdjacent } from "@/lib/boothFit";
+import { getFloorplanViewBox, worldRectOf } from "@/lib/floorplan/transform";
 
 const SIZE_PALETTE = ["#C97C4B", "#8A5A38", "#D9A066", "#6B4429"];
 
@@ -33,6 +34,15 @@ interface FloorplanData {
   tiers: { sizeKey: string; label: string; priceAedFils: number; vatInclusive: boolean }[];
   floorPlanImageUrl: string | null;
   allowMultipleBooths: boolean;
+  venueScaleConfirmed: boolean;
+  venueWidthMm: number | null;
+  venueDepthMm: number | null;
+  venueBackgroundNaturalWidthPx: number | null;
+  venueBackgroundNaturalHeightPx: number | null;
+  venueBackgroundOffsetXMm: number | null;
+  venueBackgroundOffsetYMm: number | null;
+  venueBackgroundScale: number | null;
+  venueBackgroundRotationDeg: number;
 }
 
 export function ApplicationDetailClient({
@@ -144,6 +154,39 @@ export function ApplicationDetailClient({
   });
 
   const tierBySizeKey = useMemo(() => new Map((floorplan?.tiers || []).map((t) => [t.sizeKey, t])), [floorplan]);
+
+  // Real mm rendering (see lib/floorplan/transform.ts) — the same model the
+  // admin builder uses, now reaching both floor plans on this vendor page
+  // (booth selection below and the confirmed-booking map above) instead of
+  // the legacy 0-100 percentage square regardless of confirmed scale.
+  // Read-only here (nothing on this page writes geometry back), so unlike
+  // FloorPlanBuilder there's no reverse (worldPatchToServerPatch) direction
+  // needed — just this one display-normalization pass.
+  const viewBox = getFloorplanViewBox({
+    venueScaleConfirmed: floorplan?.venueScaleConfirmed ?? false,
+    venueWidthMm: floorplan?.venueWidthMm ?? null,
+    venueDepthMm: floorplan?.venueDepthMm ?? null,
+  });
+  const coordinateMode = viewBox.mode;
+  const venueSize = { venueWidthMm: floorplan?.venueWidthMm ?? 0, venueDepthMm: floorplan?.venueDepthMm ?? 0 };
+  const backgroundAlignment = {
+    naturalWidthPx: floorplan?.venueBackgroundNaturalWidthPx ?? null,
+    naturalHeightPx: floorplan?.venueBackgroundNaturalHeightPx ?? null,
+    offsetXMm: floorplan?.venueBackgroundOffsetXMm ?? null,
+    offsetYMm: floorplan?.venueBackgroundOffsetYMm ?? null,
+    scale: floorplan?.venueBackgroundScale ?? null,
+    rotationDeg: floorplan?.venueBackgroundRotationDeg ?? 0,
+  };
+  const displayBooths = useMemo(
+    () => (floorplan?.booths ?? []).map((b) => ({ ...b, ...(() => { const r = worldRectOf(b, coordinateMode, venueSize); return { gridX: r.x, gridY: r.y, gridW: r.w, gridH: r.h }; })() })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- venueSize is a fresh object literal every render; depending on its primitive fields (already listed) is equivalent and avoids invalidating this memo every render
+    [floorplan?.booths, coordinateMode, venueSize.venueWidthMm, venueSize.venueDepthMm]
+  );
+  const displayFeatures = useMemo(
+    () => (floorplan?.features ?? []).map((f) => ({ ...f, ...(() => { const r = worldRectOf(f, coordinateMode, venueSize); return { gridX: r.x, gridY: r.y, gridW: r.w, gridH: r.h }; })() })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- venueSize is a fresh object literal every render; depending on its primitive fields (already listed) is equivalent and avoids invalidating this memo every render
+    [floorplan?.features, coordinateMode, venueSize.venueWidthMm, venueSize.venueDepthMm]
+  );
 
   function boothLine(code: string) {
     const raw = floorplan?.booths.find((b) => b.id === view.boothHolds.find((h) => h.code === code)?.boothId || b.code === code);
@@ -462,6 +505,9 @@ export function ApplicationDetailClient({
                     tiers={floorplan.tiers}
                     sizeStyles={sizeStyles}
                     backgroundImageUrl={floorplan.floorPlanImageUrl}
+                    viewBox={viewBox}
+                    coordinateMode={coordinateMode}
+                    backgroundAlignment={backgroundAlignment}
                     excludeIds={stagedBooths.map((b) => b.id)}
                     confirmLabel={multiMode ? () => (isAr ? "إضافة هذا الكشك" : "Add This Booth") : undefined}
                     onConfirmBooth={setPendingBooth}
@@ -637,8 +683,8 @@ export function ApplicationDetailClient({
                 </div>
               </div>
               <FloorPlan
-                features={floorplan.features}
-                booths={floorplan.booths}
+                features={displayFeatures}
+                booths={displayBooths}
                 sizeStyles={sizeStyles}
                 backgroundImageUrl={floorplan.floorPlanImageUrl}
                 interactive
@@ -647,6 +693,9 @@ export function ApplicationDetailClient({
                 focusNonce={mapFocusNonce}
                 groupFocusNonce={mapGroupFocusNonce}
                 fitViewNonce={mapFitViewNonce}
+                viewBox={viewBox}
+                coordinateMode={coordinateMode}
+                backgroundAlignment={backgroundAlignment}
               />
               <Legend sizeStyles={sizeStyles} showMineKey />
               <div className="mt-4 grid sm:grid-cols-2 gap-4 text-sm">

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { FloorPlan } from "@/components/floorplan/FloorPlan";
 import { Legend } from "@/components/floorplan/Legend";
 import type { FloorFeature, FloorBooth, SizeStyle } from "@/components/floorplan/types";
+import { worldRectOf, type BackgroundAlignment, type FloorplanMode } from "@/lib/floorplan/transform";
 
 interface Tier {
   sizeKey: string;
@@ -52,6 +53,9 @@ export function BoothSelector({
   sizeStyles,
   backgroundImageUrl,
   venueWidthM,
+  viewBox,
+  coordinateMode = "LEGACY_PERCENT",
+  backgroundAlignment,
   onConfirmBooth,
   onBoothBecameUnavailable,
   excludeIds = [],
@@ -63,6 +67,11 @@ export function BoothSelector({
   sizeStyles: Record<string, SizeStyle>;
   backgroundImageUrl: string | null;
   venueWidthM?: number | null;
+  /** Real venue geometry (see lib/floorplan/transform.ts) — omit to keep the
+   *  legacy 0-100 percentage square exactly as before. */
+  viewBox?: { width: number; height: number };
+  coordinateMode?: FloorplanMode;
+  backgroundAlignment?: BackgroundAlignment | null;
   onConfirmBooth: (booth: FloorBooth) => void;
   /** Fires once if the vendor's current browsing selection is taken by
    *  someone else (or otherwise stops being available) while they're still
@@ -123,6 +132,22 @@ export function BoothSelector({
 
   const tierBySizeKey = useMemo(() => new Map(tiers.map((t) => [t.sizeKey, t])), [tiers]);
 
+  // Real mm rendering for the map pane only — the list above never reads
+  // geometry, so `booths`/`features` themselves stay untouched. Read-only:
+  // nothing here writes geometry back, so there's no reverse translation
+  // needed (contrast FloorPlanBuilder's patchBoothRaw).
+  const venueSize = { venueWidthMm: viewBox?.width ?? 0, venueDepthMm: viewBox?.height ?? 0 };
+  const displayBooths = useMemo(
+    () => booths.map((b) => ({ ...b, ...(() => { const r = worldRectOf(b, coordinateMode, venueSize); return { gridX: r.x, gridY: r.y, gridW: r.w, gridH: r.h }; })() })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- venueSize is a fresh object literal every render; depending on its primitive fields (already listed) is equivalent and avoids invalidating this memo every render
+    [booths, coordinateMode, venueSize.venueWidthMm, venueSize.venueDepthMm]
+  );
+  const displayFeatures = useMemo(
+    () => features.map((f) => ({ ...f, ...(() => { const r = worldRectOf(f, coordinateMode, venueSize); return { gridX: r.x, gridY: r.y, gridW: r.w, gridH: r.h }; })() })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- venueSize is a fresh object literal every render; depending on its primitive fields (already listed) is equivalent and avoids invalidating this memo every render
+    [features, coordinateMode, venueSize.venueWidthMm, venueSize.venueDepthMm]
+  );
+
   const isExcluded = (id: string) => excludeIds.includes(id);
 
   const filteredBooths = useMemo(() => {
@@ -159,8 +184,8 @@ export function BoothSelector({
   const mapPane = (
     <div>
       <FloorPlan
-        features={features}
-        booths={booths}
+        features={displayFeatures}
+        booths={displayBooths}
         sizeStyles={sizeStyles}
         backgroundImageUrl={backgroundImageUrl}
         venueWidthM={venueWidthM}
@@ -170,6 +195,9 @@ export function BoothSelector({
         onHoverBooth={setMapHoverId}
         focusBoothId={selectedId}
         focusNonce={focusNonce}
+        viewBox={viewBox}
+        coordinateMode={coordinateMode}
+        backgroundAlignment={backgroundAlignment}
       />
       <Legend sizeStyles={sizeStyles} />
     </div>
