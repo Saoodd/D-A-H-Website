@@ -66,47 +66,65 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
   if (outcome === "SUCCEEDED") {
     const soldAt = new Date();
     const boothIds = booths.map((b) => b.id);
-    // Same TOCTOU concern as the booth-hold route: guard the actual write
-    // with the condition just re-checked above (still held by this
-    // application, in the PAYMENT stage) so a double-submit or a race with
-    // an expiry sweep can't sell a booth twice or out from under the hold.
-    // Checking `sale.count === boothIds.length` (not just > 0) is what
-    // keeps a multi-booth sale all-or-nothing — if even one booth's row
-    // no longer matches, NONE of them are marked sold here, and the
-    // payment is simply failed rather than left half-applied.
-    const sale = await prisma.booth.updateMany({
-      where: { id: { in: boothIds }, heldByApplicationId: applicationId, holdStage: "PAYMENT" },
-      data: {
-        status: "SOLD",
-        assignedApplicationId: applicationId,
-        heldByApplicationId: null,
-        holdStage: null,
-        holdExpiresAt: null,
-        soldAt,
-      },
-    });
-    if (sale.count !== boothIds.length) {
+    // Every write that makes up "this booking is genuinely confirmed" —
+    // booths SOLD, their sale-price snapshot, the payment itself marked
+    // SUCCEEDED, the now-irrelevant acceptance deadline cleared, and the
+    // receipt number assigned — happens in ONE transaction. Previously
+    // these were five sequential top-level writes; a crash partway through
+    // (e.g. after booths were marked SOLD but before Payment flipped to
+    // SUCCEEDED) could leave a booth permanently unavailable to everyone
+    // else while its own payment still read PENDING — exactly the kind of
+    // desync this booking system's other invariants (getDisplayStatus,
+    // expireStaleAcceptances) assume can never happen. Same TOCTOU guard as
+    // before: the updateMany's WHERE re-checks still-held-by-this-
+    // application + PAYMENT stage, and `sale.count === boothIds.length`
+    // keeps a multi-booth sale all-or-nothing — a mismatch throws to roll
+    // back the ENTIRE transaction (payment included), not just the booths.
+    const txResult = await prisma
+      .$transaction(async (tx) => {
+        const sale = await tx.booth.updateMany({
+          where: { id: { in: boothIds }, heldByApplicationId: applicationId, holdStage: "PAYMENT" },
+          data: {
+            status: "SOLD",
+            assignedApplicationId: applicationId,
+            heldByApplicationId: null,
+            holdStage: null,
+            holdExpiresAt: null,
+            soldAt,
+          },
+        });
+        if (sale.count !== boothIds.length) {
+          throw new Error("BOOTH_HOLD_CHANGED");
+        }
+        // priceAedFilsAtSale is per-booth (unlike the shared soldAt/status
+        // above) — set individually from each PaymentBooth's own charged price.
+        await Promise.all(
+          paymentBooths.map((pb) => tx.booth.update({ where: { id: pb.boothId }, data: { priceAedFilsAtSale: pb.priceAedFilsAtCharge } }))
+        );
+        await tx.payment.update({ where: { id: paymentId }, data: { status: "SUCCEEDED", paidAt: soldAt } });
+        // The acceptance deadline's only job was to force a timely payment —
+        // now that payment has genuinely succeeded, clear it so this booking
+        // can never later be caught and flipped to ACCEPTANCE_EXPIRED by
+        // lib/expiry.ts's sweep just because wall-clock time passed the
+        // original (now irrelevant) deadline. application.status itself stays
+        // "ACCEPTED" — there is no separate "CONFIRMED" status; getDisplayStatus()
+        // already derives "PAID" from ACCEPTED + a succeeded payment.
+        await tx.application.update({ where: { id: applicationId }, data: { acceptanceExpiresAt: null } });
+        const receiptNumber = await assignReceiptNumber(paymentId, soldAt, tx);
+        return { receiptNumber };
+      })
+      .catch((err) => {
+        if (err instanceof Error && err.message === "BOOTH_HOLD_CHANGED") return null;
+        throw err;
+      });
+
+    if (!txResult) {
       await prisma.payment.update({ where: { id: paymentId }, data: { status: "FAILED" } });
       return NextResponse.json(
         { error: "Your payment session expired. Please select a booth again." },
         { status: 409 }
       );
     }
-    // priceAedFilsAtSale is per-booth (unlike the shared soldAt/status
-    // above) — set individually from each PaymentBooth's own charged price.
-    await Promise.all(
-      paymentBooths.map((pb) => prisma.booth.update({ where: { id: pb.boothId }, data: { priceAedFilsAtSale: pb.priceAedFilsAtCharge } }))
-    );
-    await prisma.payment.update({ where: { id: paymentId }, data: { status: "SUCCEEDED", paidAt: soldAt } });
-    // The acceptance deadline's only job was to force a timely payment —
-    // now that payment has genuinely succeeded, clear it so this booking
-    // can never later be caught and flipped to ACCEPTANCE_EXPIRED by
-    // lib/expiry.ts's sweep just because wall-clock time passed the
-    // original (now irrelevant) deadline. application.status itself stays
-    // "ACCEPTED" — there is no separate "CONFIRMED" status; getDisplayStatus()
-    // already derives "PAID" from ACCEPTED + a succeeded payment.
-    await prisma.application.update({ where: { id: applicationId }, data: { acceptanceExpiresAt: null } });
-    await assignReceiptNumber(paymentId, soldAt);
 
     // getReceiptData is the same authoritative source the vendor's own
     // printable receipt uses — the email can never show different numbers

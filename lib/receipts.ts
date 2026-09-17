@@ -1,22 +1,29 @@
 import "server-only";
+import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { splitVatInclusiveTotal, formatBoothCodes } from "./constants";
+
+type Db = typeof prisma | Prisma.TransactionClient;
 
 /** Assigns this payment its permanent receipt number, the moment it
  *  actually succeeds — never before, never again. nextval() on a Postgres
  *  sequence is atomic under concurrent successful payments, so two
  *  vendors paying at the same instant can never collide on one number.
  *  Idempotent: if this payment already has one (e.g. a retried request),
- *  it's returned unchanged rather than burning another sequence value. */
-export async function assignReceiptNumber(paymentId: string, paidAt: Date): Promise<string> {
-  const existing = await prisma.payment.findUnique({ where: { id: paymentId }, select: { receiptNumber: true } });
+ *  it's returned unchanged rather than burning another sequence value.
+ *  Accepts an optional transaction client so a caller (checkout/confirm)
+ *  can assign the receipt number atomically alongside the booth-sold and
+ *  payment-succeeded writes it belongs with — defaults to the top-level
+ *  client for any caller that doesn't need that. */
+export async function assignReceiptNumber(paymentId: string, paidAt: Date, db: Db = prisma): Promise<string> {
+  const existing = await db.payment.findUnique({ where: { id: paymentId }, select: { receiptNumber: true } });
   if (existing?.receiptNumber) return existing.receiptNumber;
 
-  const rows = await prisma.$queryRawUnsafe<{ nextval: string | bigint }[]>(`SELECT nextval('"ReceiptNumberSeq"') as nextval`);
+  const rows = await db.$queryRawUnsafe<{ nextval: string | bigint }[]>(`SELECT nextval('"ReceiptNumberSeq"') as nextval`);
   const seq = String(rows[0].nextval);
   const receiptNumber = `DAH-RCP-${paidAt.getFullYear()}-${seq.padStart(6, "0")}`;
 
-  await prisma.payment.update({ where: { id: paymentId }, data: { receiptNumber } });
+  await db.payment.update({ where: { id: paymentId }, data: { receiptNumber } });
   return receiptNumber;
 }
 
