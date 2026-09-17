@@ -58,6 +58,9 @@ export default async function AdminEventsPage() {
                 </div>
                 <div className="flex items-center gap-4 text-xs text-brown-light flex-wrap">
                   <StatusBadge label={e.status} tone={statusTone[e.status] ?? "neutral"} />
+                  {!e.venueScaleConfirmed && e.booths.length > 0 && (
+                    <StatusBadge label="Scale Needs Configuration" tone="attention" />
+                  )}
                   <span>
                     {sold.length}/{e.booths.length} booths ({occupancyPct}%)
                   </span>
