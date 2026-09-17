@@ -61,14 +61,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
   }
   const totalAedFils = priced.reduce((sum, p) => sum + p.priceAedFils, 0);
 
-  const holdExpiresAt = new Date(Date.now() + BOOTH_PAYMENT_HOLD_MINUTES * 60 * 1000);
-  await prisma.booth.updateMany({
-    where: { id: { in: booths.map((b) => b.id) } },
-    data: { holdStage: "PAYMENT", holdExpiresAt },
-  });
-
   const gateway = getGateway();
   const boothCodes = priced.map((p) => p.code).join(" + ");
+  // The gateway call is external I/O and must never happen inside a DB
+  // transaction (it would hold a connection open for the network round
+  // trip) — so it runs first, standalone. The REVIEW->PAYMENT stage
+  // transition and the Payment row that records the resulting charge are
+  // then written together in one transaction: previously these were two
+  // separate writes, so a crash between them could leave a booth stuck in
+  // holdStage "PAYMENT" with no corresponding Payment row (harmless — it
+  // just sits until the 5-minute hold expires and releases — but not
+  // atomic). The updateMany's WHERE re-asserts the exact state this route
+  // already confirmed (HELD + still held by this application), the same
+  // race-safe guard pattern used everywhere else a booth's stage changes;
+  // a mismatched count rolls back the whole transaction rather than
+  // silently proceeding with a stale set of booths.
+  const holdExpiresAt = new Date(Date.now() + BOOTH_PAYMENT_HOLD_MINUTES * 60 * 1000);
   const charge = await gateway.createCharge({
     amountAedFils: totalAedFils,
     currency: "AED",
@@ -79,21 +87,38 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
     description: `Booth ${boothCodes} — ${application.eventId}`,
   });
 
-  const payment = await prisma.payment.create({
-    data: {
-      applicationId,
-      eventId: application.eventId,
-      boothId: priced[0].boothId,
-      amountAedFils: totalAedFils,
-      currency: "AED",
-      status: "PENDING",
-      provider: gateway.name,
-      providerRef: charge.providerRef,
-      booths: {
-        create: priced.map((p) => ({ boothId: p.boothId, priceAedFilsAtCharge: p.priceAedFils })),
+  const boothIds = booths.map((b) => b.id);
+  const payment = await prisma.$transaction(async (tx) => {
+    const staged = await tx.booth.updateMany({
+      where: { id: { in: boothIds }, heldByApplicationId: applicationId, status: "HELD", holdStage: "REVIEW" },
+      data: { holdStage: "PAYMENT", holdExpiresAt },
+    });
+    if (staged.count !== boothIds.length) {
+      throw new Error("BOOTH_HOLD_CHANGED");
+    }
+    return tx.payment.create({
+      data: {
+        applicationId,
+        eventId: application.eventId,
+        boothId: priced[0].boothId,
+        amountAedFils: totalAedFils,
+        currency: "AED",
+        status: "PENDING",
+        provider: gateway.name,
+        providerRef: charge.providerRef,
+        booths: {
+          create: priced.map((p) => ({ boothId: p.boothId, priceAedFilsAtCharge: p.priceAedFils })),
+        },
       },
-    },
+    });
+  }).catch((err) => {
+    if (err instanceof Error && err.message === "BOOTH_HOLD_CHANGED") return null;
+    throw err;
   });
+
+  if (!payment) {
+    return NextResponse.json({ error: "Your booth hold changed — please select a booth again." }, { status: 409 });
+  }
 
   return NextResponse.json({
     paymentId: payment.id,
