@@ -119,6 +119,21 @@ export function FloorPlanBuilder({
   const [bgLocked, setBgLocked] = useState(initialVenueBackgroundLocked ?? false);
   const [backgroundEditorOpen, setBackgroundEditorOpen] = useState(false);
 
+  // Floor Plan Setup Wizard shell: sequences the steps above (Source,
+  // Physical Scale, Venue Boundary, Background Alignment, Booths) plus a
+  // Review step, instead of leaving an admin to discover the toolbar
+  // controls unprompted. It drives the SAME state/handlers as the toolbar
+  // (scaleWidthInput/saveScale, boundaryEditorOpen, backgroundEditorOpen,
+  // uploadFloorPlanImage) rather than duplicating any logic — it's a guided
+  // front door onto the existing panels, not a second implementation of
+  // them. Auto-opens for any event that hasn't confirmed its physical scale
+  // yet (the one step the publish gate actually enforces server-side, see
+  // PATCH /api/admin/events/[id]); always reachable afterward via the
+  // "Setup Wizard" link in the toolbar for revisiting/adjusting.
+  const WIZARD_STEPS = ["Source", "Physical Scale", "Venue Boundary", "Background", "Booths", "Review"] as const;
+  const [wizardOpen, setWizardOpen] = useState(!initialVenueScaleConfirmed);
+  const [wizardStep, setWizardStep] = useState(0);
+
   const viewBox = getFloorplanViewBox({
     venueScaleConfirmed: venueScaleConfirmedState,
     venueWidthMm: venueWidthMmState,
@@ -241,6 +256,17 @@ export function FloorPlanBuilder({
       // localStorage unavailable — keep defaults
     }
   }, []);
+
+  // Auto-advance the wizard's mandatory Physical Scale step the moment
+  // scale actually gets confirmed (via saveScale(true) below), whichever UI
+  // triggered it — reactive on the state saveScale already sets, rather
+  // than threading a success callback through it.
+  useEffect(() => {
+    if (wizardOpen && wizardStep === 1 && venueScaleConfirmedState) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reacting to scale confirmation to auto-advance the wizard step, not an initial sync
+      setWizardStep(2);
+    }
+  }, [venueScaleConfirmedState, wizardOpen, wizardStep]);
 
   function toggleSmartGuides() {
     setSmartGuidesEnabled((v) => {
@@ -1156,6 +1182,216 @@ export function FloorPlanBuilder({
         </div>
       )}
 
+      {wizardOpen ? (
+        <div className="mb-4 rounded-[10px] border border-brown/15 bg-cream p-5">
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+            <p className="label-caps">Floor Plan Setup Wizard</p>
+            <button type="button" onClick={() => setWizardOpen(false)} className="text-xs text-brown-light underline">
+              Close (use toolbar directly)
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5 mb-5">
+            {WIZARD_STEPS.map((label, i) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setWizardStep(i)}
+                className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                  i === wizardStep
+                    ? "bg-brown text-cream-soft border-brown"
+                    : i < wizardStep || (i === 1 ? venueScaleConfirmedState : true)
+                      ? "border-brown/25 text-brown-light hover:text-brown-dark"
+                      : "border-brown/10 text-brown-light/50"
+                }`}
+              >
+                {i + 1}. {label}
+              </button>
+            ))}
+          </div>
+
+          {wizardStep === 0 && (
+            <div className="max-w-md">
+              <p className="text-sm text-brown-dark mb-1">Source</p>
+              <p className="text-xs text-brown-light mb-3">
+                Upload a reference image of the venue (a CAD export, a blueprint photo, an existing map) to trace booths against — optional, you can also build the floor plan from scratch.
+              </p>
+              <div className="flex items-center gap-3">
+                <label className="px-3 py-1.5 rounded-[6px] border border-brown/25 text-xs cursor-pointer hover:bg-brown hover:text-cream-soft transition-colors">
+                  {uploadingImage ? "Uploading…" : floorPlanImageUrl ? "Replace image" : "Upload image"}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    className="hidden"
+                    disabled={uploadingImage}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (file) uploadFloorPlanImage(file);
+                    }}
+                  />
+                </label>
+                {floorPlanImageUrl && <span className="text-xs text-emerald-800">Image uploaded ✓</span>}
+              </div>
+            </div>
+          )}
+
+          {wizardStep === 1 && (
+            <div className="max-w-md">
+              <p className="text-sm text-brown-dark mb-1">Physical Scale — required to publish</p>
+              <p className="text-xs text-brown-light mb-3">
+                The venue&apos;s real width and depth, in meters. Every booth&apos;s position and size on the canvas is derived from this — it&apos;s what makes the floor plan mathematically accurate instead of a rough sketch.
+              </p>
+              <div className="flex items-center gap-1.5 text-xs mb-2">
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  placeholder="Width (m)"
+                  value={scaleWidthInput}
+                  onChange={(e) => setScaleWidthInput(e.target.value)}
+                  className="w-24 border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft"
+                />
+                <span className="text-brown-light">×</span>
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  placeholder="Depth (m)"
+                  value={scaleDepthInput}
+                  onChange={(e) => setScaleDepthInput(e.target.value)}
+                  className="w-24 border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft"
+                />
+              </div>
+              {venueScaleConfirmedState ? (
+                <p className="text-xs text-emerald-800">Confirmed: {(venueWidthMmState! / 1000).toFixed(1)}m × {(venueDepthMmState! / 1000).toFixed(1)}m ✓</p>
+              ) : (
+                <button type="button" disabled={scaleBusy} onClick={() => saveScale(true)} className="px-3 py-1.5 rounded-lg bg-brown text-cream-soft text-xs disabled:opacity-50">
+                  Confirm scale &amp; continue
+                </button>
+              )}
+            </div>
+          )}
+
+          {wizardStep === 2 && (
+            <div className="max-w-md">
+              <p className="text-sm text-brown-dark mb-1">Venue Boundary</p>
+              <p className="text-xs text-brown-light mb-3">
+                Defaults to a rectangle matching the physical scale above. Customize it if the venue is an L-shape, circle, oval, or other polygon, so booths placed outside the real usable floor get flagged.
+              </p>
+              {coordinateMode !== "MM" ? (
+                <p className="text-xs text-amber-800">Confirm Physical Scale first (previous step).</p>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={() => setBoundaryEditorOpen(true)} className="px-3 py-1.5 rounded-lg border border-brown/25 text-xs hover:bg-brown hover:text-cream-soft transition-colors">
+                    Customize boundary
+                  </button>
+                  <span className="text-xs text-brown-light">
+                    Current: {venueShapeState === "RECTANGLE" ? "rectangle (default)" : venueShapeState.toLowerCase()}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {wizardStep === 3 && (
+            <div className="max-w-md">
+              <p className="text-sm text-brown-dark mb-1">Background Alignment</p>
+              {!floorPlanImageUrl ? (
+                <p className="text-xs text-brown-light">No reference image was uploaded in Source — nothing to align. Skip ahead.</p>
+              ) : coordinateMode !== "MM" ? (
+                <p className="text-xs text-amber-800">Confirm Physical Scale first.</p>
+              ) : (
+                <>
+                  <p className="text-xs text-brown-light mb-3">
+                    Position, scale and rotate the uploaded image so it lines up with the real venue dimensions — or use two-point calibration against a known real-world distance in the image.
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <button type="button" onClick={() => setBackgroundEditorOpen(true)} className="px-3 py-1.5 rounded-lg border border-brown/25 text-xs hover:bg-brown hover:text-cream-soft transition-colors">
+                      Align background
+                    </button>
+                    <span className="text-xs text-brown-light">{bgNaturalWidthPx ? "Aligned ✓" : "Not aligned yet"}</span>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {wizardStep === 4 && (
+            <div className="max-w-md">
+              <p className="text-sm text-brown-dark mb-1">Booths</p>
+              <p className="text-xs text-brown-light mb-3">
+                Add booths one at a time by clicking the canvas, in bulk with Mass Create (a numbered run like B1→B67), or by importing a DXF/CAD export. All three are below the canvas once this wizard closes.
+              </p>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAdvanced(true);
+                    setMassCreateOpen(true);
+                    setWizardOpen(false);
+                    requestAnimationFrame(() => document.getElementById("booth-tools-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-brown/25 text-xs hover:bg-brown hover:text-cream-soft transition-colors"
+                >
+                  Open booth tools
+                </button>
+                <span className="text-xs text-brown-light">{booths.length} booth{booths.length === 1 ? "" : "s"} so far</span>
+              </div>
+            </div>
+          )}
+
+          {wizardStep === 5 && (
+            <div className="max-w-md">
+              <p className="text-sm text-brown-dark mb-3">Review</p>
+              <ul className="text-xs text-brown-light space-y-1.5 mb-4">
+                <li>
+                  Physical scale:{" "}
+                  {venueScaleConfirmedState ? (
+                    <span className="text-emerald-800">{(venueWidthMmState! / 1000).toFixed(1)}m × {(venueDepthMmState! / 1000).toFixed(1)}m confirmed ✓</span>
+                  ) : (
+                    <span className="text-amber-800">not confirmed — required before this event can publish</span>
+                  )}
+                </li>
+                <li>Venue boundary: {venueShapeState === "RECTANGLE" ? "rectangle (default)" : venueShapeState.toLowerCase()}</li>
+                <li>Background image: {floorPlanImageUrl ? (bgNaturalWidthPx ? "uploaded and aligned" : "uploaded, not aligned") : "none"}</li>
+                <li>Booths placed: {booths.length}</li>
+              </ul>
+              <button type="button" onClick={() => setWizardOpen(false)} className="px-4 py-2 rounded-[6px] bg-brown text-cream-soft text-sm">
+                Finish setup
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 mt-5 pt-4 border-t border-brown/10">
+            <button
+              type="button"
+              disabled={wizardStep === 0}
+              onClick={() => setWizardStep((s) => Math.max(0, s - 1))}
+              className="px-3 py-1.5 rounded-lg border border-brown/25 text-xs disabled:opacity-30"
+            >
+              Back
+            </button>
+            {wizardStep < WIZARD_STEPS.length - 1 && (
+              <button
+                type="button"
+                disabled={wizardStep === 1 && !venueScaleConfirmedState}
+                onClick={() => setWizardStep((s) => Math.min(WIZARD_STEPS.length - 1, s + 1))}
+                className="px-3 py-1.5 rounded-lg border border-brown/25 text-xs disabled:opacity-30"
+              >
+                {wizardStep === 1 ? "Continue" : "Skip / Continue"}
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="mb-2">
+          <button type="button" onClick={() => { setWizardOpen(true); setWizardStep(0); }} className="text-xs text-brown-light underline">
+            Open Setup Wizard
+          </button>
+        </div>
+      )}
+
       {/* Compact top toolbar — upload, undo/redo, guide toggles. Booth
           creation and the selection inspector live in the right-hand panel
           below, instead of stacked as forms above/below the canvas. */}
@@ -1381,7 +1617,7 @@ export function FloorPlanBuilder({
           />
           <Legend sizeStyles={sizeStyles} />
 
-          <div className="mt-8">
+          <div id="booth-tools-anchor" className="mt-8">
             <button type="button" onClick={() => setShowAdvanced((v) => !v)} className="text-xs text-brown-light underline">
               {showAdvanced ? "Hide advanced tools" : "Advanced: add structural features / bulk-import booths"}
             </button>
