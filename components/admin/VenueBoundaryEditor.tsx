@@ -339,8 +339,20 @@ export function VenueBoundaryEditor({ eventId, venueWidthMm, venueDepthMm, initi
                 <input type="number" step="0.1" value={mm(boundary.cy)} onChange={(e) => updateNumeric({ cy: Number(e.target.value) * 1000 })} className="w-20 border border-brown/20 rounded px-1.5 py-1 bg-cream-soft" />
               </label>
               <label className="flex items-center gap-1">
-                Radius (m)
-                <input type="number" step="0.1" min="0.1" value={mm(boundary.r)} onChange={(e) => updateNumeric({ r: Math.max(100, Number(e.target.value) * 1000) })} className="w-20 border border-brown/20 rounded px-1.5 py-1 bg-cream-soft" />
+                Diameter (m)
+                {/* Human-facing field is diameter — easier to reason about
+                    when you know the physical venue size than radius. The
+                    model/server (VenueBoundary { shape: "CIRCLE", r }) keep
+                    storing radius internally; this is purely a display/input
+                    conversion (diameter = r * 2), never a schema change. */}
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.2"
+                  value={mm(boundary.r * 2)}
+                  onChange={(e) => updateNumeric({ r: Math.max(100, (Number(e.target.value) * 1000) / 2) })}
+                  className="w-20 border border-brown/20 rounded px-1.5 py-1 bg-cream-soft"
+                />
               </label>
             </div>
           )}

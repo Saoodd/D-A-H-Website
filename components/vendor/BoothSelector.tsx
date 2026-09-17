@@ -56,6 +56,8 @@ export function BoothSelector({
   viewBox,
   coordinateMode = "LEGACY_PERCENT",
   backgroundAlignment,
+  venueShape,
+  venueBoundaryJson,
   onConfirmBooth,
   onBoothBecameUnavailable,
   excludeIds = [],
@@ -72,6 +74,11 @@ export function BoothSelector({
   viewBox?: { width: number; height: number };
   coordinateMode?: FloorplanMode;
   backgroundAlignment?: BackgroundAlignment | null;
+  /** Event.venueShape/venueBoundaryJson (see lib/floorplan/boundary.ts) —
+   *  passed straight through to the shared FloorPlan canvas so a vendor
+   *  sees the same venue boundary framing the admin configured. */
+  venueShape?: string | null;
+  venueBoundaryJson?: string | null;
   onConfirmBooth: (booth: FloorBooth) => void;
   /** Fires once if the vendor's current browsing selection is taken by
    *  someone else (or otherwise stops being available) while they're still
@@ -198,6 +205,8 @@ export function BoothSelector({
         viewBox={viewBox}
         coordinateMode={coordinateMode}
         backgroundAlignment={backgroundAlignment}
+        venueShape={venueShape}
+        venueBoundaryJson={venueBoundaryJson}
       />
       <Legend sizeStyles={sizeStyles} />
     </div>

@@ -165,6 +165,34 @@ export function parseVenueBoundary(shape: string | null | undefined, boundaryJso
   return { shape: "RECTANGLE" };
 }
 
+/** The axis-aligned bounding box of `boundary`'s OWN shape within the
+ *  venue's mm coordinate space — NOT the venue's rectangular coordinate box
+ *  (venueWidthMm x venueDepthMm), which is always the superset. Used by
+ *  "Fit Venue" so a circular/oval/polygon venue frames its actual usable
+ *  shape instead of the (possibly much larger) enclosing coordinate square
+ *  — see requirement: never fit an invisible coordinate box when the real
+ *  venue is smaller or differently shaped. */
+export function boundaryExtentMm(
+  boundary: VenueBoundary,
+  venueWidthMm: number,
+  venueDepthMm: number
+): { minX: number; minY: number; maxX: number; maxY: number } {
+  switch (boundary.shape) {
+    case "RECTANGLE":
+      return { minX: 0, minY: 0, maxX: venueWidthMm, maxY: venueDepthMm };
+    case "CIRCLE":
+      return { minX: boundary.cx - boundary.r, minY: boundary.cy - boundary.r, maxX: boundary.cx + boundary.r, maxY: boundary.cy + boundary.r };
+    case "OVAL":
+      return { minX: boundary.cx - boundary.rx, minY: boundary.cy - boundary.ry, maxX: boundary.cx + boundary.rx, maxY: boundary.cy + boundary.ry };
+    case "POLYGON": {
+      if (boundary.points.length === 0) return { minX: 0, minY: 0, maxX: venueWidthMm, maxY: venueDepthMm };
+      const xs = boundary.points.map((p) => p.x);
+      const ys = boundary.points.map((p) => p.y);
+      return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
+    }
+  }
+}
+
 export function serializeVenueBoundary(boundary: VenueBoundary): string | null {
   if (boundary.shape === "RECTANGLE") return null;
   if (boundary.shape === "CIRCLE") return JSON.stringify({ cx: boundary.cx, cy: boundary.cy, r: boundary.r });

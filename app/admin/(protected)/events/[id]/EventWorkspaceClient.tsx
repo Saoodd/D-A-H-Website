@@ -205,6 +205,8 @@ export function EventWorkspaceClient({
           venueDepthMm={floorPlanProps.venueDepthMm}
           venueScaleConfirmed={floorPlanProps.venueScaleConfirmed}
           tiers={floorPlanProps.tiers}
+          venueShape={floorPlanProps.venueShape}
+          venueBoundaryJson={floorPlanProps.venueBoundaryJson}
         />
       )}
 

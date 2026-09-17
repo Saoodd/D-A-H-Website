@@ -48,6 +48,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ even
         venueBackgroundOffsetYMm: true,
         venueBackgroundScale: true,
         venueBackgroundRotationDeg: true,
+        venueShape: true,
+        venueBoundaryJson: true,
       },
     }),
   ]);
@@ -69,6 +71,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ even
     venueBackgroundOffsetYMm: event?.venueBackgroundOffsetYMm ?? null,
     venueBackgroundScale: event?.venueBackgroundScale ?? null,
     venueBackgroundRotationDeg: event?.venueBackgroundRotationDeg ?? 0,
+    // Venue boundary shape (see lib/floorplan/boundary.ts) — the actual
+    // usable footprint, rendered by the shared FloorPlan canvas as an
+    // overlay/mask so a vendor sees the same boundary the admin configured,
+    // not just a plain rectangle regardless of shape.
+    venueShape: event?.venueShape ?? "RECTANGLE",
+    venueBoundaryJson: event?.venueBoundaryJson ?? null,
     setupWidthMm: refreshed.setupWidthMm,
     setupDepthMm: refreshed.setupDepthMm,
     booths: booths.map((b) => ({

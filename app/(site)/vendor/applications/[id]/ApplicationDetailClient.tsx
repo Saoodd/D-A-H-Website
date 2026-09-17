@@ -43,6 +43,8 @@ interface FloorplanData {
   venueBackgroundOffsetYMm: number | null;
   venueBackgroundScale: number | null;
   venueBackgroundRotationDeg: number;
+  venueShape?: string | null;
+  venueBoundaryJson?: string | null;
 }
 
 export function ApplicationDetailClient({
@@ -484,6 +486,8 @@ export function ApplicationDetailClient({
                     viewBox={viewBox}
                     coordinateMode={coordinateMode}
                     backgroundAlignment={backgroundAlignment}
+                    venueShape={floorplan.venueShape}
+                    venueBoundaryJson={floorplan.venueBoundaryJson}
                     excludeIds={stagedBooths.map((b) => b.id)}
                     confirmLabel={multiMode ? () => (isAr ? "إضافة هذا الكشك" : "Add This Booth") : undefined}
                     onConfirmBooth={setPendingBooth}
@@ -666,6 +670,8 @@ export function ApplicationDetailClient({
                 viewBox={viewBox}
                 coordinateMode={coordinateMode}
                 backgroundAlignment={backgroundAlignment}
+                venueShape={floorplan.venueShape}
+                venueBoundaryJson={floorplan.venueBoundaryJson}
               />
               <Legend sizeStyles={sizeStyles} showMineKey />
               <div className="mt-4 grid sm:grid-cols-2 gap-4 text-sm">

@@ -45,6 +45,8 @@ interface FloorplanData {
   venueBackgroundOffsetYMm: number | null;
   venueBackgroundScale: number | null;
   venueBackgroundRotationDeg: number;
+  venueShape?: string | null;
+  venueBoundaryJson?: string | null;
 }
 
 const SIZE_PALETTE = ["#C97C4B", "#8A5A38", "#D9A066", "#6B4429"];
@@ -316,6 +318,8 @@ export function BookingReviewClient({
               viewBox={viewBox}
               coordinateMode={coordinateMode}
               backgroundAlignment={backgroundAlignment}
+              venueShape={floorplan.venueShape}
+              venueBoundaryJson={floorplan.venueBoundaryJson}
             />
             <Legend sizeStyles={sizeStyles} showMineKey />
           </>

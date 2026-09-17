@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLocale } from "@/lib/i18n/context";
@@ -11,6 +11,7 @@ import { formatAed } from "@/lib/constants";
 import { FloorPlan } from "@/components/floorplan/FloorPlan";
 import { Legend } from "@/components/floorplan/Legend";
 import type { FloorFeature, FloorBooth } from "@/components/floorplan/types";
+import { getFloorplanViewBox, worldRectOf } from "@/lib/floorplan/transform";
 
 interface BookingSummary {
   lines: { code: string; priceAedFils: number | null; baseAedFils: number | null; vatAedFils: number | null }[];
@@ -61,6 +62,17 @@ export function EventTermsClient({
     booths: FloorBooth[];
     floorPlanImageUrl: string | null;
     tiers: { sizeKey: string; label: string; priceAedFils: number }[];
+    venueScaleConfirmed: boolean;
+    venueWidthMm: number | null;
+    venueDepthMm: number | null;
+    venueBackgroundNaturalWidthPx: number | null;
+    venueBackgroundNaturalHeightPx: number | null;
+    venueBackgroundOffsetXMm: number | null;
+    venueBackgroundOffsetYMm: number | null;
+    venueBackgroundScale: number | null;
+    venueBackgroundRotationDeg: number;
+    venueShape: string | null;
+    venueBoundaryJson: string | null;
   } | null>(null);
   const [mapLoading, setMapLoading] = useState(false);
 
@@ -87,6 +99,38 @@ export function EventTermsClient({
   (mapData?.tiers || []).forEach((t, i) => {
     mapSizeStyles[t.sizeKey] = { color: SIZE_PALETTE[i % SIZE_PALETTE.length], label: t.label };
   });
+
+  // Real mm rendering for this map preview (see lib/floorplan/transform.ts)
+  // — same derived-state pattern as every other vendor-facing floor plan
+  // (ApplicationDetailClient, BoothSelector, Booking Review): normalize
+  // gridX/Y/W/H into current-viewbox-units via useMemo, never mutating the
+  // canonical mapData.booths/features. Previously this map stayed on the
+  // legacy 0-100 percentage square regardless of confirmed scale.
+  const mapViewBox = getFloorplanViewBox({
+    venueScaleConfirmed: mapData?.venueScaleConfirmed ?? false,
+    venueWidthMm: mapData?.venueWidthMm ?? null,
+    venueDepthMm: mapData?.venueDepthMm ?? null,
+  });
+  const mapCoordinateMode = mapViewBox.mode;
+  const mapVenueSize = { venueWidthMm: mapData?.venueWidthMm ?? 0, venueDepthMm: mapData?.venueDepthMm ?? 0 };
+  const mapBackgroundAlignment = {
+    naturalWidthPx: mapData?.venueBackgroundNaturalWidthPx ?? null,
+    naturalHeightPx: mapData?.venueBackgroundNaturalHeightPx ?? null,
+    offsetXMm: mapData?.venueBackgroundOffsetXMm ?? null,
+    offsetYMm: mapData?.venueBackgroundOffsetYMm ?? null,
+    scale: mapData?.venueBackgroundScale ?? null,
+    rotationDeg: mapData?.venueBackgroundRotationDeg ?? 0,
+  };
+  const mapDisplayBooths = useMemo(
+    () => (mapData?.booths ?? []).map((b) => ({ ...b, ...(() => { const r = worldRectOf(b, mapCoordinateMode, mapVenueSize); return { gridX: r.x, gridY: r.y, gridW: r.w, gridH: r.h }; })() })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mapVenueSize is a fresh object literal every render; depending on its primitive fields (already listed) is equivalent and avoids invalidating this memo every render
+    [mapData?.booths, mapCoordinateMode, mapVenueSize.venueWidthMm, mapVenueSize.venueDepthMm]
+  );
+  const mapDisplayFeatures = useMemo(
+    () => (mapData?.features ?? []).map((f) => ({ ...f, ...(() => { const r = worldRectOf(f, mapCoordinateMode, mapVenueSize); return { gridX: r.x, gridY: r.y, gridW: r.w, gridH: r.h }; })() })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mapVenueSize is a fresh object literal every render; depending on its primitive fields (already listed) is equivalent and avoids invalidating this memo every render
+    [mapData?.features, mapCoordinateMode, mapVenueSize.venueWidthMm, mapVenueSize.venueDepthMm]
+  );
 
   function measureScroll() {
     const el = scrollRef.current;
@@ -223,13 +267,18 @@ export function EventTermsClient({
               ) : mapData ? (
                 <>
                   <FloorPlan
-                    features={mapData.features}
-                    booths={mapData.booths}
+                    features={mapDisplayFeatures}
+                    booths={mapDisplayBooths}
                     sizeStyles={mapSizeStyles}
                     backgroundImageUrl={mapData.floorPlanImageUrl}
                     interactive
                     focusBoothId={mapData.booths.find((b) => b.isMine)?.id ?? null}
                     focusNonce={1}
+                    viewBox={mapViewBox}
+                    coordinateMode={mapCoordinateMode}
+                    backgroundAlignment={mapBackgroundAlignment}
+                    venueShape={mapData.venueShape}
+                    venueBoundaryJson={mapData.venueBoundaryJson}
                   />
                   <Legend sizeStyles={mapSizeStyles} showMineKey />
                 </>

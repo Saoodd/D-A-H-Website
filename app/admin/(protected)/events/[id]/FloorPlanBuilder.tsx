@@ -10,6 +10,7 @@ import { JsonImportPanel } from "@/components/admin/JsonImportPanel";
 import { VenueBoundaryEditor } from "@/components/admin/VenueBoundaryEditor";
 import { BackgroundAlignmentEditor } from "@/components/admin/BackgroundAlignmentEditor";
 import { getFloorplanViewBox, mmToGridRect, worldRectOf, worldPatchToServerPatch } from "@/lib/floorplan/transform";
+import { parseVenueBoundary } from "@/lib/floorplan/boundary";
 
 const SIZE_PALETTE = ["#C97C4B", "#8A5A38", "#D9A066", "#6B4429"];
 const DEFAULT_BOOTH_W = 6;
@@ -109,6 +110,11 @@ export function FloorPlanBuilder({
   const [venueShapeState, setVenueShapeState] = useState(initialVenueShape ?? "RECTANGLE");
   const [venueBoundaryJsonState, setVenueBoundaryJsonState] = useState(initialVenueBoundaryJson ?? null);
   const [boundaryEditorOpen, setBoundaryEditorOpen] = useState(false);
+  // Venue Boundary control stays visible even before Physical Scale is
+  // confirmed (never disappears — see requirement below), just disabled
+  // with an explanation instead of hidden entirely. Clicking it in that
+  // state toggles this notice rather than silently doing nothing.
+  const [boundaryLockedNoticeOpen, setBoundaryLockedNoticeOpen] = useState(false);
 
   // Background Alignment (Floor Plan Setup Wizard step 4) — see
   // components/admin/BackgroundAlignmentEditor.tsx and computeBackgroundRect
@@ -144,6 +150,28 @@ export function FloorPlanBuilder({
   });
   const coordinateMode = viewBox.mode;
   const venueSize = { venueWidthMm: venueWidthMmState ?? 0, venueDepthMm: venueDepthMmState ?? 0 };
+
+  // Parsed venue boundary, for the Venue Setup summary card and toolbar
+  // labels below — the same lib/floorplan/boundary.ts parser the shared
+  // FloorPlan canvas and the server both use, never a second reading of
+  // venueShapeState/venueBoundaryJsonState.
+  const parsedBoundary = useMemo(
+    () => parseVenueBoundary(venueShapeState, venueBoundaryJsonState),
+    [venueShapeState, venueBoundaryJsonState]
+  );
+  // Diameter is the human-facing unit for a circular venue boundary (per
+  // requirement: admin shouldn't have to calculate radius manually) — the
+  // model/editor keep storing radius (r) internally; this is purely a
+  // display conversion (diameter = r * 2).
+  const boundaryDiameterM = parsedBoundary.shape === "CIRCLE" ? ((parsedBoundary.r * 2) / 1000).toFixed(1) : null;
+  const boundaryShapeLabel =
+    parsedBoundary.shape === "RECTANGLE"
+      ? "Rectangle"
+      : parsedBoundary.shape === "CIRCLE"
+      ? `Circle — ${boundaryDiameterM}m diameter`
+      : parsedBoundary.shape === "OVAL"
+      ? "Oval"
+      : "Custom Polygon";
 
   // `booths`/`features` state ALWAYS holds the server's own representation
   // (gridX/Y/W/H as 0-100 percentages, xMm/yMm/widthMm/depthMm as real mm —
@@ -1202,6 +1230,70 @@ export function FloorPlanBuilder({
         </div>
       )}
 
+      {/* Venue Setup — always visible at the top of Floor Plan & Booths, so
+          how the floor plan is configured (or that it isn't yet) is never
+          something an admin has to go hunting for. Never hides the
+          functionality for a legacy/never-configured event — shows a clear
+          "not configured" state with a direct path in instead. */}
+      <div className="mb-4 rounded-[10px] border border-brown/10 bg-cream p-4 sm:p-5">
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <p className="label-caps">Venue Setup</p>
+          {venueScaleConfirmedState && (
+            <button
+              type="button"
+              onClick={() => {
+                setWizardOpen(true);
+                setWizardStep(1);
+              }}
+              className="text-xs text-brown-light underline"
+            >
+              Edit Venue Setup
+            </button>
+          )}
+        </div>
+
+        {!venueScaleConfirmedState ? (
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <p className="text-sm text-amber-900">
+              ⚠ Physical scale not configured. Booth physical proportions and the venue boundary require the venue&apos;s real width and depth.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setWizardOpen(true);
+                setWizardStep(1);
+              }}
+              className="shrink-0 px-3 py-1.5 rounded-lg bg-brown text-cream-soft text-xs"
+            >
+              Configure Physical Scale
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-brown-light mb-0.5">Physical Size</p>
+              <p className="text-brown-dark font-medium">
+                {(venueWidthMmState! / 1000).toFixed(1)}m × {(venueDepthMmState! / 1000).toFixed(1)}m
+              </p>
+              <button type="button" onClick={() => setScaleFormOpen(true)} className="text-[11px] underline text-brown-light hover:text-brown">
+                Edit
+              </button>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-brown-light mb-0.5">Venue Boundary</p>
+              <p className="text-brown-dark font-medium">{boundaryShapeLabel}</p>
+              <button type="button" onClick={() => setBoundaryEditorOpen(true)} className="text-[11px] underline text-brown-light hover:text-brown">
+                {parsedBoundary.shape === "POLYGON" ? "Edit Boundary" : "Edit"}
+              </button>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-brown-light mb-0.5">Scale</p>
+              <p className="text-emerald-800 font-medium">Confirmed ✓</p>
+            </div>
+          </div>
+        )}
+      </div>
+
       {wizardOpen ? (
         <div className="mb-4 rounded-[10px] border border-brown/15 bg-cream p-5">
           <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
@@ -1522,16 +1614,32 @@ export function FloorPlanBuilder({
           </button>
         )}
 
+        <div className="w-px h-5 bg-brown/15 mx-1" />
+        {/* Venue Boundary stays visible here even before Physical Scale is
+            confirmed — never disappears entirely (that was confusing: no
+            path back in except rediscovering the wizard). Disabled with a
+            clear explanation instead — see boundaryLockedNoticeOpen below. */}
+        <button
+          type="button"
+          onClick={() => {
+            if (coordinateMode !== "MM") {
+              setBoundaryLockedNoticeOpen((v) => !v);
+              return;
+            }
+            setBoundaryEditorOpen((v) => !v);
+          }}
+          className={`text-xs ${coordinateMode === "MM" ? "text-brown-light hover:text-brown" : "text-brown-light/60 hover:text-brown-light"}`}
+        >
+          {coordinateMode === "MM"
+            ? venueShapeState === "RECTANGLE"
+              ? "Venue boundary: rectangle"
+              : `Venue boundary: ${venueShapeState.toLowerCase()} (custom)`
+            : "🔒 Venue boundary: locked"}
+        </button>
         {coordinateMode === "MM" && (
-          <>
-            <div className="w-px h-5 bg-brown/15 mx-1" />
-            <button type="button" onClick={() => setBoundaryEditorOpen((v) => !v)} className="text-xs text-brown-light hover:text-brown">
-              {venueShapeState === "RECTANGLE" ? "Venue boundary: rectangle" : `Venue boundary: ${venueShapeState.toLowerCase()} (custom)`}
-            </button>
-            <button type="button" onClick={() => setBackgroundEditorOpen((v) => !v)} disabled={!floorPlanImageUrl} className="text-xs text-brown-light hover:text-brown disabled:opacity-40 disabled:cursor-not-allowed">
-              {bgNaturalWidthPx ? "Background: aligned" : "Background: not aligned"}
-            </button>
-          </>
+          <button type="button" onClick={() => setBackgroundEditorOpen((v) => !v)} disabled={!floorPlanImageUrl} className="text-xs text-brown-light hover:text-brown disabled:opacity-40 disabled:cursor-not-allowed">
+            {bgNaturalWidthPx ? "Background: aligned" : "Background: not aligned"}
+          </button>
         )}
 
         {!venueWidthM && (
@@ -1540,6 +1648,23 @@ export function FloorPlanBuilder({
           </span>
         )}
       </div>
+
+      {boundaryLockedNoticeOpen && coordinateMode !== "MM" && (
+        <div className="mb-4 -mt-2 rounded-[8px] border border-amber-300/60 bg-amber-50 p-3 flex items-center justify-between flex-wrap gap-3">
+          <p className="text-xs text-amber-900">Set the venue&apos;s physical dimensions first so DAH can create an accurate venue boundary.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setBoundaryLockedNoticeOpen(false);
+              setScaleFormOpen(true);
+            }}
+            className="shrink-0 text-xs px-3 py-1.5 rounded-lg bg-brown text-cream-soft"
+          >
+            Configure Physical Scale
+          </button>
+        </div>
+      )}
+
       {coordinateMode === "MM" && (
         <p className="mb-3 -mt-2 text-[11px] text-brown-light/70">
           New booths, Mass Create, and bulk size changes below now store true physical dimensions ({viewBox.width / 1000}m × {viewBox.height / 1000}m venue) and render at genuinely proportional size.
@@ -1629,6 +1754,8 @@ export function FloorPlanBuilder({
             // worldPatchToServerPatch inside patchBoothRaw before persisting.
             viewBox={viewBox}
             coordinateMode={coordinateMode}
+            venueShape={venueShapeState}
+            venueBoundaryJson={venueBoundaryJsonState}
             backgroundAlignment={{
               naturalWidthPx: bgNaturalWidthPx,
               naturalHeightPx: bgNaturalHeightPx,

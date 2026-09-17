@@ -1,8 +1,14 @@
 "use client";
 
-import { useRef, useState, useCallback, useEffect, useMemo } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo, useId } from "react";
 import { FloorFeature, FloorBooth, SizeStyle } from "./types";
 import { BackgroundAlignment, computeBackgroundRect } from "@/lib/floorplan/transform";
+import { parseVenueBoundary, isFootprintWithinBoundary, boundaryExtentMm, type VenueBoundary } from "@/lib/floorplan/boundary";
+
+/** "x1,y1 x2,y2 ..." for an SVG <polygon points> attribute. */
+function polygonPointsStr(points: { x: number; y: number }[]): string {
+  return points.map((p) => `${p.x},${p.y}`).join(" ");
+}
 
 function shadeColor(hex: string, amount: number): string {
   const m = hex.replace("#", "");
@@ -475,6 +481,8 @@ export function FloorPlan({
   fitViewNonce,
   viewBox = DEFAULT_VIEWBOX,
   coordinateMode = "LEGACY_PERCENT",
+  venueShape,
+  venueBoundaryJson,
 }: {
   features: FloorFeature[];
   booths: FloorBooth[];
@@ -586,6 +594,17 @@ export function FloorPlan({
    *  is the original 0-100 percentage canvas. Drives snap/grid/nudge sizing
    *  and distance-label formatting — see snapTuningFor/formatDistance. */
   coordinateMode?: "MM" | "LEGACY_PERCENT";
+  /** Event.venueShape/venueBoundaryJson (see lib/floorplan/boundary.ts) —
+   *  the venue's ACTUAL usable footprint, which may be smaller than the
+   *  viewBox's rectangular coordinate box (a circular/oval/polygon venue
+   *  never fills it). When present and coordinateMode is "MM", the shared
+   *  canvas renders this as a perimeter outline plus a shaded mask over the
+   *  area outside it — the same boundary geometry lib/floorplan/boundary.ts
+   *  enforces server-side, never a separate percentage-based overlay.
+   *  Omit to render with no boundary overlay at all (every caller that
+   *  doesn't pass this keeps rendering exactly as before). */
+  venueShape?: string | null;
+  venueBoundaryJson?: string | null;
 }) {
   const tuning = snapTuningFor(viewBox, coordinateMode);
   const unitScale = unitScaleOf(viewBox);
@@ -602,6 +621,45 @@ export function FloorPlan({
   // mean anything, so they keep the plain diagonal-hatch canvas background.
   const verticalGridLines = useMemo(() => (coordinateMode === "MM" ? gridLinesFor(viewBox.width) : []), [coordinateMode, viewBox.width]);
   const horizontalGridLines = useMemo(() => (coordinateMode === "MM" ? gridLinesFor(viewBox.height) : []), [coordinateMode, viewBox.height]);
+
+  // Venue boundary (see lib/floorplan/boundary.ts) — the venue's ACTUAL
+  // usable footprint, only meaningful once real mm venue geometry exists.
+  // parseVenueBoundary never throws and falls back to RECTANGLE for
+  // missing/malformed data, so this is always safe to compute even for a
+  // caller that doesn't pass venueShape/venueBoundaryJson at all (every such
+  // caller renders a plain rectangle boundary matching the full viewBox,
+  // which is a no-op visually — see the RECTANGLE branches below). Admin
+  // (editable) gets a more prominent perimeter + booth-violation flags;
+  // every read-only vendor-facing surface gets the same geometry rendered
+  // subtler, per requirement: same boundary, different visual weight.
+  const boundary: VenueBoundary = useMemo(
+    () => parseVenueBoundary(venueShape ?? null, venueBoundaryJson ?? null),
+    [venueShape, venueBoundaryJson]
+  );
+  const showBoundary = coordinateMode === "MM";
+  const isAdminBoundaryView = editable;
+  const boundaryStrokeColor = "#4A6B8A";
+  const boundaryStrokeWidth = (isAdminBoundaryView ? 0.45 : 0.22) * unitScale;
+  const boundaryStrokeOpacity = isAdminBoundaryView ? 0.85 : 0.5;
+  const outsideMaskId = useId();
+  // Every booth outside the actual boundary, admin view only — computed
+  // with the SAME isFootprintWithinBoundary the server uses to enforce
+  // this, never a separate/approximate client-side rule. Booths missing
+  // real mm geometry (never migrated/placed under a confirmed scale) are
+  // skipped, same as every other boundary-aware path in this system.
+  const boothsOutsideBoundary = useMemo(() => {
+    if (!showBoundary || !isAdminBoundaryView) return new Set<string>();
+    const venueBox = { widthMm: viewBox.width, depthMm: viewBox.height, boundary };
+    const set = new Set<string>();
+    for (const b of booths) {
+      if (b.xMm == null || b.yMm == null || b.widthMm == null || b.depthMm == null) continue;
+      if (!isFootprintWithinBoundary(venueBox, { xMm: b.xMm, yMm: b.yMm, widthMm: b.widthMm, depthMm: b.depthMm, rotationDeg: b.rotation ?? 0 })) {
+        set.add(b.id);
+      }
+    }
+    return set;
+  }, [showBoundary, isAdminBoundaryView, booths, boundary, viewBox.width, viewBox.height]);
+
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const [hoveredBoothId, setHoveredBoothId] = useState<string | null>(null);
@@ -859,16 +917,70 @@ export function FloorPlan({
     setTranslate({ x: rect.width / 2 - cx * unit, y: rect.height / 2 - cy * unit });
   }, [focusBoothIds, groupFocusNonce, booths, viewBox.width, viewBox.height]);
 
+  // "Fit Venue" — for a RECTANGLE boundary (or LEGACY_PERCENT mode, or no
+  // boundary passed at all) this is IDENTICAL to the old behavior
+  // (scale=1, translate=0 IS the full-venue view, since the SVG viewBox
+  // already spans the whole venue under preserveAspectRatio="xMidYMid
+  // meet") — zero behavior change for the overwhelming majority of events,
+  // which use the default rectangle boundary. For a smaller/differently
+  // shaped CIRCLE/OVAL/POLYGON boundary, frames the boundary's OWN extent
+  // (lib/floorplan/boundary.ts boundaryExtentMm) instead of the enclosing
+  // coordinate box — never fits an invisible box bigger than the real
+  // venue. Same fit-math pattern as the "Focus My Booth(s)" effect above.
+  const fitToBoundary = useCallback(() => {
+    if (!showBoundary || boundary.shape === "RECTANGLE") {
+      setScale(1);
+      setTranslate({ x: 0, y: 0 });
+      return;
+    }
+    const el = containerRef.current;
+    const rect = el?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) {
+      setScale(1);
+      setTranslate({ x: 0, y: 0 });
+      return;
+    }
+    const extent = boundaryExtentMm(boundary, viewBox.width, viewBox.height);
+    const PAD = Math.max(viewBox.width, viewBox.height) * 0.04;
+    const boxW = Math.max(extent.maxX - extent.minX + PAD * 2, viewBox.width * 0.05);
+    const boxH = Math.max(extent.maxY - extent.minY + PAD * 2, viewBox.height * 0.05);
+    const cx = (extent.minX + extent.maxX) / 2;
+    const cy = (extent.minY + extent.maxY) / 2;
+    const containerAspect = rect.width / rect.height;
+    const viewBoxAspect = viewBox.width / viewBox.height;
+    const basePxPerUnit = viewBoxAspect > containerAspect ? rect.width / viewBox.width : rect.height / viewBox.height;
+    const boxAspect = boxW / boxH;
+    const pxPerUnitForBox = boxAspect > containerAspect ? rect.width / boxW : rect.height / boxH;
+    const targetScale = clampScale(pxPerUnitForBox / basePxPerUnit);
+    const unit = basePxPerUnit * targetScale;
+    setScale(targetScale);
+    setTranslate({ x: rect.width / 2 - cx * unit, y: rect.height / 2 - cy * unit });
+  }, [showBoundary, boundary, viewBox.width, viewBox.height]);
+
   // "Fit Venue" — externally-triggerable equivalent of the canvas's own
-  // internal reset button (scale=1, translate=0 IS the full-venue view,
-  // since the SVG viewBox already spans the whole venue under
-  // preserveAspectRatio="xMidYMid meet").
+  // internal reset button.
   useEffect(() => {
     if (fitViewNonce == null) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reacting to an external "Fit Venue" trigger prop, not deriving from own render
-    setScale(1);
-    setTranslate({ x: 0, y: 0 });
-  }, [fitViewNonce]);
+    fitToBoundary();
+  }, [fitViewNonce, fitToBoundary]);
+
+  // Once, on first mount (or once the boundary/container become known —
+  // e.g. this canvas was hidden behind a mobile List/Map toggle at mount
+  // time), frame the ACTUAL boundary rather than opening on the plain
+  // scale=1 coordinate-box view for a non-rectangle venue — so a circular
+  // venue doesn't open small-and-centered inside a mostly-empty square.
+  // Never re-fires after its first successful measurement, so it never
+  // fights a subsequent manual pan/zoom.
+  const initialBoundaryFitDoneRef = useRef(false);
+  useEffect(() => {
+    if (initialBoundaryFitDoneRef.current) return;
+    if (!showBoundary || boundary.shape === "RECTANGLE") return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) return;
+    initialBoundaryFitDoneRef.current = true;
+    fitToBoundary();
+  }, [showBoundary, boundary, fitToBoundary]);
 
   // ---- booth manipulation (editable mode): drag-to-move (solo or as a
   // group), corner resize handles, and a rotate handle, all operating in
@@ -1117,10 +1229,7 @@ export function FloorPlan({
           </button>
           <button
             type="button"
-            onClick={() => {
-              setScale(1);
-              setTranslate({ x: 0, y: 0 });
-            }}
+            onClick={fitToBoundary}
             title="Fit Venue"
             aria-label="Fit Venue"
             className="w-7 h-7 rounded-full border border-brown/30 hover:bg-brown/10 text-[10px]"
@@ -1224,6 +1333,39 @@ export function FloorPlan({
             // of stretching, so a non-square venue photo/drawing renders
             // undistorted regardless of the venue's own proportions.
             <image href={backgroundImageUrl} x={0} y={0} width={viewBox.width} height={viewBox.height} preserveAspectRatio="xMidYMid meet" />
+          )}
+
+          {/* Outside-venue-boundary shading — sits over the architectural
+              background/grid but below every booth/feature, so the "this is
+              where booths are allowed" framing never obscures anything
+              interactive. A RECTANGLE boundary (the default — most events)
+              has no outside area to shade, so this renders nothing for it;
+              the mask hole exactly matches the SAME shape the perimeter
+              outline below draws and the server enforces via
+              isFootprintWithinBoundary, never a separate approximation. */}
+          {showBoundary && boundary.shape !== "RECTANGLE" && (
+            <>
+              <defs>
+                <mask id={outsideMaskId} maskUnits="userSpaceOnUse" x={0} y={0} width={viewBox.width} height={viewBox.height}>
+                  <rect x={0} y={0} width={viewBox.width} height={viewBox.height} fill="white" />
+                  {boundary.shape === "CIRCLE" && <circle cx={boundary.cx} cy={boundary.cy} r={boundary.r} fill="black" />}
+                  {boundary.shape === "OVAL" && <ellipse cx={boundary.cx} cy={boundary.cy} rx={boundary.rx} ry={boundary.ry} fill="black" />}
+                  {boundary.shape === "POLYGON" && boundary.points.length >= 3 && (
+                    <polygon points={polygonPointsStr(boundary.points)} fill="black" />
+                  )}
+                </mask>
+              </defs>
+              <rect
+                x={0}
+                y={0}
+                width={viewBox.width}
+                height={viewBox.height}
+                fill="#2A1D14"
+                opacity={isAdminBoundaryView ? 0.1 : 0.2}
+                mask={`url(#${outsideMaskId})`}
+                style={{ pointerEvents: "none" }}
+              />
+            </>
           )}
 
           {features.map((f) => {
@@ -1369,9 +1511,16 @@ export function FloorPlan({
             const cx = b.gridX + b.gridW / 2;
             const cy = b.gridY + b.gridH / 2;
             const isBeingManipulated = preview[b.id] != null;
+            // Admin-only, live-computed via the SAME isFootprintWithinBoundary
+            // the server enforces (see boothsOutsideBoundary above) — never
+            // hidden from an admin override that let it through; the whole
+            // point is to keep an out-of-boundary placement visible, not to
+            // suppress it once accepted.
+            const isOutsideBoundary = boothsOutsideBoundary.has(b.id);
 
             return (
               <g key={b.id} transform={rotation ? `rotate(${rotation} ${cx} ${cy})` : undefined}>
+                {isOutsideBoundary && <title>{`${b.code} — outside venue boundary`}</title>}
                 <g
                   onClick={(e) => {
                     if (!clickable) return;
@@ -1419,8 +1568,9 @@ export function FloorPlan({
                     ry={0.5 * unitScale}
                     fill={isGroupSelected ? shadeColor(fill, -20) : clickable && isHovered ? shadeColor(fill, -30) : fill}
                     opacity={b.status === "SOLD" ? 0.6 : backgroundImageUrl ? 0.85 : 1}
-                    stroke={isGroupSelected ? "#2563EB" : isSelected || b.isMine ? "#2E7D32" : clickable && isHovered ? "#FBF8F3" : "#3A2417"}
-                    strokeWidth={(isSelected || b.isMine ? 0.6 : clickable && isHovered ? 0.45 : 0.15) * unitScale}
+                    stroke={isOutsideBoundary ? "#B91C1C" : isGroupSelected ? "#2563EB" : isSelected || b.isMine ? "#2E7D32" : clickable && isHovered ? "#FBF8F3" : "#3A2417"}
+                    strokeWidth={(isOutsideBoundary ? 0.55 : isSelected || b.isMine ? 0.6 : clickable && isHovered ? 0.45 : 0.15) * unitScale}
+                    strokeDasharray={isOutsideBoundary ? `${0.9 * unitScale} ${0.5 * unitScale}` : undefined}
                     style={{ transition: isBeingManipulated ? "none" : "fill 0.15s ease, stroke 0.15s ease, stroke-width 0.15s ease" }}
                   />
                   <text
@@ -1436,6 +1586,21 @@ export function FloorPlan({
                     {b.code}
                   </text>
                 </g>
+
+                {isOutsideBoundary && (
+                  // A small persistent "!" badge, not a full label — a
+                  // dashed red outline already reads as "something's wrong"
+                  // at a glance; the badge + <title> above supply the exact
+                  // reason on hover without competing for space on a small
+                  // booth. Admin-only (boothsOutsideBoundary is always empty
+                  // for a non-editable canvas — see its computation above).
+                  <g style={{ pointerEvents: "none" }}>
+                    <circle cx={b.gridX + b.gridW - 0.3 * unitScale} cy={b.gridY + 0.3 * unitScale} r={1.1 * unitScale} fill="#B91C1C" stroke="#FBF8F3" strokeWidth={0.2 * unitScale} />
+                    <text x={b.gridX + b.gridW - 0.3 * unitScale} y={b.gridY + 0.3 * unitScale} textAnchor="middle" dominantBaseline="central" fontSize={1.6 * unitScale} fontWeight={700} fill="#FBF8F3">
+                      !
+                    </text>
+                  </g>
+                )}
 
                 {editable && isSoleSelected && (
                   <>
@@ -1521,6 +1686,35 @@ export function FloorPlan({
               strokeDasharray={`${unitScale} ${0.6 * unitScale}`}
               style={{ pointerEvents: "none" }}
             />
+          )}
+
+          {/* Venue boundary perimeter — drawn LAST (on top of booths/
+              features/guides) so it's never obscured by anything placed
+              near the venue edge; non-interactive, so it never intercepts a
+              click meant for a booth underneath. Renders the boundary's OWN
+              shape (RECTANGLE included, deliberately distinct from the
+              plain coordinate-box frame rect at the very top of this SVG —
+              see requirement: never let the browser/canvas frame be
+              mistaken for the real physical boundary) — the identical
+              geometry isFootprintWithinBoundary enforces server-side and a
+              CAD-imported polygon boundary is stored under, so an imported
+              boundary renders through this exact same path, never a
+              separate CAD-specific renderer. */}
+          {showBoundary && (
+            <g style={{ pointerEvents: "none" }}>
+              {boundary.shape === "RECTANGLE" && (
+                <rect x={0} y={0} width={viewBox.width} height={viewBox.height} fill="none" stroke={boundaryStrokeColor} strokeWidth={boundaryStrokeWidth} opacity={boundaryStrokeOpacity} />
+              )}
+              {boundary.shape === "CIRCLE" && (
+                <circle cx={boundary.cx} cy={boundary.cy} r={boundary.r} fill="none" stroke={boundaryStrokeColor} strokeWidth={boundaryStrokeWidth} opacity={boundaryStrokeOpacity} />
+              )}
+              {boundary.shape === "OVAL" && (
+                <ellipse cx={boundary.cx} cy={boundary.cy} rx={boundary.rx} ry={boundary.ry} fill="none" stroke={boundaryStrokeColor} strokeWidth={boundaryStrokeWidth} opacity={boundaryStrokeOpacity} />
+              )}
+              {boundary.shape === "POLYGON" && boundary.points.length >= 3 && (
+                <polygon points={polygonPointsStr(boundary.points)} fill="none" stroke={boundaryStrokeColor} strokeWidth={boundaryStrokeWidth} opacity={boundaryStrokeOpacity} />
+              )}
+            </g>
           )}
         </svg>
       </div>
