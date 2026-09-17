@@ -24,6 +24,12 @@ export interface FloorBooth {
   priceAedFils?: number | null;
   widthMm?: number | null;
   depthMm?: number | null;
+  // Real-world position, in millimetres — null until an event's physical
+  // scale is confirmed and this booth has been placed/imported under it.
+  // See lib/boothFit.ts isProvablyAdjacent, the only consumer that needs
+  // position rather than just size.
+  xMm?: number | null;
+  yMm?: number | null;
 }
 
 export interface SizeStyle {

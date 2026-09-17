@@ -15,6 +15,7 @@ import { FloorPlan } from "@/components/floorplan/FloorPlan";
 import { Legend } from "@/components/floorplan/Legend";
 import type { FloorBooth, FloorFeature, SizeStyle } from "@/components/floorplan/types";
 import type { ApplicationView } from "@/lib/applicationView";
+import { checkMultiBoothFit, isProvablyAdjacent } from "@/lib/boothFit";
 
 const SIZE_PALETTE = ["#C97C4B", "#8A5A38", "#D9A066", "#6B4429"];
 
@@ -441,6 +442,8 @@ export function ApplicationDetailClient({
                     setMultiMode(false);
                   }}
                   isAr={isAr}
+                  setupWidthMm={view.setupWidthMm}
+                  setupDepthMm={view.setupDepthMm}
                 />
               )}
 
@@ -712,6 +715,8 @@ function StagedBoothsSummary({
   onConfirm,
   onChooseDifferent,
   isAr,
+  setupWidthMm,
+  setupDepthMm,
 }: {
   stagedBooths: FloorBooth[];
   totals: { lines: { code: string; price: number | null; sizeLabel: string }[]; subtotal: number; vat: number; total: number };
@@ -721,7 +726,34 @@ function StagedBoothsSummary({
   onConfirm: () => void;
   onChooseDifferent: () => void;
   isAr: boolean;
+  setupWidthMm?: number | null;
+  setupDepthMm?: number | null;
 }) {
+  // Combined-space guidance for a multi-booth selection — never assumes two
+  // selected booths automatically combine into one usable space. Only ever
+  // claims "Adjacent Booths" when their real mm positions geometrically
+  // prove it (isProvablyAdjacent); otherwise, if the vendor's declared
+  // setup doesn't fit within any single selected booth alone, this shows a
+  // generic "please confirm with DAH" message rather than a false promise
+  // or a false denial — see lib/boothFit.ts.
+  let combinedSpaceNotice: string | null = null;
+  if (stagedBooths.length > 1) {
+    const fit = checkMultiBoothFit(
+      { widthMm: setupWidthMm ?? null, depthMm: setupDepthMm ?? null },
+      stagedBooths.map((b) => ({ widthMm: b.widthMm ?? null, depthMm: b.depthMm ?? null }))
+    );
+    if (fit.needsCombinedSpaceCaution) {
+      const anyAdjacentPair = stagedBooths.some((a, i) => stagedBooths.slice(i + 1).some((b) => isProvablyAdjacent(a, b)));
+      combinedSpaceNotice = anyAdjacentPair
+        ? isAr
+          ? "هذه الأكشاك متجاورة، لكن يجب تأكيد ملاءمة إعدادك للمساحة المجمعة مع دار الحي مباشرة."
+          : "These booths are Adjacent Booths, but please confirm your setup fits the combined space directly with DAH."
+        : isAr
+        ? "يُرجى تأكيد ملاءمة إعدادك مع دار الحي مباشرة — لا يمكننا تأكيد أن هذه الأكشاك تشكل مساحة واحدة متصلة."
+        : "Please confirm your setup fits with DAH directly — we can't confirm these booths form one connected space.";
+    }
+  }
+
   return (
     <div className="mb-4 rounded-[10px] border border-emerald-700/25 bg-emerald-700/[0.04] p-5">
       <p className="label-caps mb-3 text-emerald-800">{isAr ? "الأكشاك المختارة" : "Your Selected Booths"}</p>
@@ -741,6 +773,11 @@ function StagedBoothsSummary({
           </div>
         ))}
       </div>
+      {combinedSpaceNotice && (
+        <div className="mb-4 rounded-[8px] bg-amber-50 border border-amber-200 text-amber-900 text-xs px-3 py-2.5">
+          {combinedSpaceNotice}
+        </div>
+      )}
       {stagedBooths.length > 1 && (
         <div className="space-y-1 mb-4 text-sm border-t border-brown/10 pt-3">
           <div className="flex items-center justify-between">

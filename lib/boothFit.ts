@@ -49,3 +49,63 @@ export function checkMultiBoothFit(
   const allDefinitelyDoNotFit = results.length > 0 && results.every((r) => r.status === "DOES_NOT_FIT");
   return { anyFits, anyUnknown, needsCombinedSpaceCaution: allDefinitelyDoNotFit };
 }
+
+export interface PositionedFootprint {
+  xMm?: number | null;
+  yMm?: number | null;
+  widthMm?: number | null;
+  depthMm?: number | null;
+  rotationDeg?: number | null;
+}
+
+// Generous enough to cover a shared partition wall or no-aisle divider
+// between two booths (never exactly 0mm in real floor plans due to
+// measurement/drawing tolerance), tight enough that two booths with a
+// genuine aisle between them never count as adjacent.
+const ADJACENCY_TOLERANCE_MM = 300;
+
+/** True ONLY when two booths' real-world footprints can be geometrically
+ *  PROVEN to share an edge — an aligned side within ADJACENCY_TOLERANCE_MM,
+ *  with real overlap along that side — never inferred from booth codes,
+ *  list order, or canvas/percentage proximity. Requires both booths to
+ *  have real mm position AND size, and to be axis-aligned (rotation a
+ *  multiple of 90°); missing geometry or an off-axis rotation
+ *  conservatively returns false rather than guessing. This is the one
+ *  place the product's "never promise adjacency we can't prove" rule
+ *  (see checkMultiBoothFit above) is actually decided — callers must show
+ *  a generic "please confirm with DAH" message whenever this returns
+ *  false for a multi-booth selection, never assume two selected booths
+ *  combine into one usable space. */
+export function isProvablyAdjacent(a: PositionedFootprint, b: PositionedFootprint): boolean {
+  if (a.xMm == null || a.yMm == null || a.widthMm == null || a.depthMm == null) return false;
+  if (b.xMm == null || b.yMm == null || b.widthMm == null || b.depthMm == null) return false;
+
+  const normalizeRot = (deg: number | null | undefined) => ((Math.round(deg ?? 0) % 360) + 360) % 360;
+  const rotA = normalizeRot(a.rotationDeg);
+  const rotB = normalizeRot(b.rotationDeg);
+  if (![0, 90, 180, 270].includes(rotA) || ![0, 90, 180, 270].includes(rotB)) return false;
+
+  // At a 90/270 rotation, width and depth swap for the purpose of the
+  // axis-aligned bounding span — the footprint itself is still a plain
+  // rectangle since only 90-degree multiples are accepted above.
+  const spanOf = (widthMm: number, depthMm: number, rot: number) => (rot === 90 || rot === 270 ? { w: depthMm, h: widthMm } : { w: widthMm, h: depthMm });
+  const spanA = spanOf(a.widthMm, a.depthMm, rotA);
+  const spanB = spanOf(b.widthMm, b.depthMm, rotB);
+
+  const aLeft = a.xMm;
+  const aRight = a.xMm + spanA.w;
+  const aTop = a.yMm;
+  const aBottom = a.yMm + spanA.h;
+  const bLeft = b.xMm;
+  const bRight = b.xMm + spanB.w;
+  const bTop = b.yMm;
+  const bBottom = b.yMm + spanB.h;
+
+  const yOverlap = Math.min(aBottom, bBottom) - Math.max(aTop, bTop);
+  const xOverlap = Math.min(aRight, bRight) - Math.max(aLeft, bLeft);
+
+  const sharesVerticalEdge = yOverlap > 0 && (Math.abs(aRight - bLeft) <= ADJACENCY_TOLERANCE_MM || Math.abs(bRight - aLeft) <= ADJACENCY_TOLERANCE_MM);
+  const sharesHorizontalEdge = xOverlap > 0 && (Math.abs(aBottom - bTop) <= ADJACENCY_TOLERANCE_MM || Math.abs(bBottom - aTop) <= ADJACENCY_TOLERANCE_MM);
+
+  return sharesVerticalEdge || sharesHorizontalEdge;
+}
