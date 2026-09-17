@@ -12,6 +12,7 @@ import { FloorPlan } from "@/components/floorplan/FloorPlan";
 import { Legend } from "@/components/floorplan/Legend";
 import type { FloorFeature, FloorBooth } from "@/components/floorplan/types";
 import { getFloorplanViewBox, worldRectOf } from "@/lib/floorplan/transform";
+import { DAH_SIZE_PALETTE } from "@/lib/theme/brand";
 
 interface BookingSummary {
   lines: { code: string; priceAedFils: number | null; baseAedFils: number | null; vatAedFils: number | null }[];
@@ -94,7 +95,7 @@ export function EventTermsClient({
 
   const scrolledToBottom = readProgress >= 100;
 
-  const SIZE_PALETTE = ["#C97C4B", "#8A5A38", "#D9A066", "#6B4429"];
+  const SIZE_PALETTE = DAH_SIZE_PALETTE;
   const mapSizeStyles: Record<string, { color: string; label: string }> = {};
   (mapData?.tiers || []).forEach((t, i) => {
     mapSizeStyles[t.sizeKey] = { color: SIZE_PALETTE[i % SIZE_PALETTE.length], label: t.label };

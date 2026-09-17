@@ -353,12 +353,12 @@ function CadPreviewCanvas({ rows, architecture }: { rows: Row[]; architecture: C
     <div className="rounded-[8px] border border-brown/10 bg-cream-soft aspect-square w-full max-w-md mx-auto overflow-hidden">
       <svg viewBox="0 0 100 100" className="w-full h-full">
         {architecture.map((a, i) => (
-          <polyline key={i} points={a.points.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="#8A5A38" strokeWidth={0.3} opacity={0.35} />
+          <polyline key={i} points={a.points.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="#2D291D" strokeWidth={0.3} opacity={0.35} />
         ))}
         {rows.map((r) => {
           const cx = r.gridX + r.gridW / 2;
           const cy = r.gridY + r.gridH / 2;
-          const color = !r.include ? "#8A5A3855" : r.labelConfidence === "unlabeled" ? "#D97706" : "#2E7D32";
+          const color = !r.include ? "#2D291D55" : r.labelConfidence === "unlabeled" ? "#D97706" : "#2E7D32";
           return (
             <g key={r.entityId} transform={`rotate(${r.rotation} ${cx} ${cy})`}>
               <rect x={r.gridX} y={r.gridY} width={r.gridW} height={r.gridH} fill={color} fillOpacity={0.25} stroke={color} strokeWidth={0.4} />

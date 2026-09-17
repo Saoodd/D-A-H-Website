@@ -112,7 +112,7 @@ export function AdminSidebar() {
       {/* Desktop sidebar — unchanged from before. */}
       <aside className="hidden md:flex md:w-56 md:flex-col shrink-0 border-r border-brown/10 bg-cream md:min-h-screen">
         <div className="p-5">
-          <Logo className="scale-75 origin-left" />
+          <Logo className="items-start" />
           <p className="text-xs tracking-[0.3em] uppercase text-brown-light mt-2">Management Portal</p>
         </div>
         <div className="px-3">{navContent()}</div>
@@ -125,7 +125,7 @@ export function AdminSidebar() {
       {/* Mobile top bar + slide-out drawer. */}
       <header className="md:hidden sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-brown/10 bg-cream px-4 py-3">
         <div className="flex items-center gap-2 min-w-0">
-          <Logo className="scale-75 origin-left" />
+          <Logo variant="mark" className="text-brown-dark" />
           <p className="text-[10px] tracking-[0.25em] uppercase text-brown-light truncate">Management Portal</p>
         </div>
         <button
@@ -159,7 +159,7 @@ export function AdminSidebar() {
           >
             <div className="p-5 flex items-center justify-between gap-3">
               <div>
-                <Logo className="scale-75 origin-left" />
+                <Logo className="items-start" />
                 <p className="text-xs tracking-[0.3em] uppercase text-brown-light mt-2">Management Portal</p>
               </div>
               <button

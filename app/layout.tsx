@@ -3,6 +3,7 @@ import { Jost, Inter, Cairo } from "next/font/google";
 import "./globals.css";
 import { LocaleProvider } from "@/lib/i18n/context";
 import { ThemeProvider } from "@/lib/theme/context";
+import { DAH_IVORY, DAH_CHARCOAL } from "@/lib/theme/brand";
 
 const heading = Jost({
   variable: "--font-heading",
@@ -42,6 +43,13 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
   },
+};
+
+export const viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: DAH_IVORY },
+    { media: "(prefers-color-scheme: dark)", color: DAH_CHARCOAL },
+  ],
 };
 
 // Runs synchronously before first paint (a blocking <head> script, not a

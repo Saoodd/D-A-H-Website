@@ -1,4 +1,5 @@
 import "server-only";
+import { DAH_CHARCOAL, DAH_OLIVE, DAH_MUTED_TEXT, DAH_BORDER, DAH_IVORY } from "@/lib/theme/brand";
 
 // One shared DAH transactional email design system — table-based markup and
 // inline styles throughout, since that's what actually renders consistently
@@ -7,11 +8,11 @@ import "server-only";
 // like the same product: restrained ivory/charcoal palette, one accent
 // color, generous spacing, no gradients/emoji/banners.
 
-const INK = "#241A12"; // near-black body text
-const BROWN = "#6B4429"; // brand accent
-const BROWN_LIGHT = "#8C7160"; // muted secondary text
-const BORDER = "#E6DDD0";
-const IVORY = "#F6F2EC";
+const INK = DAH_CHARCOAL; // near-black body text
+const BROWN = DAH_OLIVE; // brand accent
+const BROWN_LIGHT = DAH_MUTED_TEXT; // muted secondary text
+const BORDER = DAH_BORDER;
+const IVORY = DAH_IVORY;
 
 /** Wraps a block of already-built inner HTML in the shared DAH email shell:
  *  wordmark header, white card, footer. `preheader` is the short hidden
@@ -73,7 +74,7 @@ export function emailButton(label: string, href: string): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:22px 0 8px;">
     <tr>
       <td style="border-radius:999px;background-color:${BROWN};">
-        <a href="${href}" style="display:inline-block;padding:13px 28px;font-size:14px;font-weight:600;color:#FBF8F4;text-decoration:none;letter-spacing:0.3px;">${label}</a>
+        <a href="${href}" style="display:inline-block;padding:13px 28px;font-size:14px;font-weight:600;color:${IVORY};text-decoration:none;letter-spacing:0.3px;">${label}</a>
       </td>
     </tr>
   </table>`;

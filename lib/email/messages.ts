@@ -3,6 +3,7 @@ import { formatAed } from "../constants";
 import { trustedSiteUrl } from "../url";
 import { sendEmail, ADMIN_NOTIFY_EMAIL } from "./core";
 import { emailShell, emailHeading, emailParagraph, emailMuted, emailButton, emailFactTable, emailDivider } from "./template";
+import { DAH_OLIVE, DAH_CHARCOAL } from "../theme/brand";
 
 // Every function here builds one specific DAH transactional email and hands
 // it to sendEmail() (lib/email/core.ts) for actual delivery + logging.
@@ -219,7 +220,7 @@ export async function sendPaymentSuccessEmail(opts: {
       ${emailParagraph(`Your payment for <strong>${opts.eventName}</strong> has been received and your booth is confirmed.`)}
       ${emailFactTable(rows)}
       ${emailButton("View my booking", opts.viewBookingUrl)}
-      ${emailMuted(`<a href="${opts.receiptUrl}" style="color:#6B4429;">View / download your payment receipt</a>`)}
+      ${emailMuted(`<a href="${opts.receiptUrl}" style="color:${DAH_OLIVE};">View / download your payment receipt</a>`)}
       ${emailMuted("Your event vendor WhatsApp group link, if available, is on your dashboard.")}`,
       { preheader: `Booth ${opts.boothCode} confirmed for ${opts.eventName}.` }
     ),
@@ -302,7 +303,7 @@ export async function sendUsernameReminderEmail(opts: { vendorId: string; vendor
     html: emailShell(
       `${emailHeading(`Hi ${opts.businessName}`)}
       ${emailParagraph("You (or someone with access to this inbox) asked us for a reminder of your DAH username.")}
-      <p style="margin:8px 0 20px;font-size:20px;font-weight:600;color:#241A12;">${opts.username}</p>
+      <p style="margin:8px 0 20px;font-size:20px;font-weight:600;color:${DAH_CHARCOAL};">${opts.username}</p>
       ${emailButton("Log in", `${site()}/vendor/login`)}`
     ),
   });

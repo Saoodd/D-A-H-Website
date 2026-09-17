@@ -217,8 +217,8 @@ export function VenueBoundaryEditor({ eventId, venueWidthMm, venueDepthMm, initi
                 y={venueDepthMm * 0.01}
                 width={venueWidthMm * 0.98}
                 height={venueDepthMm * 0.98}
-                fill="rgba(107,68,41,0.06)"
-                stroke="#6B4429"
+                fill="rgba(45,41,29,0.06)"
+                stroke="#2D291D"
                 strokeDasharray={`${venueWidthMm * 0.01} ${venueWidthMm * 0.008}`}
                 strokeWidth={venueWidthMm * 0.003}
               />
@@ -226,7 +226,7 @@ export function VenueBoundaryEditor({ eventId, venueWidthMm, venueDepthMm, initi
 
             {boundary.shape === "CIRCLE" && (
               <>
-                <circle cx={boundary.cx} cy={boundary.cy} r={boundary.r} fill="rgba(107,68,41,0.12)" stroke="#6B4429" strokeWidth={venueWidthMm * 0.003} />
+                <circle cx={boundary.cx} cy={boundary.cy} r={boundary.r} fill="rgba(45,41,29,0.12)" stroke="#2D291D" strokeWidth={venueWidthMm * 0.003} />
                 <circle
                   cx={boundary.cx}
                   cy={boundary.cy}
@@ -253,8 +253,8 @@ export function VenueBoundaryEditor({ eventId, venueWidthMm, venueDepthMm, initi
                   cy={boundary.cy}
                   rx={boundary.rx}
                   ry={boundary.ry}
-                  fill="rgba(107,68,41,0.12)"
-                  stroke="#6B4429"
+                  fill="rgba(45,41,29,0.12)"
+                  stroke="#2D291D"
                   strokeWidth={venueWidthMm * 0.003}
                 />
                 <circle
@@ -289,8 +289,8 @@ export function VenueBoundaryEditor({ eventId, venueWidthMm, venueDepthMm, initi
                 {boundary.points.length >= 2 && (
                   <polygon
                     points={boundary.points.map((p) => `${p.x},${p.y}`).join(" ")}
-                    fill="rgba(107,68,41,0.12)"
-                    stroke="#6B4429"
+                    fill="rgba(45,41,29,0.12)"
+                    stroke="#2D291D"
                     strokeWidth={venueWidthMm * 0.003}
                   />
                 )}

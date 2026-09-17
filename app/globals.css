@@ -1,45 +1,64 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
-/* DAH palette — warm ivory / stone / espresso / near-black, with one
-   restrained bronze accent used sparingly (a thin rule, a small detail —
-   never a fill color for large areas). Token NAMES are kept stable
-   (cream-soft/cream/cream-deep/brown-light/brown/brown-dark/ink) since the
-   whole app already styles itself from them; only the hex values move
-   toward the more restrained, less orange-saturated direction. This is a
-   provisional palette — swap these hex values once the real DAH logo file
-   is available, so the accent can be pulled from the actual mark. */
+/* Dar Al Hay (DAH) brand palette — Emirati architectural identity: warm
+   ivory, desert/stone neutrals, dark olive, charcoal, with terracotta as a
+   restrained accent (a thin rule, a small badge, never a fill for large
+   areas). Raw brand hues are exposed as their own --dah-* tokens (for
+   architectural motifs / anywhere the literal brand color is wanted) AND
+   mapped onto the existing semantic tokens below — token NAMES
+   (cream-soft/cream/cream-deep/brown-light/brown/brown-dark/ink/accent) are
+   kept stable since the whole app already styles itself from them; only
+   the hex values move to the new identity. See lib/theme/brand.ts for the
+   same values shared with email templates and the generated icon/OG image,
+   which can't read CSS custom properties. */
 :root {
-  --color-cream-soft: #faf7f2;
-  --color-cream: #f1ece3;
-  --color-cream-deep: #e4dacb;
-  --color-brown-light: #8c7863;
-  --color-brown: #5c4632;
-  --color-brown-dark: #2e2117;
-  --color-ink: #241a12;
-  --color-accent: #b08d57;
+  --dah-ivory: #f8f4ec;
+  --dah-desert: #c3af94;
+  --dah-stone: #cfbeaa;
+  --dah-olive: #2d291d;
+  --dah-terracotta: #743a26;
+  --dah-charcoal: #25201a;
+
+  --color-cream-soft: #f8f4ec;
+  --color-cream: #f0e6d5;
+  --color-cream-deep: #e2d2b4;
+  --color-brown-light: #7a6c55;
+  --color-brown: #2d291d;
+  --color-brown-dark: #25201a;
+  --color-ink: #25201a;
+  --color-accent: #743a26;
 
   --background: var(--color-cream-soft);
   --foreground: var(--color-ink);
 }
 
 /* Dark mode — see lib/theme/context.tsx (sets data-theme on <html>). Surfaces
-   (cream-soft/cream/cream-deep) invert to dark warm tones; brown-dark and ink
-   invert to light tones so heading text and body text stay readable, while
-   brown itself brightens so it still reads as an accent (and any text placed
-   on top of a brown button, e.g. text-cream-soft, keeps good contrast). */
+   (cream-soft/cream/cream-deep) invert to deep olive/charcoal tones (never
+   pure black); brown-dark and ink invert to warm ivory so heading text and
+   body text stay readable, while brown itself lightens to a desert-gold so
+   primary buttons still read clearly against a dark background (and any
+   text placed on top of a brown button, e.g. text-cream-soft, keeps good
+   contrast — cream-soft is the dark page background here, which is deep
+   charcoal, so it reads as dark text on a light desert button). */
 :root[data-theme="dark"] {
-  --color-cream-soft: #17120d;
-  --color-cream: #201911;
-  --color-cream-deep: #362819;
-  --color-brown-light: #c2a98c;
-  --color-brown: #c99b5e;
-  --color-brown-dark: #f3e7d6;
-  --color-ink: #f2eae0;
-  --color-accent: #d4b27a;
+  --color-cream-soft: #221d15;
+  --color-cream: #2e2a1d;
+  --color-cream-deep: #3d3826;
+  --color-brown-light: #c7b79e;
+  --color-brown: #cbb795;
+  --color-brown-dark: #f3ecdd;
+  --color-ink: #f0e8d9;
+  --color-accent: #c17452;
 }
 
 @theme inline {
+  --color-dah-ivory: var(--dah-ivory);
+  --color-dah-desert: var(--dah-desert);
+  --color-dah-stone: var(--dah-stone);
+  --color-dah-olive: var(--dah-olive);
+  --color-dah-terracotta: var(--dah-terracotta);
+  --color-dah-charcoal: var(--dah-charcoal);
   --color-cream-soft: var(--color-cream-soft);
   --color-cream: var(--color-cream);
   --color-cream-deep: var(--color-cream-deep);

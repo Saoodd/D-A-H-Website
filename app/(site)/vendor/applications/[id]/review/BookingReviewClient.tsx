@@ -12,6 +12,7 @@ import { PhoneVerifyModal } from "@/components/vendor/PhoneVerifyModal";
 import { FloorPlan } from "@/components/floorplan/FloorPlan";
 import { Legend } from "@/components/floorplan/Legend";
 import { getFloorplanViewBox, worldRectOf } from "@/lib/floorplan/transform";
+import { DAH_SIZE_PALETTE } from "@/lib/theme/brand";
 import type { FloorFeature, FloorBooth } from "@/components/floorplan/types";
 
 interface BookingSummaryLine {
@@ -49,7 +50,7 @@ interface FloorplanData {
   venueBoundaryJson?: string | null;
 }
 
-const SIZE_PALETTE = ["#C97C4B", "#8A5A38", "#D9A066", "#6B4429"];
+const SIZE_PALETTE = DAH_SIZE_PALETTE;
 
 // The dedicated pre-Terms review moment: everything the vendor is about to
 // commit to (booth(s), price, whether their declared setup actually fits,

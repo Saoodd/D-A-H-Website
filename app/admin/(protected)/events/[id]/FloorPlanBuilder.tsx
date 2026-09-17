@@ -10,9 +10,10 @@ import { JsonImportPanel } from "@/components/admin/JsonImportPanel";
 import { VenueBoundaryEditor } from "@/components/admin/VenueBoundaryEditor";
 import { BackgroundAlignmentEditor } from "@/components/admin/BackgroundAlignmentEditor";
 import { getFloorplanViewBox, mmToGridRect, worldRectOf, worldPatchToServerPatch } from "@/lib/floorplan/transform";
+import { DAH_SIZE_PALETTE } from "@/lib/theme/brand";
 import { parseVenueBoundary } from "@/lib/floorplan/boundary";
 
-const SIZE_PALETTE = ["#C97C4B", "#8A5A38", "#D9A066", "#6B4429"];
+const SIZE_PALETTE = DAH_SIZE_PALETTE;
 const DEFAULT_BOOTH_W = 6;
 const DEFAULT_BOOTH_H = 6;
 

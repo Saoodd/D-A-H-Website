@@ -17,8 +17,9 @@ import type { FloorBooth, FloorFeature, SizeStyle } from "@/components/floorplan
 import type { ApplicationView } from "@/lib/applicationView";
 import { checkMultiBoothFit, isProvablyAdjacent } from "@/lib/boothFit";
 import { getFloorplanViewBox, worldRectOf } from "@/lib/floorplan/transform";
+import { DAH_SIZE_PALETTE } from "@/lib/theme/brand";
 
-const SIZE_PALETTE = ["#C97C4B", "#8A5A38", "#D9A066", "#6B4429"];
+const SIZE_PALETTE = DAH_SIZE_PALETTE;
 
 const statusColor: Record<DisplayStatus, string> = {
   PENDING: "bg-cream-deep text-brown-dark",

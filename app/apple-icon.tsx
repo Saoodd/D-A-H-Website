@@ -1,10 +1,12 @@
 import { ImageResponse } from "next/og";
-import { DAH_IVORY, DAH_OLIVE, DAH_TERRACOTTA } from "@/lib/theme/brand";
+import { DAH_IVORY, DAH_OLIVE } from "@/lib/theme/brand";
 
-export const size = { width: 1200, height: 630 };
+export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
 
-export default function OpengraphImage() {
+// Apple touch icon — same standalone mark as icon.tsx, scaled up; iOS
+// applies its own corner rounding, so no borderRadius here.
+export default function AppleIcon() {
   return new ImageResponse(
     (
       <div
@@ -12,23 +14,16 @@ export default function OpengraphImage() {
           width: "100%",
           height: "100%",
           display: "flex",
-          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
           background: DAH_IVORY,
         }}
       >
-        <svg width="72" height="90" viewBox="0 0 120 150" fill={DAH_OLIVE}>
+        <svg width="96" height="120" viewBox="0 0 120 150" fill={DAH_OLIVE}>
           <path d="M18,148 C18,95 24,50 60,10 C52,48 46,95 44,148 Z" />
           <path d="M102,148 C102,95 96,50 60,10 C68,48 74,95 76,148 Z" />
           <path d="M60,84 L71,97 L60,110 L49,97 Z" />
         </svg>
-        <div style={{ fontSize: 56, color: DAH_OLIVE, letterSpacing: 14, fontWeight: 300, marginTop: 28 }}>
-          DAR AL HAY
-        </div>
-        <div style={{ fontSize: 22, color: DAH_TERRACOTTA, letterSpacing: 6, marginTop: 18 }}>
-          EVENTS &amp; POP-UPS · DUBAI
-        </div>
       </div>
     ),
     size

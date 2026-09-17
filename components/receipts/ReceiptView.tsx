@@ -51,7 +51,7 @@ export function ReceiptView({
 
       <div className="rounded-2xl border border-brown/10 bg-cream-soft p-8 md:p-10 print:border-0 print:p-0">
         <div className="flex items-start justify-between mb-8">
-          <Logo className="scale-90 origin-left" />
+          <Logo className="items-start" />
           <div className="text-right">
             <p className="text-xs uppercase tracking-widest text-brown-light">Payment Receipt</p>
             {receipt.receiptNumber && <p className="text-sm text-brown-dark font-medium mt-1">{receipt.receiptNumber}</p>}
