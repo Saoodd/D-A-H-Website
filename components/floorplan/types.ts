@@ -7,6 +7,13 @@ export interface FloorFeature {
   gridW: number;
   gridH: number;
   rotation: number;
+  // Real-world position/size, in millimetres — same dual-field pattern as
+  // FloorBooth below (null until an event's physical scale is confirmed
+  // and this feature has been placed/created under it).
+  xMm?: number | null;
+  yMm?: number | null;
+  widthMm?: number | null;
+  depthMm?: number | null;
 }
 
 export interface FloorBooth {

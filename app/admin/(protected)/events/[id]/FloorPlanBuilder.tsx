@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FloorPlan } from "@/components/floorplan/FloorPlan";
 import { Legend } from "@/components/floorplan/Legend";
 import type { FloorBooth, FloorFeature, SizeStyle } from "@/components/floorplan/types";
@@ -8,7 +8,7 @@ import { FEATURE_TYPE, formatAed } from "@/lib/constants";
 import { CadImportPanel } from "@/components/admin/CadImportPanel";
 import { VenueBoundaryEditor } from "@/components/admin/VenueBoundaryEditor";
 import { BackgroundAlignmentEditor } from "@/components/admin/BackgroundAlignmentEditor";
-import { getFloorplanViewBox } from "@/lib/floorplan/transform";
+import { getFloorplanViewBox, mmToGridRect, worldRectOf, worldPatchToServerPatch } from "@/lib/floorplan/transform";
 
 const SIZE_PALETTE = ["#C97C4B", "#8A5A38", "#D9A066", "#6B4429"];
 const DEFAULT_BOOTH_W = 6;
@@ -125,6 +125,31 @@ export function FloorPlanBuilder({
     venueDepthMm: venueDepthMmState,
   });
   const coordinateMode = viewBox.mode;
+  const venueSize = { venueWidthMm: venueWidthMmState ?? 0, venueDepthMm: venueDepthMmState ?? 0 };
+
+  // `booths`/`features` state ALWAYS holds the server's own representation
+  // (gridX/Y/W/H as 0-100 percentages, xMm/yMm/widthMm/depthMm as real mm —
+  // see mmToGridRect in lib/floorplan/transform.ts) untouched, so every
+  // other reader of that state (CSV export, price displays, undo
+  // snapshots, ...) keeps working exactly as before. displayBooths/
+  // displayFeatures are the SAME items with gridX/Y/W/H resolved into
+  // CURRENT VIEWBOX UNITS (still percent in legacy mode; real mm once
+  // scale is confirmed) via worldRectOf — the one thing the canvas render
+  // and all geometry MATH (align/distribute/duplicate/click-to-place/drag/
+  // resize) below should ever read positions from. Writing back to the
+  // server always goes through worldPatchToServerPatch so a raw mm number
+  // is never sent under the name "gridX", which the server always treats
+  // as a percentage regardless of mode.
+  const displayBooths = useMemo(
+    () => booths.map((b) => ({ ...b, ...(() => { const r = worldRectOf(b, coordinateMode, venueSize); return { gridX: r.x, gridY: r.y, gridW: r.w, gridH: r.h }; })() })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- venueSize is a fresh object literal every render; depending on its primitive fields (already listed) is equivalent and avoids invalidating this memo every render
+    [booths, coordinateMode, venueSize.venueWidthMm, venueSize.venueDepthMm]
+  );
+  const displayFeatures = useMemo(
+    () => features.map((f) => ({ ...f, ...(() => { const r = worldRectOf(f, coordinateMode, venueSize); return { gridX: r.x, gridY: r.y, gridW: r.w, gridH: r.h }; })() })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- venueSize is a fresh object literal every render; depending on its primitive fields (already listed) is equivalent and avoids invalidating this memo every render
+    [features, coordinateMode, venueSize.venueWidthMm, venueSize.venueDepthMm]
+  );
 
   async function saveScale(confirmed: boolean) {
     const widthM = Number(scaleWidthInput);
@@ -313,34 +338,57 @@ export function FloorPlanBuilder({
         setNotice("Enter a price for the booth first.");
         return;
       }
-      // The canvas always renders/reports position in the legacy 0-100
-      // percentage space (see note on the FloorPlan call below on why the
-      // canvas itself doesn't switch to a real-mm viewBox yet). widthMm/
-      // depthMm are still the real dimensions the admin typed — the SERVER
-      // (see app/api/admin/events/[id]/booths/route.ts) derives a
-      // genuinely proportional gridW/gridH from them once this event's
-      // scale is confirmed, converting the percent position below into mm
-      // and back out again so the two stay consistent, rather than ever
-      // trusting a hardcoded default box.
-      const w = DEFAULT_BOOTH_W;
-      const h = DEFAULT_BOOTH_H;
-      const gridX = Math.min(100 - w, Math.max(0, xPercent - w / 2));
-      const gridY = Math.min(100 - h, Math.max(0, yPercent - h / 2));
+      // `xPercent`/`yPercent` (despite the name, kept for minimal diff) are
+      // FloorPlan.tsx's onCanvasClick coordinates in CURRENT VIEWBOX UNITS
+      // — 0-100 percent in legacy mode, real millimetres once scale is
+      // confirmed (see components/floorplan/FloorPlan.tsx pointToPercent).
+      // In MM mode, the admin's typed width/depth (meters) size the
+      // placeholder box directly and position it explicitly via xMm/yMm so
+      // the CREATE route takes its authoritative path instead of
+      // misreading a real mm coordinate as a 0-100 percentage; gridX/Y/W/H
+      // are still sent (the route's own required-field check) but as the
+      // server-derived values matching that same xMm/yMm/widthMm/depthMm.
       const res = await fetch(`/api/admin/events/${eventId}/booths`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          code: name,
-          size: "custom",
-          priceAedFils: placePrice ? Math.round(Number(placePrice) * 100) : null,
-          colorHex: placeColor || null,
-          widthMm: placeWidthM.trim() ? Math.round(Number(placeWidthM) * 1000) : null,
-          depthMm: placeDepthM.trim() ? Math.round(Number(placeDepthM) * 1000) : null,
-          gridX,
-          gridY,
-          gridW: w,
-          gridH: h,
-        }),
+        body: JSON.stringify(
+          coordinateMode === "MM"
+            ? (() => {
+                const widthMm = placeWidthM.trim() ? Math.round(Number(placeWidthM) * 1000) : 1000;
+                const depthMm = placeDepthM.trim() ? Math.round(Number(placeDepthM) * 1000) : 1000;
+                const xMm = Math.min(viewBox.width - widthMm, Math.max(0, xPercent - widthMm / 2));
+                const yMm = Math.min(viewBox.height - depthMm, Math.max(0, yPercent - depthMm / 2));
+                return {
+                  code: name,
+                  size: "custom",
+                  priceAedFils: placePrice ? Math.round(Number(placePrice) * 100) : null,
+                  colorHex: placeColor || null,
+                  widthMm,
+                  depthMm,
+                  xMm: Math.round(xMm),
+                  yMm: Math.round(yMm),
+                  ...mmToGridRect(venueSize, { xMm, yMm, widthMm, depthMm }),
+                };
+              })()
+            : (() => {
+                const w = DEFAULT_BOOTH_W;
+                const h = DEFAULT_BOOTH_H;
+                const gridX = Math.min(100 - w, Math.max(0, xPercent - w / 2));
+                const gridY = Math.min(100 - h, Math.max(0, yPercent - h / 2));
+                return {
+                  code: name,
+                  size: "custom",
+                  priceAedFils: placePrice ? Math.round(Number(placePrice) * 100) : null,
+                  colorHex: placeColor || null,
+                  widthMm: placeWidthM.trim() ? Math.round(Number(placeWidthM) * 1000) : null,
+                  depthMm: placeDepthM.trim() ? Math.round(Number(placeDepthM) * 1000) : null,
+                  gridX,
+                  gridY,
+                  gridW: w,
+                  gridH: h,
+                };
+              })()
+        ),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) setNotice(data.error || "Could not add booth");
@@ -351,7 +399,8 @@ export function FloorPlanBuilder({
         await load();
       }
     },
-    [eventId, placeName, placePrice, placeColor, placeWidthM, placeDepthM, load]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- venueSize is a fresh object literal every render; depending on its primitive fields (already listed) is equivalent and avoids invalidating this callback every render
+    [eventId, placeName, placePrice, placeColor, placeWidthM, placeDepthM, load, coordinateMode, viewBox.width, viewBox.height, venueSize.venueWidthMm, venueSize.venueDepthMm]
   );
 
   async function uploadFloorPlanImage(file: File) {
@@ -383,20 +432,39 @@ export function FloorPlanBuilder({
 
   // Optimistic local update + PATCH for one booth, with no undo bookkeeping
   // of its own — callers that want undo wrap this and record before/after.
-  const patchBoothRaw = useCallback(async (id: string, patch: Record<string, unknown>) => {
-    setBooths((prev) => prev.map((b) => (b.id === id ? { ...b, ...patch } : b)));
-    await fetch(`/api/admin/booths/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    });
-  }, []);
+  // `worldPatch` is expressed in CURRENT VIEWBOX UNITS for any gridX/Y/W/H
+  // keys it carries (percent in legacy mode, real mm once scale is
+  // confirmed — exactly what FloorPlan.tsx's own drag/resize/rotate math
+  // emits, and what align/distribute/duplicate/click-to-place below also
+  // produce via displayBooths). Translated to the server's actual field
+  // names (xMm/yMm/widthMm/depthMm in MM mode) via worldPatchToServerPatch
+  // before either the optimistic state update or the PATCH body — `booths`
+  // state must always stay in the server's own representation so it keeps
+  // working for every other reader (CSV export, price displays, ...).
+  // Non-geometry keys (price, color, status, rotation, ...) pass through
+  // unchanged either way.
+  const patchBoothRaw = useCallback(
+    async (id: string, worldPatch: Record<string, unknown>) => {
+      const serverPatch = worldPatchToServerPatch(worldPatch, coordinateMode);
+      setBooths((prev) => prev.map((b) => (b.id === id ? { ...b, ...serverPatch } : b)));
+      await fetch(`/api/admin/booths/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(serverPatch),
+      });
+    },
+    [coordinateMode]
+  );
 
   // Single-booth move/resize/rotate, from dragging the solo-selected booth's
-  // body or its corner/rotate handles.
+  // body or its corner/rotate handles. `patch` arrives in CURRENT VIEWBOX
+  // UNITS (see patchBoothRaw above) — the "before" snapshot must be read
+  // from the SAME unit space (displayBooths), not the server-shaped
+  // `booths` state, so undo/redo replay the exact values that were dragged
+  // from/to rather than mixing units.
   const onBoothCommit = useCallback(
     async (id: string, patch: Record<string, number>) => {
-      const before = booths.find((b) => b.id === id);
+      const before = displayBooths.find((b) => b.id === id);
       if (!before) return;
       const beforePatch: Record<string, number> = {};
       (Object.keys(patch) as (keyof AdminBooth)[]).forEach((k) => {
@@ -405,16 +473,17 @@ export function FloorPlanBuilder({
       await patchBoothRaw(id, patch);
       pushUndo({ label: "Move booth", undo: () => patchBoothRaw(id, beforePatch), redo: () => patchBoothRaw(id, patch) });
     },
-    [booths, patchBoothRaw]
+    [displayBooths, patchBoothRaw]
   );
 
   // Group move (drag or arrow-key nudge) and, since they build patches the
-  // same shape, also used directly by Align/Distribute below.
+  // same shape, also used directly by Align/Distribute below. `patches`
+  // arrive in CURRENT VIEWBOX UNITS, same as onBoothCommit above.
   const onGroupCommit = useCallback(
     async (patches: { id: string; gridX: number; gridY: number }[]) => {
       if (patches.length === 0) return;
       const before = patches.map((p) => {
-        const b = booths.find((bb) => bb.id === p.id);
+        const b = displayBooths.find((bb) => bb.id === p.id);
         return { id: p.id, gridX: b?.gridX ?? 0, gridY: b?.gridY ?? 0 };
       });
       await Promise.all(patches.map((p) => patchBoothRaw(p.id, { gridX: p.gridX, gridY: p.gridY })));
@@ -428,11 +497,15 @@ export function FloorPlanBuilder({
         },
       });
     },
-    [booths, patchBoothRaw]
+    [displayBooths, patchBoothRaw]
   );
 
+  // Reads from displayBooths (CURRENT VIEWBOX UNITS) — every caller
+  // (align/distribute/duplicate) does its own geometry math on the result,
+  // which must stay in the same unit space onGroupCommit/patchBoothRaw
+  // expect their incoming patches in.
   function selectionMembers(): AdminBooth[] {
-    return booths.filter((b) => selectedIds.has(b.id));
+    return displayBooths.filter((b) => selectedIds.has(b.id));
   }
 
   function alignSelection(kind: "left" | "right" | "top" | "bottom" | "centerH" | "centerV") {
@@ -515,24 +588,32 @@ export function FloorPlanBuilder({
       return candidate;
     }
     const codeMap = snapshot.map((b) => ({ source: b, newCode: nextCode(b.code) }));
+    // `snapshot` items come from displayBooths (see duplicateSelection below)
+    // — gridX/Y/W/H are already in CURRENT VIEWBOX UNITS. The nudge offset
+    // (visually separating the copy from its source) scales with viewBox
+    // size rather than a hardcoded "3", which meant 3mm — invisible — once
+    // that was really millimetres instead of 3%.
+    const nudge = viewBox.width * 0.03;
     await Promise.all(
-      codeMap.map(({ source, newCode }) =>
-        fetch(`/api/admin/events/${eventId}/booths`, {
+      codeMap.map(({ source, newCode }) => {
+        const gridX = Math.min(viewBox.width - source.gridW, source.gridX + nudge);
+        const gridY = Math.min(viewBox.height - source.gridH, source.gridY + nudge);
+        const base = { code: newCode, size: source.size, priceAedFils: source.priceAedFils, colorHex: source.colorHex, rotation: source.rotation ?? 0 };
+        // The CREATE route requires valid gridX/Y/W/H numbers regardless of
+        // mode (its own initial validation), but in MM mode also needs the
+        // EXPLICIT xMm/yMm/widthMm/depthMm so it takes the authoritative
+        // path instead of misreading gridX (now an mm value) as a percent
+        // — see the same requirement documented on worldPatchToServerPatch.
+        const body =
+          coordinateMode === "MM"
+            ? { ...base, widthMm: source.gridW, depthMm: source.gridH, xMm: Math.round(gridX), yMm: Math.round(gridY), ...mmToGridRect(venueSize, { xMm: gridX, yMm: gridY, widthMm: source.gridW, depthMm: source.gridH }) }
+            : { ...base, gridX, gridY, gridW: source.gridW, gridH: source.gridH };
+        return fetch(`/api/admin/events/${eventId}/booths`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            code: newCode,
-            size: source.size,
-            priceAedFils: source.priceAedFils,
-            colorHex: source.colorHex,
-            gridX: Math.min(100 - source.gridW, source.gridX + 3),
-            gridY: Math.min(100 - source.gridH, source.gridY + 3),
-            gridW: source.gridW,
-            gridH: source.gridH,
-            rotation: source.rotation ?? 0,
-          }),
-        })
-      )
+          body: JSON.stringify(body),
+        });
+      })
     );
     const newCodes = codeMap.map((c) => c.newCode);
     await load();
@@ -594,26 +675,47 @@ export function FloorPlanBuilder({
         pushUndo({
           label: "Delete",
           undo: async () => {
+            // deletedSnapshot items come from displayBooths — gridX/Y/W/H
+            // are already CURRENT VIEWBOX UNITS. In MM mode that means they
+            // ARE the real mm position/size already, so pass them as
+            // explicit xMm/yMm/widthMm/depthMm (the route's authoritative
+            // path) rather than under the name gridX/Y/W/H, which it always
+            // treats as a 0-100 percentage — see worldPatchToServerPatch.
             await Promise.all(
-              deletedSnapshot.map((b) =>
-                fetch(`/api/admin/events/${eventId}/booths`, {
+              deletedSnapshot.map((b) => {
+                const body =
+                  coordinateMode === "MM"
+                    ? {
+                        code: b.code,
+                        size: b.size,
+                        priceAedFils: b.priceAedFils,
+                        colorHex: b.colorHex,
+                        rotation: b.rotation ?? 0,
+                        widthMm: b.gridW,
+                        depthMm: b.gridH,
+                        xMm: Math.round(b.gridX),
+                        yMm: Math.round(b.gridY),
+                        ...mmToGridRect(venueSize, { xMm: b.gridX, yMm: b.gridY, widthMm: b.gridW, depthMm: b.gridH }),
+                      }
+                    : {
+                        code: b.code,
+                        size: b.size,
+                        priceAedFils: b.priceAedFils,
+                        colorHex: b.colorHex,
+                        widthMm: b.widthMm,
+                        depthMm: b.depthMm,
+                        gridX: b.gridX,
+                        gridY: b.gridY,
+                        gridW: b.gridW,
+                        gridH: b.gridH,
+                        rotation: b.rotation ?? 0,
+                      };
+                return fetch(`/api/admin/events/${eventId}/booths`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    code: b.code,
-                    size: b.size,
-                    priceAedFils: b.priceAedFils,
-                    colorHex: b.colorHex,
-                    widthMm: b.widthMm,
-                    depthMm: b.depthMm,
-                    gridX: b.gridX,
-                    gridY: b.gridY,
-                    gridW: b.gridW,
-                    gridH: b.gridH,
-                    rotation: b.rotation ?? 0,
-                  }),
-                })
-              )
+                  body: JSON.stringify(body),
+                });
+              })
             );
           },
           redo: async () => {
@@ -946,18 +1048,36 @@ export function FloorPlanBuilder({
   async function addFeature(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
-    const res = await fetch(`/api/admin/events/${eventId}/features`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const rotation = Number(form.get("rotation")) || 0;
+    // In MM mode the form collects position/size in meters (see JSX below)
+    // — convert to mm and let the server derive the authoritative gridX/Y/
+    // W/H from them (same pattern as booth create). gridX/Y/W/H sent here
+    // are only the required-field placeholder the route re-derives from
+    // xMm/yMm/widthMm/depthMm once scale is confirmed; in legacy percent
+    // mode they're the real, final values (no mm fields sent at all).
+    let body: Record<string, unknown>;
+    if (coordinateMode === "MM") {
+      const widthMm = Math.round(Number(form.get("widthM")) * 1000);
+      const depthMm = Math.round(Number(form.get("depthM")) * 1000);
+      const xMm = Math.round(Number(form.get("xM")) * 1000);
+      const yMm = Math.round(Number(form.get("yM")) * 1000);
+      const grid = mmToGridRect({ venueWidthMm: viewBox.width, venueDepthMm: viewBox.height }, { xMm, yMm, widthMm, depthMm });
+      body = { type: form.get("type"), label: form.get("label"), rotation, widthMm, depthMm, xMm, yMm, ...grid };
+    } else {
+      body = {
         type: form.get("type"),
         label: form.get("label"),
+        rotation,
         gridX: Number(form.get("gridX")),
         gridY: Number(form.get("gridY")),
         gridW: Number(form.get("gridW")),
         gridH: Number(form.get("gridH")),
-        rotation: Number(form.get("rotation")) || 0,
-      }),
+      };
+    }
+    const res = await fetch(`/api/admin/events/${eventId}/features`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     });
     if (res.ok) {
       (e.target as HTMLFormElement).reset();
@@ -1018,7 +1138,11 @@ export function FloorPlanBuilder({
     await load();
   }
 
-  const selected = selectedIds.size === 1 ? booths.find((b) => selectedIds.has(b.id)) ?? null : null;
+  // From displayBooths (CURRENT VIEWBOX UNITS) so the "Fine-tune position"
+  // inspector fields below show/edit real meters once scale is confirmed —
+  // every other field on this object (price, color, status, widthMm, ...)
+  // is untouched by that normalization, so nothing else here changes.
+  const selected = selectedIds.size === 1 ? displayBooths.find((b) => selectedIds.has(b.id)) ?? null : null;
   const selectionCount = selectedIds.size;
 
   return (
@@ -1217,8 +1341,8 @@ export function FloorPlanBuilder({
       <div className="flex flex-col lg:flex-row gap-6 items-start">
         <div className="flex-1 min-w-0 w-full">
           <FloorPlan
-            features={features}
-            booths={booths}
+            features={displayFeatures}
+            booths={displayBooths}
             sizeStyles={sizeStyles}
             allowAnyStatusClick
             backgroundImageUrl={floorPlanImageUrl}
@@ -1235,25 +1359,25 @@ export function FloorPlanBuilder({
             smartGuidesEnabled={smartGuidesEnabled}
             gridSnapEnabled={gridSnapEnabled}
             venueWidthM={venueWidthM}
-            // NOT passing viewBox/coordinateMode here yet: FloorPlan's
-            // drag/resize/rotate manipulation math (computeGroupMovePatch /
-            // computeResizePatch / computeRotatePatch) still emits patches
-            // in raw viewBox units and writes them into gridX/gridY/gridW/
-            // gridH — correct in legacy percent mode (0-100), where those
-            // units already match what the server expects, but WRONG in
-            // real mm mode (0-venueWidthMm), where the server still treats
-            // gridX/Y/W/H as 0-100 percentages (see mmToGridRect in
-            // lib/floorplan/transform.ts) and xMm/yMm as the authoritative
-            // position. Flipping coordinateMode to "MM" here without first
-            // updating that manipulation code to emit real xMm/yMm (or
-            // percent-converted) patches silently corrupts booth positions
-            // on drag/resize — confirmed live. This is the actual remaining
-            // Phase 7 work; until it's done, the interactive canvas stays
-            // in legacy percent mode (gridX/Y/W/H are already populated as
-            // percentages regardless of scale confirmation, so booths still
-            // render correctly here) while the Venue Boundary and
-            // Background Alignment editors below use their own independent,
-            // already-mm-correct math.
+            // Safe now: displayBooths/displayFeatures resolve gridX/Y/W/H
+            // into CURRENT VIEWBOX UNITS (see the useMemo above), matching
+            // whatever viewBox/coordinateMode says — FloorPlan's own drag/
+            // resize/rotate/snap math was already fully viewBox-parametric
+            // (unitScaleOf, snapTuningFor, computeGroupMovePatch etc. all
+            // take viewBox/tuning as params); it just needed data in the
+            // right units. Patches it emits come back in those same units
+            // and get translated to the server's real field names by
+            // worldPatchToServerPatch inside patchBoothRaw before persisting.
+            viewBox={viewBox}
+            coordinateMode={coordinateMode}
+            backgroundAlignment={{
+              naturalWidthPx: bgNaturalWidthPx,
+              naturalHeightPx: bgNaturalHeightPx,
+              offsetXMm: bgOffsetXMm,
+              offsetYMm: bgOffsetYMm,
+              scale: bgScale,
+              rotationDeg: bgRotationDeg,
+            }}
           />
           <Legend sizeStyles={sizeStyles} />
 
@@ -1286,10 +1410,21 @@ export function FloorPlanBuilder({
                     ))}
                   </select>
                   <input name="label" placeholder="Label" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft col-span-2" />
-                  <input name="gridX" type="number" step="0.5" placeholder="X %" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
-                  <input name="gridY" type="number" step="0.5" placeholder="Y %" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
-                  <input name="gridW" type="number" step="0.5" placeholder="Width %" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
-                  <input name="gridH" type="number" step="0.5" placeholder="Height %" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                  {coordinateMode === "MM" ? (
+                    <>
+                      <input name="xM" type="number" step="0.1" placeholder="X (m)" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                      <input name="yM" type="number" step="0.1" placeholder="Y (m)" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                      <input name="widthM" type="number" step="0.1" min="0.1" placeholder="Width (m)" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                      <input name="depthM" type="number" step="0.1" min="0.1" placeholder="Depth (m)" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                    </>
+                  ) : (
+                    <>
+                      <input name="gridX" type="number" step="0.5" placeholder="X %" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                      <input name="gridY" type="number" step="0.5" placeholder="Y %" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                      <input name="gridW" type="number" step="0.5" placeholder="Width %" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                      <input name="gridH" type="number" step="0.5" placeholder="Height %" required className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft" />
+                    </>
+                  )}
                   <input name="rotation" type="number" placeholder="Rotation °" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft col-span-2" />
                 </div>
                 <button type="submit" className="mt-3 px-4 py-2 rounded-[6px] bg-brown text-cream-soft text-sm">
@@ -1809,14 +1944,24 @@ export function FloorPlanBuilder({
                   Drag the booth to move it, its corner handles to resize, and the handle above it to rotate — or fine-tune exact numbers below.
                 </p>
                 <details>
-                  <summary className="text-xs text-brown-light cursor-pointer">Fine-tune position, size &amp; rotation</summary>
+                  <summary className="text-xs text-brown-light cursor-pointer">Fine-tune position{coordinateMode === "LEGACY_PERCENT" ? ", size " : " "}&amp; rotation</summary>
                   <div className="mt-2 grid grid-cols-2 gap-2">
-                    <input id="booth-x" type="number" step="0.5" defaultValue={selected.gridX} placeholder="X %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
-                    <input id="booth-y" type="number" step="0.5" defaultValue={selected.gridY} placeholder="Y %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
-                    <input id="booth-w" type="number" step="0.5" defaultValue={selected.gridW} placeholder="W %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
-                    <input id="booth-h" type="number" step="0.5" defaultValue={selected.gridH} placeholder="H %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
+                    {coordinateMode === "MM" ? (
+                      <>
+                        <input id="booth-x" type="number" step="0.1" defaultValue={(selected.gridX / 1000).toFixed(2)} placeholder="X (m)" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
+                        <input id="booth-y" type="number" step="0.1" defaultValue={(selected.gridY / 1000).toFixed(2)} placeholder="Y (m)" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
+                      </>
+                    ) : (
+                      <>
+                        <input id="booth-x" type="number" step="0.5" defaultValue={selected.gridX} placeholder="X %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
+                        <input id="booth-y" type="number" step="0.5" defaultValue={selected.gridY} placeholder="Y %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
+                        <input id="booth-w" type="number" step="0.5" defaultValue={selected.gridW} placeholder="W %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
+                        <input id="booth-h" type="number" step="0.5" defaultValue={selected.gridH} placeholder="H %" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs" />
+                      </>
+                    )}
                     <input id="booth-rotation" type="number" step="1" defaultValue={selected.rotation ?? 0} placeholder="Rotate °" className="border border-brown/20 rounded-lg px-2 py-1.5 bg-cream-soft text-xs col-span-2" />
                   </div>
+                  {coordinateMode === "MM" && <p className="mt-1 text-[11px] text-brown-light/70">Size is set via Width/Depth (m) above.</p>}
                 </details>
               </div>
 
@@ -1831,25 +1976,34 @@ export function FloorPlanBuilder({
                     const color = (document.getElementById("booth-color") as HTMLInputElement).value.trim();
                     const x = (document.getElementById("booth-x") as HTMLInputElement).value;
                     const y = (document.getElementById("booth-y") as HTMLInputElement).value;
-                    const w = (document.getElementById("booth-w") as HTMLInputElement).value;
-                    const h = (document.getElementById("booth-h") as HTMLInputElement).value;
                     const rotation = (document.getElementById("booth-rotation") as HTMLInputElement).value;
                     const widthM = (document.getElementById("booth-width-m") as HTMLInputElement).value;
                     const depthM = (document.getElementById("booth-depth-m") as HTMLInputElement).value;
+                    const widthMm = widthM.trim() ? Math.round(Number(widthM) * 1000) : null;
+                    const depthMm = depthM.trim() ? Math.round(Number(depthM) * 1000) : null;
+                    // X/Y from the "Fine-tune" fields are already CURRENT
+                    // VIEWBOX UNITS (see the selected= useMemo above) — in MM
+                    // mode that's real meters (converted to mm below and
+                    // sent as explicit xMm/yMm so the server takes its
+                    // authoritative path instead of misreading an mm number
+                    // under the name "gridX", which it always treats as a
+                    // 0-100 percentage). Width/Depth (m) above are the only
+                    // size control in MM mode — no gridW/gridH sent here.
+                    const geometryPatch =
+                      coordinateMode === "MM"
+                        ? { xMm: Math.round(Number(x) * 1000), yMm: Math.round(Number(y) * 1000) }
+                        : { gridX: Number(x), gridY: Number(y), gridW: Number((document.getElementById("booth-w") as HTMLInputElement).value), gridH: Number((document.getElementById("booth-h") as HTMLInputElement).value) };
                     saveSelected({
                       status,
                       code,
                       priceAedFils: price ? Math.round(Number(price) * 100) : null,
                       colorHex: color || null,
-                      gridX: Number(x),
-                      gridY: Number(y),
-                      gridW: Number(w),
-                      gridH: Number(h),
+                      ...geometryPatch,
                       rotation: rotation ? Number(rotation) : 0,
                       assignedApplicationId: assignedApplicationId || null,
                       manualAssigneeName: assignedApplicationId ? null : manualAssigneeName || null,
-                      widthMm: widthM.trim() ? Math.round(Number(widthM) * 1000) : null,
-                      depthMm: depthM.trim() ? Math.round(Number(depthM) * 1000) : null,
+                      widthMm,
+                      depthMm,
                     });
                   }}
                   className="px-4 py-2 rounded-[6px] bg-brown text-cream-soft text-sm"

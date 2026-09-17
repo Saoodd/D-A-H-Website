@@ -109,6 +109,71 @@ export function gridRectToMm(venue: VenueSize, grid: GridRect): MmRect {
   };
 }
 
+export interface WorldRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** A booth/feature-shaped object carrying both the legacy grid fields and
+ *  the mm-authoritative ones — loose on purpose so it accepts raw Booth/
+ *  FloorPlanFeature rows or their API DTOs without extra mapping. */
+export interface GeometryFields {
+  gridX: number;
+  gridY: number;
+  gridW: number;
+  gridH: number;
+  xMm?: number | null;
+  yMm?: number | null;
+  widthMm?: number | null;
+  depthMm?: number | null;
+}
+
+/** Resolves an item's rect into CURRENT VIEWBOX UNITS — the single function
+ *  every render/manipulation path that needs a world-space rect should go
+ *  through instead of reading gridX/Y/W/H directly, now that those stay
+ *  0-100 percentages forever (see mmToGridRect above) regardless of mode.
+ *  In LEGACY_PERCENT mode this is just gridX/Y/W/H unchanged. In MM mode,
+ *  uses the item's own xMm/yMm/widthMm/depthMm when all four are present
+ *  (the normal case for anything created/moved once scale is confirmed);
+ *  falls back to deriving an approximate mm rect from gridX/Y/W/H via
+ *  gridRectToMm for an item that predates scale confirmation and hasn't
+ *  been touched since — never authoritative, just a reasonable placement
+ *  until it's next moved/saved and a write path persists real mm for it. */
+export function worldRectOf(item: GeometryFields, mode: FloorplanMode, venue: VenueSize): WorldRect {
+  if (mode === "LEGACY_PERCENT") {
+    return { x: item.gridX, y: item.gridY, w: item.gridW, h: item.gridH };
+  }
+  if (item.xMm != null && item.yMm != null && item.widthMm != null && item.depthMm != null) {
+    return { x: item.xMm, y: item.yMm, w: item.widthMm, h: item.depthMm };
+  }
+  const mm = gridRectToMm(venue, { gridX: item.gridX, gridY: item.gridY, gridW: item.gridW, gridH: item.gridH });
+  return { x: mm.xMm, y: mm.yMm, w: mm.widthMm, h: mm.depthMm };
+}
+
+/** Converts a PARTIAL geometry patch expressed in CURRENT VIEWBOX UNITS
+ *  (gridX/gridY/gridW/gridH keys, valued in percent in legacy mode or real
+ *  mm once scale is confirmed — exactly what FloorPlan.tsx's own drag/
+ *  resize/rotate math emits, since it's already fully viewBox-parametric)
+ *  into the field names a booth/feature PATCH or POST body actually
+ *  expects for that mode: passthrough in legacy mode, or
+ *  gridX->xMm/gridY->yMm/gridW->widthMm/gridH->depthMm in MM mode — NEVER
+ *  send a raw gridX holding an mm value under the name "gridX": the server
+ *  always treats that field as a 0-100 percentage regardless of mode (see
+ *  mmToGridRect). Every other key in the patch (price, color, rotation,
+ *  status, ...) passes through unchanged. */
+export function worldPatchToServerPatch(patch: Record<string, unknown>, mode: FloorplanMode): Record<string, unknown> {
+  if (mode === "LEGACY_PERCENT") return patch;
+  const { gridX, gridY, gridW, gridH, ...rest } = patch;
+  const out: Record<string, unknown> = { ...rest };
+  if (gridX !== undefined) out.xMm = Math.round(gridX as number);
+  if (gridY !== undefined) out.yMm = Math.round(gridY as number);
+  if (gridW !== undefined) out.widthMm = Math.round(gridW as number);
+  if (gridH !== undefined) out.depthMm = Math.round(gridH as number);
+  return out;
+}
+
 export interface BackgroundAlignment {
   naturalWidthPx: number | null;
   naturalHeightPx: number | null;
