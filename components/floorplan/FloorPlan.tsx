@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { FloorFeature, FloorBooth, SizeStyle } from "./types";
 import { BackgroundAlignment, computeBackgroundRect } from "@/lib/floorplan/transform";
 
@@ -93,6 +93,27 @@ function snapTuningFor(viewBox: ViewBoxSize, mode: "MM" | "LEGACY_PERCENT"): Sna
     minBoothSize: 2,
     rotateHandleOffset: 6,
   };
+}
+
+interface GridLineSpec {
+  pos: number;
+  major: boolean;
+}
+
+/** The physical background grid's line positions along one axis, in real mm
+ *  — 1m major lines always, plus 0.25m minor lines (0.5m once the venue is
+ *  large enough that 0.25m would draw hundreds of near-invisible lines) —
+ *  see requirement: physical grid driven by venue mm scale (1m major /
+ *  0.25-0.5m minor), not a fixed percentage-of-canvas pattern. Only
+ *  meaningful in MM mode; LEGACY_PERCENT venues have no real distance to
+ *  grid against, so callers should skip this entirely in that mode. */
+function gridLinesFor(lengthMm: number): GridLineSpec[] {
+  const minorStep = lengthMm > 40000 ? 500 : 250;
+  const lines: GridLineSpec[] = [];
+  for (let pos = 0; pos <= lengthMm; pos += minorStep) {
+    lines.push({ pos, major: pos % 1000 === 0 });
+  }
+  return lines;
 }
 
 interface GuideLine {
@@ -434,6 +455,9 @@ export function FloorPlan({
   onCanvasClick,
   editable = false,
   onBoothCommit,
+  selectedFeatureId,
+  onFeatureSelectionChange,
+  onFeatureCommit,
   selectedIds,
   onSelectionChange,
   onGroupCommit,
@@ -480,6 +504,15 @@ export function FloorPlan({
    *  moving/resizing objects on a slide. */
   editable?: boolean;
   onBoothCommit?: (id: string, patch: BoothPatch) => void;
+  /** Structural feature (entrance/toilets/office/...) selection + editing —
+   *  independent of booth selection. Passing selectedFeatureId (even null)
+   *  enables click-to-select, drag-to-move and a rotate handle on features,
+   *  the same interaction booths already have, gated on `editable`. A
+   *  feature's own size is fixed at creation (see FloorPlanBuilder's Add
+   *  Feature form) — only position and rotation are ever manipulated here. */
+  selectedFeatureId?: string | null;
+  onFeatureSelectionChange?: (id: string | null) => void;
+  onFeatureCommit?: (id: string, patch: { gridX?: number; gridY?: number; rotation?: number }) => void;
   /** Multi-select mode (admin only): current selection. Passing this (even
    *  an empty Set) switches the canvas from the plain single-pick API
    *  (selectedBoothId/onSelectBooth) to full Figma-style multi-select:
@@ -564,6 +597,11 @@ export function FloorPlan({
     coordinateMode === "MM" && backgroundAlignment
       ? computeBackgroundRect({ venueWidthMm: viewBox.width, venueDepthMm: viewBox.height }, backgroundAlignment)
       : null;
+  // Physical background grid (1m major / 0.25-0.5m minor) — MM mode only;
+  // legacy percent-mode venues have no real distance for a physical grid to
+  // mean anything, so they keep the plain diagonal-hatch canvas background.
+  const verticalGridLines = useMemo(() => (coordinateMode === "MM" ? gridLinesFor(viewBox.width) : []), [coordinateMode, viewBox.width]);
+  const horizontalGridLines = useMemo(() => (coordinateMode === "MM" ? gridLinesFor(viewBox.height) : []), [coordinateMode, viewBox.height]);
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const [hoveredBoothId, setHoveredBoothId] = useState<string | null>(null);
@@ -577,6 +615,17 @@ export function FloorPlan({
   const pinchState = useRef<{ dist: number; scale: number } | null>(null);
   const manipRef = useRef<Manip | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  // Feature move/rotate — deliberately separate from the booth Manip state
+  // machine above: a feature is always a single, solo drag (no group-move,
+  // no resize, no rubber-band selection), so per-element pointer capture on
+  // its own <g> is simpler and sufficient rather than routing through the
+  // container-level dispatch booths need for multi-select coordination.
+  const featureManipRef = useRef<
+    | { kind: "move"; id: string; startPointer: { x: number; y: number }; startGrid: { x: number; y: number }; moved: boolean }
+    | { kind: "rotate"; id: string; center: { x: number; y: number }; moved: boolean }
+    | null
+  >(null);
+  const [featurePreview, setFeaturePreview] = useState<{ id: string; gridX?: number; gridY?: number; rotation?: number } | null>(null);
 
   const multiSelectMode = selectedIds !== undefined;
 
@@ -661,13 +710,16 @@ export function FloorPlan({
       if (wasClick && placementMode && onCanvasClick) {
         const pct = pointToPercent(e.clientX, e.clientY);
         if (pct) onCanvasClick(pct.x, pct.y);
-      } else if (wasClick && !placementMode && onDeselect) {
-        // Clicked empty canvas (not a booth, which stops propagation before
-        // this fires) — deselect, same as clicking empty space in Figma/Slides.
-        onDeselect();
+      } else if (wasClick && !placementMode) {
+        // Clicked empty canvas (not a booth/feature, which stop propagation
+        // before this fires) — deselect, same as clicking empty space in
+        // Figma/Slides. Booth and feature selection are independent, so
+        // both get cleared here.
+        onDeselect?.();
+        onFeatureSelectionChange?.(null);
       }
     },
-    [placementMode, onCanvasClick, pointToPercent, onDeselect, booths, selectedIds, onSelectionChange, viewBox.width, viewBox.height]
+    [placementMode, onCanvasClick, pointToPercent, onDeselect, onFeatureSelectionChange, booths, selectedIds, onSelectionChange, viewBox.width, viewBox.height]
   );
 
   const onWheel = useCallback((e: React.WheelEvent) => {
@@ -1084,6 +1136,35 @@ export function FloorPlan({
         >
           <rect x={0} y={0} width={viewBox.width} height={viewBox.height} fill="transparent" stroke="#DDD3C3" strokeWidth={0.3 * unitScale} />
 
+          {coordinateMode === "MM" && (
+            <g pointerEvents="none">
+              {verticalGridLines.map((l) => (
+                <line
+                  key={`gv${l.pos}`}
+                  x1={l.pos}
+                  y1={0}
+                  x2={l.pos}
+                  y2={viewBox.height}
+                  stroke="#DDD3C3"
+                  strokeWidth={(l.major ? 0.22 : 0.08) * unitScale}
+                  opacity={l.major ? 0.55 : 0.28}
+                />
+              ))}
+              {horizontalGridLines.map((l) => (
+                <line
+                  key={`gh${l.pos}`}
+                  x1={0}
+                  y1={l.pos}
+                  x2={viewBox.width}
+                  y2={l.pos}
+                  stroke="#DDD3C3"
+                  strokeWidth={(l.major ? 0.22 : 0.08) * unitScale}
+                  opacity={l.major ? 0.55 : 0.28}
+                />
+              ))}
+            </g>
+          )}
+
           {backgroundImageUrl && alignedBackgroundRect && (
             // Precise admin-controlled placement from the Background
             // Alignment wizard step: computeBackgroundRect already applies
@@ -1118,23 +1199,111 @@ export function FloorPlan({
           )}
 
           {features.map((f) => {
-            const fcx = f.gridX + f.gridW / 2;
-            const fcy = f.gridY + f.gridH / 2;
+            const featureEditable = editable && selectedFeatureId !== undefined;
+            const isFeaturePreview = featurePreview?.id === f.id;
+            const gridX = isFeaturePreview && featurePreview.gridX !== undefined ? featurePreview.gridX : f.gridX;
+            const gridY = isFeaturePreview && featurePreview.gridY !== undefined ? featurePreview.gridY : f.gridY;
+            const rotation = isFeaturePreview && featurePreview.rotation !== undefined ? featurePreview.rotation : f.rotation || 0;
+            const fcx = gridX + f.gridW / 2;
+            const fcy = gridY + f.gridH / 2;
+            const isSelectedFeature = featureEditable && selectedFeatureId === f.id;
             return (
-              <g key={f.id} transform={f.rotation ? `rotate(${f.rotation} ${fcx} ${fcy})` : undefined}>
+              <g key={f.id} transform={rotation ? `rotate(${rotation} ${fcx} ${fcy})` : undefined}>
                 <rect
-                  x={f.gridX}
-                  y={f.gridY}
+                  x={gridX}
+                  y={gridY}
                   width={f.gridW}
                   height={f.gridH}
                   fill={backgroundImageUrl ? "rgba(227,217,204,0.75)" : "#E3D9CC"}
-                  stroke="#B79A7C"
-                  strokeWidth={0.15 * unitScale}
+                  stroke={isSelectedFeature ? "#2E7D32" : "#B79A7C"}
+                  strokeWidth={(isSelectedFeature ? 0.35 : 0.15) * unitScale}
                   strokeDasharray={f.type.startsWith("ENTRANCE") ? `${unitScale} ${0.7 * unitScale}` : undefined}
+                  style={featureEditable ? { cursor: "move", touchAction: "none" } : undefined}
+                  onPointerDown={
+                    featureEditable
+                      ? (e) => {
+                          e.stopPropagation();
+                          (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+                          onFeatureSelectionChange?.(f.id);
+                          const pt = pointToPercent(e.clientX, e.clientY);
+                          if (!pt) return;
+                          featureManipRef.current = { kind: "move", id: f.id, startPointer: pt, startGrid: { x: f.gridX, y: f.gridY }, moved: false };
+                        }
+                      : undefined
+                  }
+                  onPointerMove={
+                    featureEditable
+                      ? (e) => {
+                          const m = featureManipRef.current;
+                          if (!m || m.id !== f.id || m.kind !== "move") return;
+                          const pt = pointToPercent(e.clientX, e.clientY);
+                          if (!pt) return;
+                          const dx = pt.x - m.startPointer.x;
+                          const dy = pt.y - m.startPointer.y;
+                          if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) m.moved = true;
+                          const newX = Math.min(viewBox.width - f.gridW, Math.max(0, m.startGrid.x + dx));
+                          const newY = Math.min(viewBox.height - f.gridH, Math.max(0, m.startGrid.y + dy));
+                          setFeaturePreview({ id: f.id, gridX: newX, gridY: newY });
+                        }
+                      : undefined
+                  }
+                  onPointerUp={
+                    featureEditable
+                      ? (e) => {
+                          const m = featureManipRef.current;
+                          featureManipRef.current = null;
+                          (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
+                          if (!m || m.id !== f.id || m.kind !== "move") return;
+                          if (m.moved && featurePreview?.id === f.id && featurePreview.gridX !== undefined && featurePreview.gridY !== undefined) {
+                            onFeatureCommit?.(f.id, { gridX: featurePreview.gridX, gridY: featurePreview.gridY });
+                          }
+                          setFeaturePreview(null);
+                        }
+                      : undefined
+                  }
                 />
-                <text x={fcx} y={fcy} textAnchor="middle" dominantBaseline="middle" fontSize={2.2 * unitScale} fill="#6B4429">
+                <text x={fcx} y={fcy} textAnchor="middle" dominantBaseline="middle" fontSize={2.2 * unitScale} fill="#6B4429" style={{ pointerEvents: "none" }}>
                   {f.label || featureLabel[f.type]}
                 </text>
+                {isSelectedFeature && (
+                  <circle
+                    cx={fcx}
+                    cy={fcy - Math.max(f.gridH / 2, tuning.minBoothSize / 2) - tuning.rotateHandleOffset}
+                    r={0.9 * unitScale}
+                    fill="#2E7D32"
+                    style={{ cursor: "grab", touchAction: "none" }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+                      featureManipRef.current = { kind: "rotate", id: f.id, center: { x: fcx, y: fcy }, moved: false };
+                    }}
+                    onPointerMove={(e) => {
+                      const m = featureManipRef.current;
+                      if (!m || m.id !== f.id || m.kind !== "rotate") return;
+                      const pt = pointToPercent(e.clientX, e.clientY);
+                      if (!pt) return;
+                      const angleRad = Math.atan2(pt.y - m.center.y, pt.x - m.center.x);
+                      let deg = (angleRad * 180) / Math.PI + 90;
+                      deg = ((deg % 360) + 360) % 360;
+                      const snapped = Math.round(deg / 15) * 15;
+                      const diff = Math.abs(deg - snapped);
+                      if (Math.min(diff, 360 - diff) < 3) deg = snapped;
+                      deg = Math.round(((deg % 360) + 360) % 360);
+                      m.moved = true;
+                      setFeaturePreview({ id: f.id, rotation: deg });
+                    }}
+                    onPointerUp={(e) => {
+                      const m = featureManipRef.current;
+                      featureManipRef.current = null;
+                      (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
+                      if (!m || m.id !== f.id || m.kind !== "rotate") return;
+                      if (m.moved && featurePreview?.id === f.id && featurePreview.rotation !== undefined) {
+                        onFeatureCommit?.(f.id, { rotation: featurePreview.rotation });
+                      }
+                      setFeaturePreview(null);
+                    }}
+                  />
+                )}
               </g>
             );
           })}

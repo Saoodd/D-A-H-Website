@@ -76,6 +76,8 @@ export function FloorPlanBuilder({
   venueBackgroundLocked?: boolean;
 }) {
   const [features, setFeatures] = useState<FloorFeature[]>([]);
+  const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
+  const [featureBusy, setFeatureBusy] = useState(false);
   const [booths, setBooths] = useState<AdminBooth[]>([]);
   const [acceptedApplications, setAcceptedApplications] = useState<{ id: string; businessName: string }[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -500,6 +502,22 @@ export function FloorPlanBuilder({
       pushUndo({ label: "Move booth", undo: () => patchBoothRaw(id, beforePatch), redo: () => patchBoothRaw(id, patch) });
     },
     [displayBooths, patchBoothRaw]
+  );
+
+  // Feature move/rotate, from FloorPlan's per-feature drag/rotate handle —
+  // same worldPatchToServerPatch translation as patchBoothRaw above (never
+  // send a real mm value under the "gridX" key once scale is confirmed).
+  const onFeatureCommit = useCallback(
+    async (id: string, patch: Record<string, unknown>) => {
+      const serverPatch = worldPatchToServerPatch(patch, coordinateMode);
+      setFeatures((prev) => prev.map((f) => (f.id === id ? { ...f, ...serverPatch } : f)));
+      await fetch(`/api/admin/features/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(serverPatch),
+      });
+    },
+    [coordinateMode]
   );
 
   // Group move (drag or arrow-key nudge) and, since they build patches the
@@ -1170,6 +1188,7 @@ export function FloorPlanBuilder({
   // is untouched by that normalization, so nothing else here changes.
   const selected = selectedIds.size === 1 ? displayBooths.find((b) => selectedIds.has(b.id)) ?? null : null;
   const selectionCount = selectedIds.size;
+  const selectedFeature = selectedFeatureId ? features.find((f) => f.id === selectedFeatureId) ?? null : null;
 
   return (
     <div>
@@ -1587,6 +1606,9 @@ export function FloorPlanBuilder({
             onDeselect={() => setSelectedIds(new Set())}
             editable={!placementOn}
             onBoothCommit={onBoothCommit}
+            selectedFeatureId={selectedFeatureId}
+            onFeatureSelectionChange={setSelectedFeatureId}
+            onFeatureCommit={onFeatureCommit}
             selectedIds={selectedIds}
             onSelectionChange={setSelectedIds}
             onGroupCommit={onGroupCommit}
@@ -1817,6 +1839,73 @@ export function FloorPlanBuilder({
         {/* Right inspector: multi-select tools, then a single booth's editor,
             then (when nothing is selected) the add-a-booth mini-form. */}
         <div className="w-full lg:w-80 shrink-0 lg:sticky lg:top-4 space-y-4">
+          {selectedFeature && (
+            <form
+              key={selectedFeature.id}
+              className="rounded-[10px] border border-emerald-300 bg-emerald-50 p-4 space-y-3"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                setFeatureBusy(true);
+                try {
+                  const res = await fetch(`/api/admin/features/${selectedFeature.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ label: fd.get("label"), type: fd.get("type") }),
+                  });
+                  if (res.ok) {
+                    const { feature } = await res.json();
+                    setFeatures((prev) => prev.map((f) => (f.id === feature.id ? { ...f, ...feature } : f)));
+                    setNotice("Feature updated.");
+                  } else {
+                    setNotice("Couldn't update the feature.");
+                  }
+                } finally {
+                  setFeatureBusy(false);
+                }
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-emerald-900">Editing feature</span>
+                <button type="button" onClick={() => setSelectedFeatureId(null)} className="text-xs text-emerald-900 underline">
+                  Deselect
+                </button>
+              </div>
+              <p className="text-xs text-emerald-800/70">Drag to move · drag the green handle above it to rotate.</p>
+              <input name="label" defaultValue={selectedFeature.label} placeholder="Label" className="w-full border border-emerald-300 rounded-lg px-2 py-1.5 text-sm bg-white" />
+              <select name="type" defaultValue={selectedFeature.type} className="w-full border border-emerald-300 rounded-lg px-2 py-1.5 text-sm bg-white">
+                {FEATURE_TYPE.map((t) => (
+                  <option key={t} value={t}>
+                    {t.replaceAll("_", " ")}
+                  </option>
+                ))}
+              </select>
+              <div className="flex items-center gap-2">
+                <button type="submit" disabled={featureBusy} className="px-3 py-1.5 rounded-lg bg-emerald-800 text-white text-xs disabled:opacity-50">
+                  Save
+                </button>
+                <button
+                  type="button"
+                  disabled={featureBusy}
+                  onClick={async () => {
+                    if (!confirm(`Remove "${selectedFeature.label || selectedFeature.type}"?`)) return;
+                    setFeatureBusy(true);
+                    try {
+                      await fetch(`/api/admin/features/${selectedFeature.id}`, { method: "DELETE" });
+                      setFeatures((prev) => prev.filter((f) => f.id !== selectedFeature.id));
+                      setSelectedFeatureId(null);
+                    } finally {
+                      setFeatureBusy(false);
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-red-300 text-red-700 text-xs disabled:opacity-50"
+                >
+                  Delete
+                </button>
+              </div>
+            </form>
+          )}
+
           {selectionCount > 1 && (
             <div className="rounded-[10px] border border-blue-300 bg-blue-50 p-4 space-y-3">
               <div className="flex items-center justify-between">
