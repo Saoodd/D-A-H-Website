@@ -61,6 +61,8 @@ export function ApplicationDetailClient({
   const [multiMode, setMultiMode] = useState(false);
   const [editingSetupSize, setEditingSetupSize] = useState(false);
   const [mapFocusNonce, setMapFocusNonce] = useState(1);
+  const [mapFitViewNonce, setMapFitViewNonce] = useState(0);
+  const [mapGroupFocusNonce, setMapGroupFocusNonce] = useState(1);
   // Server-side phone-verification gate — set when confirming a booth or
   // starting checkout is refused because the vendor's mobile number isn't
   // verified yet. Opens the inline PhoneVerifyModal; on success, resumes
@@ -620,11 +622,19 @@ export function ApplicationDetailClient({
 
           {floorplan && view.soldBooths.length > 0 && (
             <div className="rounded-[10px] border border-brown/10 bg-cream p-5 sm:p-6">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <p className="label-caps">{isAr ? "مخطط الموقع" : "Floor Plan"}</p>
-                <button type="button" onClick={() => setMapFocusNonce((n) => n + 1)} className="text-xs underline text-brown">
-                  {isAr ? "إعادة ضبط العرض" : "Reset View"}
-                </button>
+                <div className="flex items-center gap-4">
+                  <button type="button" onClick={() => setMapFitViewNonce((n) => n + 1)} className="text-xs underline text-brown">
+                    {isAr ? "ملاءمة الموقع" : "Fit Venue"}
+                  </button>
+                  <button type="button" onClick={() => setMapGroupFocusNonce((n) => n + 1)} className="text-xs underline text-brown">
+                    {isAr ? "التركيز على جناحي" : "Focus My Booth(s)"}
+                  </button>
+                  <button type="button" onClick={() => setMapFocusNonce((n) => n + 1)} className="text-xs underline text-brown">
+                    {isAr ? "إعادة ضبط العرض" : "Reset View"}
+                  </button>
+                </div>
               </div>
               <FloorPlan
                 features={floorplan.features}
@@ -633,7 +643,10 @@ export function ApplicationDetailClient({
                 backgroundImageUrl={floorplan.floorPlanImageUrl}
                 interactive
                 focusBoothId={view.soldBooths[0]?.boothId ?? null}
+                focusBoothIds={view.soldBooths.map((b) => b.boothId)}
                 focusNonce={mapFocusNonce}
+                groupFocusNonce={mapGroupFocusNonce}
+                fitViewNonce={mapFitViewNonce}
               />
               <Legend sizeStyles={sizeStyles} showMineKey />
               <div className="mt-4 grid sm:grid-cols-2 gap-4 text-sm">

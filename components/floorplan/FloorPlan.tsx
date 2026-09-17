@@ -444,6 +444,9 @@ export function FloorPlan({
   onHoverBooth,
   focusBoothId,
   focusNonce,
+  focusBoothIds,
+  groupFocusNonce,
+  fitViewNonce,
   viewBox = DEFAULT_VIEWBOX,
   coordinateMode = "LEGACY_PERCENT",
 }: {
@@ -511,6 +514,24 @@ export function FloorPlan({
    *  since a hidden container measures as zero-sized and the first attempt
    *  is a no-op. */
   focusNonce?: number;
+  /** When set to 1+ booth ids present in `booths` ("Focus My Booth(s)" for
+   *  a booking), pans/zooms to fit ALL of their bounding boxes in view
+   *  together (a single id just fits that one booth with padding). Driven
+   *  by its own `groupFocusNonce` below — independent of focusBoothId /
+   *  focusNonce, so a page can offer both a "recenter on my primary
+   *  booth" control and a separate "fit all my booths" control. */
+  focusBoothIds?: string[] | null;
+  /** Bump this (any changed number) to re-run the focusBoothIds fit —
+   *  mirrors focusNonce's re-trigger role but scoped to the group-fit
+   *  effect only, so it never fires the single-booth focusBoothId
+   *  effect. */
+  groupFocusNonce?: number;
+  /** Bump this (any changed number) to pan/zoom back to the full venue —
+   *  "Fit Venue" — i.e. reset scale/translate to the identity view, the
+   *  same view the canvas opens at and its own internal reset button
+   *  produces, just externally triggerable (e.g. a "Fit Venue" button
+   *  outside this component, on View Booking). */
+  fitViewNonce?: number;
   /** The coordinate space to render in — venueWidthMm x venueDepthMm (real
    *  millimetres, used directly as SVG user units) once the caller's Event
    *  has a confirmed physical scale, or the legacy 100x100 percentage
@@ -695,6 +716,63 @@ export function FloorPlan({
     setTranslate({ x: rect.width / 2 - cx * unit, y: rect.height / 2 - cy * unit });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-checks on booths/scale changes but only acts once per (focusBoothId, focusNonce) pair (see lastFocusedBoothRef guard above)
   }, [focusBoothId, focusNonce, booths, viewBox.width, viewBox.height]);
+
+  const lastFocusedGroupRef = useRef<string | null>(null);
+
+  // Forget the last-focused group key once focusBoothIds is cleared/emptied,
+  // mirroring the focusBoothId reset above.
+  useEffect(() => {
+    if (!focusBoothIds || focusBoothIds.length === 0) lastFocusedGroupRef.current = null;
+  }, [focusBoothIds]);
+
+  // "Focus My Booth(s)" — fits ALL of focusBoothIds' bounding boxes
+  // together (a single id just fits that one booth with padding). Driven
+  // by its own groupFocusNonce, independent of focusBoothId/focusNonce,
+  // so this is a self-contained control regardless of booth count. Same
+  // once-per-(ids,nonce) guard and hidden-container retry behavior as the
+  // single-booth focus effect above.
+  useEffect(() => {
+    const ids = (focusBoothIds ?? []).filter((id) => booths.some((b) => b.id === id));
+    const key = `${[...ids].sort().join(",")}:${groupFocusNonce ?? 0}`;
+    if (ids.length < 1 || key === lastFocusedGroupRef.current) return;
+    const members = booths.filter((b) => ids.includes(b.id));
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    lastFocusedGroupRef.current = key;
+
+    const minX = Math.min(...members.map((b) => b.gridX));
+    const minY = Math.min(...members.map((b) => b.gridY));
+    const maxX = Math.max(...members.map((b) => b.gridX + b.gridW));
+    const maxY = Math.max(...members.map((b) => b.gridY + b.gridH));
+    const PAD = Math.max(viewBox.width, viewBox.height) * 0.08; // breathing room around the group
+    const boxW = Math.max(maxX - minX + PAD * 2, viewBox.width * 0.05);
+    const boxH = Math.max(maxY - minY + PAD * 2, viewBox.height * 0.05);
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+
+    const containerAspect = rect.width / rect.height;
+    const viewBoxAspect = viewBox.width / viewBox.height;
+    const basePxPerUnit = viewBoxAspect > containerAspect ? rect.width / viewBox.width : rect.height / viewBox.height;
+    const boxAspect = boxW / boxH;
+    const pxPerUnitForBox = boxAspect > containerAspect ? rect.width / boxW : rect.height / boxH;
+    const targetScale = clampScale(pxPerUnitForBox / basePxPerUnit);
+    const unit = basePxPerUnit * targetScale;
+    setScale(targetScale);
+    setTranslate({ x: rect.width / 2 - cx * unit, y: rect.height / 2 - cy * unit });
+  }, [focusBoothIds, groupFocusNonce, booths, viewBox.width, viewBox.height]);
+
+  // "Fit Venue" — externally-triggerable equivalent of the canvas's own
+  // internal reset button (scale=1, translate=0 IS the full-venue view,
+  // since the SVG viewBox already spans the whole venue under
+  // preserveAspectRatio="xMidYMid meet").
+  useEffect(() => {
+    if (fitViewNonce == null) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reacting to an external "Fit Venue" trigger prop, not deriving from own render
+    setScale(1);
+    setTranslate({ x: 0, y: 0 });
+  }, [fitViewNonce]);
 
   // ---- booth manipulation (editable mode): drag-to-move (solo or as a
   // group), corner resize handles, and a rotate handle, all operating in
