@@ -58,7 +58,6 @@ export function ApplicationDetailClient({
   const [floorplan, setFloorplan] = useState<FloorplanData | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [checkoutSession, setCheckoutSession] = useState<{ paymentId: string; amountAedFils: number } | null>(null);
   // A booth click never holds it immediately — it only opens the
   // confirmation modal below. The hold request itself only fires once the
   // vendor explicitly confirms (see confirmPendingBooth / confirmStaged).
@@ -73,11 +72,12 @@ export function ApplicationDetailClient({
   const [mapFocusNonce, setMapFocusNonce] = useState(1);
   const [mapFitViewNonce, setMapFitViewNonce] = useState(0);
   const [mapGroupFocusNonce, setMapGroupFocusNonce] = useState(1);
-  // Server-side phone-verification gate — set when confirming a booth or
-  // starting checkout is refused because the vendor's mobile number isn't
-  // verified yet. Opens the inline PhoneVerifyModal; on success, resumes
-  // whichever action was blocked.
-  const [verifyIntent, setVerifyIntent] = useState<"confirm-booth" | "checkout" | null>(null);
+  // Server-side phone-verification gate — set when confirming a booth is
+  // refused because the vendor's mobile number isn't verified yet. Opens
+  // the inline PhoneVerifyModal; on success, resumes the blocked confirm.
+  // (Checkout's own VERIFICATION_REQUIRED gate is handled on the Booking
+  // Review page now, since that's the only place checkout is started.)
+  const [verifyIntent, setVerifyIntent] = useState<"confirm-booth" | null>(null);
 
   const refreshStatus = useCallback(async () => {
     const res = await fetch(`/api/applications/${applicationId}/status`);
@@ -287,7 +287,6 @@ export function ApplicationDetailClient({
           })
         )
       );
-      setCheckoutSession(null);
       setStagedBooths([]);
       setMultiMode(false);
       await refreshStatus();
@@ -297,31 +296,8 @@ export function ApplicationDetailClient({
     }
   }
 
-  async function proceedToPayment() {
-    setBusy(true);
-    setNotice(null);
-    try {
-      const res = await fetch(`/api/checkout/${applicationId}/start`, { method: "POST" });
-      if (!res.ok) {
-        const b = await res.json().catch(() => ({}));
-        if (b.code === "VERIFICATION_REQUIRED") {
-          setVerifyIntent("checkout");
-          return;
-        }
-        throw new Error(b.error || "Could not start checkout");
-      }
-      const data = await res.json();
-      setCheckoutSession({ paymentId: data.paymentId, amountAedFils: data.amountAedFils });
-      await refreshStatus();
-    } catch (e) {
-      setNotice(e instanceof Error ? e.message : "Something went wrong");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function pay(outcome: "SUCCEEDED" | "FAILED") {
-    const paymentId = checkoutSession?.paymentId || view.latestPayment?.id;
+    const paymentId = view.latestPayment?.id;
     if (!paymentId) return;
     setBusy(true);
     setNotice(null);
@@ -565,15 +541,9 @@ export function ApplicationDetailClient({
                 </div>
               )}
               <div className="flex gap-3">
-                {view.eventTermsRequired && !view.eventTermsAccepted ? (
-                  <Link href={`/vendor/applications/${applicationId}/terms`} className="px-6 py-2.5 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark">
-                    {isAr ? "مراجعة وقبول شروط الفعالية" : "Review & Accept Event Terms"}
-                  </Link>
-                ) : (
-                  <button onClick={proceedToPayment} disabled={busy} className="px-6 py-2.5 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark disabled:opacity-50">
-                    {isAr ? "المتابعة للدفع" : "Continue to Payment"}
-                  </button>
-                )}
+                <Link href={`/vendor/applications/${applicationId}/review`} className="px-6 py-2.5 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark">
+                  {isAr ? "متابعة مراجعة الحجز" : "Continue to Booking Review"}
+                </Link>
                 <button onClick={changeBooth} disabled={busy} className="px-6 py-2.5 rounded-full border border-brown/30 text-sm disabled:opacity-50">
                   {view.boothHolds.length > 1 ? (isAr ? "اختيار أكشاك أخرى" : "Choose different booths") : isAr ? "اختيار كشك آخر" : "Choose a different booth"}
                 </button>
@@ -591,7 +561,7 @@ export function ApplicationDetailClient({
               </div>
               <div className="flex justify-between text-sm mb-4">
                 <span className="text-brown-light">{isAr ? "المبلغ" : "Amount"}</span>
-                <span className="text-brown font-medium">{formatAed(checkoutSession?.amountAedFils ?? view.latestPayment?.amountAedFils ?? 0)}</span>
+                <span className="text-brown font-medium">{formatAed(view.latestPayment?.amountAedFils ?? 0)}</span>
               </div>
               {view.boothHolds[0].holdExpiresAt && (
                 <div className="mb-5">
@@ -748,10 +718,8 @@ export function ApplicationDetailClient({
         <PhoneVerifyModal
           onClose={() => setVerifyIntent(null)}
           onVerified={() => {
-            const intent = verifyIntent;
             setVerifyIntent(null);
-            if (intent === "confirm-booth") confirmPendingBooth();
-            else if (intent === "checkout") proceedToPayment();
+            confirmPendingBooth();
           }}
         />
       )}
