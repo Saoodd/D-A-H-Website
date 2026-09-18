@@ -446,6 +446,77 @@ type Manip =
   | { kind: "resize"; id: string; handle: ResizeHandle; anchorWorld: { x: number; y: number }; rotation: number; moved: boolean }
   | { kind: "rotate"; id: string; center: { x: number; y: number }; moved: boolean };
 
+interface ViewportRect {
+  width: number;
+  height: number;
+}
+
+/** The "Fit Venue" scale — and, per the bounded-viewer requirement, the hard
+ *  floor for how far out the user may ever zoom (minZoom = fitZoom, never an
+ *  arbitrary constant like the old flat 0.5). For a RECTANGLE boundary (or
+ *  LEGACY_PERCENT mode, or no boundary at all) this is always exactly 1: the
+ *  <svg> element is fixed at the container's own pixel size (width/height
+ *  100%), so CSS scale 1 already frames the complete venue — going below 1
+ *  would only ever reveal the container's own background past the SVG's
+ *  edge, never more venue. For a smaller/differently-shaped CIRCLE/OVAL/
+ *  POLYGON boundary, computes how far to zoom IN so the boundary's own
+ *  padded extent (never the larger enclosing coordinate box) fills the
+ *  viewport — the exact math "Fit Venue" already used, now also doubling as
+ *  the pan/zoom floor everywhere else in this component (wheel, pinch,
+ *  +/- buttons, resize). Floored at 1: a boundary whose own bounding box
+ *  already spans the full coordinate box on an axis (e.g. an L-shaped
+ *  polygon touching all four sides) would otherwise have its small
+ *  breathing-room padding push the raw math fractionally BELOW 1 — but
+ *  scale 1 already frames the ENTIRE coordinate box, a strict superset of
+ *  any boundary, so there is never a legitimate reason to zoom out further
+ *  than that; doing so would only reveal empty canvas past the venue's own
+ *  frame, the exact bug this floor exists to prevent. */
+function computeFitZoom(rect: ViewportRect, viewBox: ViewBoxSize, boundary: VenueBoundary, showBoundary: boolean): number {
+  if (!showBoundary || boundary.shape === "RECTANGLE") return 1;
+  if (rect.width <= 0 || rect.height <= 0) return 1;
+  const extent = boundaryExtentMm(boundary, viewBox.width, viewBox.height);
+  const PAD = Math.max(viewBox.width, viewBox.height) * 0.04;
+  const boxW = Math.max(extent.maxX - extent.minX + PAD * 2, viewBox.width * 0.05);
+  const boxH = Math.max(extent.maxY - extent.minY + PAD * 2, viewBox.height * 0.05);
+  const containerAspect = rect.width / rect.height;
+  const viewBoxAspect = viewBox.width / viewBox.height;
+  const basePxPerUnit = viewBoxAspect > containerAspect ? rect.width / viewBox.width : rect.height / viewBox.height;
+  const boxAspect = boxW / boxH;
+  const pxPerUnitForBox = boxAspect > containerAspect ? rect.width / boxW : rect.height / boxH;
+  return Math.max(1, pxPerUnitForBox / basePxPerUnit);
+}
+
+/** The translate that centers the Fit Venue view at `fitScale` (paired 1:1
+ *  with computeFitZoom's own scale) — the boundary's own extent for a
+ *  non-rectangle shape, or simply {0,0} for a RECTANGLE (the raw SVG box IS
+ *  the venue in that case, already centered by construction) OR whenever
+ *  fitScale is exactly the computeFitZoom floor of 1: at CSS scale 1 with
+ *  zero translate, the <svg>'s own preserveAspectRatio="xMidYMid meet"
+ *  ALREADY centers the complete coordinate box in the container with no JS
+ *  translate needed — and since the box is always a strict superset of any
+ *  boundary, that view is guaranteed to show the whole boundary too.
+ *  Computing a boundary-extent-centered offset on top of that would double
+ *  up on centering and could shift the box off-true (clipping one edge to
+ *  show empty margin on the other) for a boundary that isn't itself
+ *  centered in the box on the axis that didn't drive the scale. */
+function computeFitTranslate(
+  rect: ViewportRect,
+  viewBox: ViewBoxSize,
+  boundary: VenueBoundary,
+  showBoundary: boolean,
+  fitScale: number
+): { x: number; y: number } {
+  if (!showBoundary || boundary.shape === "RECTANGLE" || fitScale <= 1) return { x: 0, y: 0 };
+  const extent = boundaryExtentMm(boundary, viewBox.width, viewBox.height);
+  const cx = (extent.minX + extent.maxX) / 2;
+  const cy = (extent.minY + extent.maxY) / 2;
+  const containerAspect = rect.width / rect.height;
+  const viewBoxAspect = viewBox.width / viewBox.height;
+  const basePxPerUnit = viewBoxAspect > containerAspect ? rect.width / viewBox.width : rect.height / viewBox.height;
+  const unit = basePxPerUnit * fitScale;
+  return { x: rect.width / 2 - cx * unit, y: rect.height / 2 - cy * unit };
+}
+
 export function FloorPlan({
   features,
   booths,
@@ -662,6 +733,14 @@ export function FloorPlan({
 
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
+  // The "Fit Venue" scale (see computeFitZoom above) — ALSO the hard floor
+  // clampScale enforces, so the venue can never be zoomed out past what Fit
+  // Venue itself shows. Starts at 1 (correct for the overwhelming majority
+  // of events — a RECTANGLE boundary, where fitZoom is always exactly 1) and
+  // is corrected for a non-rectangle boundary once the container is first
+  // measurable (see the mount effect below), then kept in sync with the
+  // container's actual size via a ResizeObserver.
+  const [fitZoom, setFitZoom] = useState(1);
   const [hoveredBoothId, setHoveredBoothId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const lastFocusedBoothRef = useRef<string | null>(null);
@@ -687,7 +766,11 @@ export function FloorPlan({
 
   const multiSelectMode = selectedIds !== undefined;
 
-  const clampScale = (s: number) => Math.min(4, Math.max(0.5, s));
+  // minZoom is ALWAYS fitZoom — never an arbitrary constant (the old
+  // flat 0.5 floor is exactly what let the venue shrink to a speck inside a
+  // huge navigable empty canvas). Applies identically regardless of how zoom
+  // happens: wheel, pinch, the +/- buttons, or a resize-driven re-clamp.
+  const clampScale = useCallback((s: number) => Math.min(4, Math.max(fitZoom, s)), [fitZoom]);
 
   // Bounded pan: the venue can never be dragged so far that empty space
   // shows past its edge — when zoomed in, translate is clamped so the
@@ -705,6 +788,18 @@ export function FloorPlan({
     const y = contentH >= rect.height ? Math.min(0, Math.max(rect.height - contentH, t.y)) : (rect.height - contentH) / 2;
     return { x, y };
   }, []);
+
+  // Imperative mirrors of scale/translate for the ResizeObserver callback
+  // below, which must read the LATEST values without itself depending on
+  // them (that would mean reconnecting the observer on every pan/zoom).
+  const scaleRef = useRef(scale);
+  const translateRef = useRef(translate);
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
+  useEffect(() => {
+    translateRef.current = translate;
+  }, [translate]);
 
   // Despite the name (kept for minimal diff against the rest of this file),
   // this resolves a screen point into the CURRENT viewBox's own coordinate
@@ -797,10 +892,13 @@ export function FloorPlan({
     [placementMode, onCanvasClick, pointToPercent, onDeselect, onFeatureSelectionChange, booths, selectedIds, onSelectionChange, viewBox.width, viewBox.height]
   );
 
-  const onWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    setScale((s) => clampScale(s - e.deltaY * 0.0015));
-  }, []);
+  const onWheel = useCallback(
+    (e: React.WheelEvent) => {
+      e.preventDefault();
+      setScale((s) => clampScale(s - e.deltaY * 0.0015));
+    },
+    [clampScale]
+  );
 
   // Re-clamps translate whenever scale changes (wheel, pinch, +/− buttons,
   // or the ⤾ reset) — a translate that was valid at the old scale can put
@@ -819,14 +917,17 @@ export function FloorPlan({
     }
   }, [scale]);
 
-  const onTouchMove = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length === 2 && pinchState.current) {
-      const [a, b] = [e.touches[0], e.touches[1]];
-      const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-      const ratio = dist / pinchState.current.dist;
-      setScale(clampScale(pinchState.current.scale * ratio));
-    }
-  }, []);
+  const onTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      if (e.touches.length === 2 && pinchState.current) {
+        const [a, b] = [e.touches[0], e.touches[1]];
+        const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+        const ratio = dist / pinchState.current.dist;
+        setScale(clampScale(pinchState.current.scale * ratio));
+      }
+    },
+    [clampScale]
+  );
 
   const onTouchEnd = useCallback((e: React.TouchEvent) => {
     if (e.touches.length < 2) pinchState.current = null;
@@ -867,7 +968,7 @@ export function FloorPlan({
     const targetScale = clampScale(Math.max(scale, 1.6));
     const unit = pxPerUnit * targetScale;
     setScale(targetScale);
-    setTranslate({ x: rect.width / 2 - cx * unit, y: rect.height / 2 - cy * unit });
+    setTranslate(clampTranslate({ x: rect.width / 2 - cx * unit, y: rect.height / 2 - cy * unit }, targetScale));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-checks on booths/scale changes but only acts once per (focusBoothId, focusNonce) pair (see lastFocusedBoothRef guard above)
   }, [focusBoothId, focusNonce, booths, viewBox.width, viewBox.height]);
 
@@ -914,7 +1015,8 @@ export function FloorPlan({
     const targetScale = clampScale(pxPerUnitForBox / basePxPerUnit);
     const unit = basePxPerUnit * targetScale;
     setScale(targetScale);
-    setTranslate({ x: rect.width / 2 - cx * unit, y: rect.height / 2 - cy * unit });
+    setTranslate(clampTranslate({ x: rect.width / 2 - cx * unit, y: rect.height / 2 - cy * unit }, targetScale));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- clampScale/clampTranslate omitted deliberately (same once-per-key guard as the effect above; both are stable functions of state already covered by their own re-clamp effects)
   }, [focusBoothIds, groupFocusNonce, booths, viewBox.width, viewBox.height]);
 
   // "Fit Venue" — for a RECTANGLE boundary (or LEGACY_PERCENT mode, or no
@@ -926,35 +1028,23 @@ export function FloorPlan({
   // shaped CIRCLE/OVAL/POLYGON boundary, frames the boundary's OWN extent
   // (lib/floorplan/boundary.ts boundaryExtentMm) instead of the enclosing
   // coordinate box — never fits an invisible box bigger than the real
-  // venue. Same fit-math pattern as the "Focus My Booth(s)" effect above.
+  // venue. Also the ONLY place fitZoom (the minZoom floor — see
+  // computeFitZoom above) gets (re)established, so calling this always
+  // keeps clampScale's floor in sync with whatever it just fit to.
   const fitToBoundary = useCallback(() => {
-    if (!showBoundary || boundary.shape === "RECTANGLE") {
-      setScale(1);
-      setTranslate({ x: 0, y: 0 });
-      return;
-    }
     const el = containerRef.current;
     const rect = el?.getBoundingClientRect();
     if (!rect || rect.width === 0 || rect.height === 0) {
+      setFitZoom(1);
       setScale(1);
       setTranslate({ x: 0, y: 0 });
       return;
     }
-    const extent = boundaryExtentMm(boundary, viewBox.width, viewBox.height);
-    const PAD = Math.max(viewBox.width, viewBox.height) * 0.04;
-    const boxW = Math.max(extent.maxX - extent.minX + PAD * 2, viewBox.width * 0.05);
-    const boxH = Math.max(extent.maxY - extent.minY + PAD * 2, viewBox.height * 0.05);
-    const cx = (extent.minX + extent.maxX) / 2;
-    const cy = (extent.minY + extent.maxY) / 2;
-    const containerAspect = rect.width / rect.height;
-    const viewBoxAspect = viewBox.width / viewBox.height;
-    const basePxPerUnit = viewBoxAspect > containerAspect ? rect.width / viewBox.width : rect.height / viewBox.height;
-    const boxAspect = boxW / boxH;
-    const pxPerUnitForBox = boxAspect > containerAspect ? rect.width / boxW : rect.height / boxH;
-    const targetScale = clampScale(pxPerUnitForBox / basePxPerUnit);
-    const unit = basePxPerUnit * targetScale;
-    setScale(targetScale);
-    setTranslate({ x: rect.width / 2 - cx * unit, y: rect.height / 2 - cy * unit });
+    const vb = { width: viewBox.width, height: viewBox.height };
+    const fz = computeFitZoom(rect, vb, boundary, showBoundary);
+    setFitZoom(fz);
+    setScale(fz);
+    setTranslate(computeFitTranslate(rect, vb, boundary, showBoundary, fz));
   }, [showBoundary, boundary, viewBox.width, viewBox.height]);
 
   // "Fit Venue" — externally-triggerable equivalent of the canvas's own
@@ -965,22 +1055,60 @@ export function FloorPlan({
     fitToBoundary();
   }, [fitViewNonce, fitToBoundary]);
 
-  // Once, on first mount (or once the boundary/container become known —
-  // e.g. this canvas was hidden behind a mobile List/Map toggle at mount
-  // time), frame the ACTUAL boundary rather than opening on the plain
-  // scale=1 coordinate-box view for a non-rectangle venue — so a circular
-  // venue doesn't open small-and-centered inside a mostly-empty square.
-  // Never re-fires after its first successful measurement, so it never
-  // fights a subsequent manual pan/zoom.
-  const initialBoundaryFitDoneRef = useRef(false);
+  // Once, on first mount (or once the container becomes known — e.g. this
+  // canvas was hidden behind a mobile List/Map toggle at mount time),
+  // opens on Fit Venue — required for every boundary shape, not just non-
+  // rectangle: for RECTANGLE it's a no-op (the useState(1)/{0,0} defaults
+  // already ARE that view), but running it unconditionally also establishes
+  // the real fitZoom floor up front (see computeFitZoom) instead of leaving
+  // the default `1` in place until some other trigger recomputes it, and
+  // for a non-rectangle boundary actually frames its real (often smaller/
+  // off-center) extent instead of the enclosing coordinate box — so a
+  // circular venue doesn't open small-and-centered inside a mostly-empty
+  // square. Never re-fires after its first successful measurement, so it
+  // never fights a subsequent manual pan/zoom.
+  const initialFitDoneRef = useRef(false);
   useEffect(() => {
-    if (initialBoundaryFitDoneRef.current) return;
-    if (!showBoundary || boundary.shape === "RECTANGLE") return;
+    if (initialFitDoneRef.current) return;
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect || rect.width === 0 || rect.height === 0) return;
-    initialBoundaryFitDoneRef.current = true;
+    initialFitDoneRef.current = true;
     fitToBoundary();
-  }, [showBoundary, boundary, fitToBoundary]);
+  }, [fitToBoundary]);
+
+  // After the container resizes (window resize, orientation change, sidebar
+  // toggle, etc.) — recompute fitZoom for the new size and re-apply the
+  // bounded-viewer invariant: never let the CURRENT scale end up below the
+  // new floor, and always re-clamp translate into the new legal bounds (a
+  // translate that was valid at the old container size can be illegal at
+  // the new one even at an unchanged scale, since translate is stored in
+  // screen pixels). If the view was already at (or now falls below) Fit
+  // Venue, snaps cleanly to the new Fit Venue view rather than leaving a
+  // stale, no-longer-centered translate in place; otherwise (the user had
+  // zoomed in further than fit) keeps their zoom level and only re-clamps
+  // pan — see requirement: preserve the current viewed location where
+  // possible, but clamp again against the new legal bounds regardless.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const recomputeBounds = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const vb = { width: viewBox.width, height: viewBox.height };
+      const fz = computeFitZoom(rect, vb, boundary, showBoundary);
+      setFitZoom(fz);
+      const wasAtOrBelowFit = scaleRef.current <= fz + 0.001;
+      if (wasAtOrBelowFit) {
+        setScale(fz);
+        setTranslate(computeFitTranslate(rect, vb, boundary, showBoundary, fz));
+        return;
+      }
+      setTranslate(clampTranslate(translateRef.current, scaleRef.current));
+    };
+    const ro = new ResizeObserver(recomputeBounds);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [viewBox.width, viewBox.height, boundary, showBoundary, clampTranslate]);
 
   // ---- booth manipulation (editable mode): drag-to-move (solo or as a
   // group), corner resize handles, and a rotate handle, all operating in
@@ -1223,7 +1351,10 @@ export function FloorPlan({
           <button
             type="button"
             onClick={() => setScale((s) => clampScale(s - 0.2))}
-            className="w-7 h-7 rounded-full border border-brown/30 hover:bg-brown/10"
+            disabled={scale <= fitZoom + 0.001}
+            aria-label="Zoom out"
+            title="Zoom out"
+            className="w-7 h-7 rounded-full border border-brown/30 hover:bg-brown/10 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >
             −
           </button>
