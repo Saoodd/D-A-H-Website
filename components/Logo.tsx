@@ -24,8 +24,8 @@ interface LogoProps {
 // display size is controlled by the h-* utility in `heightClass` (w-auto
 // lets each variant keep its own natural width at that height).
 const DIMENSIONS = {
-  full: { dark: { w: 264, h: 300 }, light: { w: 299, h: 300 } },
-  mark: { dark: { w: 88, h: 100 }, light: { w: 100, h: 100 } },
+  full: { dark: { w: 272, h: 300 }, light: { w: 299, h: 300 } },
+  mark: { dark: { w: 91, h: 100 }, light: { w: 100, h: 100 } },
 } as const;
 
 export function Logo({ variant = "full", className = "" }: LogoProps) {
