@@ -1,44 +1,54 @@
 import Image from "next/image";
 
-// The real Dar Al Hay brand mark — sourced directly from the supplied
-// brand artwork (public/brand/logo-{dark,light}{,-sm,-lg}.png), not a
-// redraw. "dark" = the olive-circle/ivory-mark badge, used against the
-// app's light theme (ivory page background) for contrast; "light" = the
-// cream-circle/dark-mark badge, used against the app's dark theme
-// (charcoal page background). Swapped via plain CSS (.theme-light-only /
-// .theme-dark-only in globals.css) keyed off [data-theme], not a client
-// hook, so this stays usable in server-rendered contexts (e.g. the
-// printable receipt page) with no hydration mismatch.
+// The real Dar Al Hay brand mark + wordmark — sourced directly from the
+// supplied brand artwork (public/brand/logo-{dark,light}{,-sm,-lg}.png),
+// background and circular badge removed (kept only for the favicon/OG
+// image, where a self-contained badge reads better) so the ink-colored
+// mark sits directly on the page like a normal logo. "dark" = the olive
+// ink version, used against the app's light theme (ivory page
+// background); "light" = the ivory ink version, used against the app's
+// dark theme (charcoal page background). Swapped via plain CSS
+// (.theme-light-only / .theme-dark-only in globals.css) keyed off
+// [data-theme], not a client hook, so this stays usable in
+// server-rendered contexts (e.g. the printable receipt page) with no
+// hydration mismatch.
 interface LogoProps {
-  /** "full" (default) — the badge at a size where its baked-in DAR AL
-   *  HAY / دار الحي / EVENTS wordmark reads clearly. "mark" — the same
-   *  badge at a smaller size, for compact chrome (mobile top bars). Both
-   *  variants show the same artwork; there is no separate icon-only
-   *  export, so "mark" is simply a smaller rendering of the full badge. */
+  /** "full" (default) — the mark + full wordmark (DAR AL HAY / دار الحي /
+   *  EVENTS) at a size where it reads clearly. "mark" — the same artwork
+   *  at a smaller size, for compact chrome (mobile top bars). */
   variant?: "full" | "mark";
   className?: string;
 }
 
+// Intrinsic pixel size of each source file, for correct aspect ratio —
+// display size is controlled by the h-* utility in `heightClass` (w-auto
+// lets each variant keep its own natural width at that height).
+const DIMENSIONS = {
+  full: { dark: { w: 264, h: 300 }, light: { w: 299, h: 300 } },
+  mark: { dark: { w: 88, h: 100 }, light: { w: 100, h: 100 } },
+} as const;
+
 export function Logo({ variant = "full", className = "" }: LogoProps) {
-  const px = variant === "full" ? 72 : 32;
-  const srcSize = variant === "full" ? "" : "-sm";
+  const suffix = variant === "mark" ? "-sm" : "";
+  const heightClass = variant === "mark" ? "h-10 w-auto" : "h-24 w-auto";
+  const dims = DIMENSIONS[variant];
 
   return (
     <span className={`inline-flex items-center ${className}`}>
       <Image
-        src={`/brand/logo-dark${srcSize}.png`}
+        src={`/brand/logo-dark${suffix}.png`}
         alt="Dar Al Hay"
-        width={px}
-        height={px}
-        className="theme-light-only rounded-full"
+        width={dims.dark.w}
+        height={dims.dark.h}
+        className={`theme-light-only ${heightClass}`}
         priority
       />
       <Image
-        src={`/brand/logo-light${srcSize}.png`}
+        src={`/brand/logo-light${suffix}.png`}
         alt="Dar Al Hay"
-        width={px}
-        height={px}
-        className="theme-dark-only rounded-full"
+        width={dims.light.w}
+        height={dims.light.h}
+        className={`theme-dark-only ${heightClass}`}
         priority
       />
     </span>
