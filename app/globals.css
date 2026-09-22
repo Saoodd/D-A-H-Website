@@ -236,3 +236,26 @@ html[dir="rtl"] .label-caps {
     animation: none;
   }
 }
+
+/* Homepage hero photo — an extremely slow, subtle "ken burns" drift so the
+   crowd photo feels alive rather than static, without ever distracting from
+   the text panel beside it. Transform-only (GPU-composited, no layout
+   cost). See app/(site)/HomeClient.tsx. */
+@keyframes hero-photo-drift {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.06);
+  }
+}
+
+.hero-photo-ambient {
+  animation: hero-photo-drift 26s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-photo-ambient {
+    animation: none;
+  }
+}
