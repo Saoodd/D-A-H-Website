@@ -53,7 +53,7 @@ export function HomeHeader({ vendorLoggedIn }: { vendorLoggedIn: boolean }) {
         solid ? "bg-cream-soft/95 backdrop-blur border-b border-brown/10" : "bg-transparent border-b border-transparent"
       }`}
     >
-      <div className="container-page flex items-center justify-between py-3.5 md:py-4">
+      <div className="container-page flex items-center justify-between py-2.5 md:py-3">
         <Link href="/" aria-label="Dar Al Hay home" className="shrink-0">
           {solid ? (
             <span className="inline-flex items-center">
@@ -63,7 +63,7 @@ export function HomeHeader({ vendorLoggedIn }: { vendorLoggedIn: boolean }) {
                 width={91}
                 height={100}
                 priority
-                className="theme-light-only h-9 w-auto"
+                className="theme-light-only h-14 md:h-16 w-auto"
               />
               <Image
                 src="/brand/logo-light-sm.png"
@@ -71,11 +71,18 @@ export function HomeHeader({ vendorLoggedIn }: { vendorLoggedIn: boolean }) {
                 width={100}
                 height={100}
                 priority
-                className="theme-dark-only h-9 w-auto"
+                className="theme-dark-only h-14 md:h-16 w-auto"
               />
             </span>
           ) : (
-            <Image src="/brand/logo-light-sm.png" alt="Dar Al Hay" width={100} height={100} priority className="h-9 w-auto" />
+            <Image
+              src="/brand/logo-light-sm.png"
+              alt="Dar Al Hay"
+              width={100}
+              height={100}
+              priority
+              className="h-14 md:h-16 w-auto"
+            />
           )}
         </Link>
 

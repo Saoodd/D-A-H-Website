@@ -56,7 +56,7 @@ export function HomeClient({
         {/* Short top scrim, for nav legibility only. */}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/50 to-transparent" />
 
-        <div className="relative container-page pb-16 sm:pb-20 md:pb-24 pt-24 md:pt-28">
+        <div className="relative container-page pb-16 sm:pb-20 md:pb-24 pt-28 md:pt-32">
           <Reveal>
             <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-[0.28em] text-white/80 mb-3 md:mb-5">
               {t("home.heroKicker")}
@@ -227,30 +227,34 @@ export function HomeClient({
         </section>
       )}
 
-      {/* FINAL CTA — bold closing band. */}
-      <section className="bg-black text-white">
-        <div className="container-page py-24 md:py-32 text-center">
+      {/* FINAL CTA — warm off-white closing section. Deliberately NOT a
+          black band: on mobile a full-black block with generous padding
+          read as a heavy, disconnected slab dropped under the photo
+          sections. This keeps the same content/links but as a natural,
+          tighter continuation of the editorial sections above. */}
+      <section className="bg-cream border-t border-brown/10">
+        <div className="container-page py-14 sm:py-20 md:py-28 text-center">
           <Reveal>
-            <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-[0.28em] text-white/50 mb-6">
+            <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-[0.28em] text-brown-light mb-4 md:mb-6">
               {t("home.heroKicker")}
             </p>
           </Reveal>
           <Reveal delayMs={100}>
-            <h2 className="font-heading font-light text-3xl sm:text-4xl md:text-5xl leading-tight max-w-3xl mx-auto">
+            <h2 className="font-heading font-light text-ink text-[1.85rem] sm:text-4xl md:text-5xl leading-tight max-w-3xl mx-auto">
               {t("home.finalCtaTitle")}
             </h2>
           </Reveal>
           <Reveal delayMs={200}>
-            <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <div className="mt-6 md:mt-10 flex flex-col sm:flex-row items-center justify-center gap-3 md:gap-4">
               <Link
                 href="/vendors"
-                className="px-8 py-3.5 rounded-full bg-white text-black text-sm font-medium tracking-wide hover:bg-white/90 active:scale-[0.98] transition-all"
+                className="w-full sm:w-auto px-8 py-3.5 rounded-full bg-brown text-cream-soft text-sm font-medium tracking-wide hover:bg-brown-dark active:scale-[0.98] transition-all"
               >
                 {t("home.ctaVendors")}
               </Link>
               <Link
                 href="/events"
-                className="px-8 py-3.5 rounded-full border border-white/40 text-white text-sm font-medium tracking-wide hover:bg-white/10 hover:border-white/60 active:scale-[0.98] transition-all"
+                className="w-full sm:w-auto px-8 py-3.5 rounded-full border border-brown/30 text-brown-dark text-sm font-medium tracking-wide hover:bg-brown/5 hover:border-brown/50 active:scale-[0.98] transition-all"
               >
                 {t("home.ctaMarkets")}
               </Link>
