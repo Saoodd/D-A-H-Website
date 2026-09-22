@@ -31,8 +31,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "home.heroTitle": "A stage for Dubai's most ambitious independent businesses.",
     "home.heroSubtitle":
       "Dar Al Hay (DAH) curates events and pop-ups across Dubai that give ambitious businesses a real audience, real sales, and room to grow.",
-    "home.ctaMarkets": "See upcoming events",
-    "home.ctaVendors": "Become a vendor",
+    "home.ctaMarkets": "Upcoming Events",
+    "home.ctaVendors": "Become a Vendor",
     "home.missionTitle": "Our story",
     "home.missionBody":
       "Dar Al Hay (DAH) curates events that put ambitious businesses in front of the people who matter to them. Every DAH event is deliberately chosen, not simply filled — a considered mix of vendors, a setting that fits the occasion, and a standard of presentation vendors can trust. From an intimate boutique pop-up to a major venue, the same principle holds: quality first.",
@@ -62,6 +62,7 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     "home.galleryTitle": "From past events",
     "home.galleryCta": "See the full gallery",
+    "home.finalCtaTitle": "Ready to put your business on stage?",
 
     "vendorInfo.title": "Become a DAH Vendor",
     "vendorInfo.subtitle": "Create your business profile to apply for upcoming Dar Al Hay events.",
@@ -226,7 +227,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "home.heroTitle": "منصة لأصحاب الأعمال المستقلة الأكثر طموحاً في دبي.",
     "home.heroSubtitle":
       "دار الحي (DAH) تنسّق فعاليات وأسواقاً منبثقة في جميع أنحاء دبي تمنح المشاريع الطموحة جمهوراً حقيقياً، ومبيعات حقيقية، ومساحة للنمو.",
-    "home.ctaMarkets": "شاهد الفعاليات القادمة",
+    "home.ctaMarkets": "الفعاليات القادمة",
     "home.ctaVendors": "كن بائعاً معنا",
     "home.missionTitle": "قصتنا",
     "home.missionBody":
@@ -257,6 +258,7 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     "home.galleryTitle": "من فعالياتنا السابقة",
     "home.galleryCta": "عرض المعرض الكامل",
+    "home.finalCtaTitle": "جاهز لتصعد بمشروعك إلى المنصة؟",
 
     "vendorInfo.title": "كن بائعاً مع دار الحي",
     "vendorInfo.subtitle": "أنشئ ملف عملك للتقديم على فعاليات دار الحي القادمة.",
