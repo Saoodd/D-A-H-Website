@@ -437,7 +437,7 @@ export function VendorsClient({ tradeLicenseRequired }: { tradeLicenseRequired: 
                 disabled={submitting || uploadingLicense || uploadingLogo}
                 className="px-7 py-3 rounded-full bg-brown text-cream-soft text-sm tracking-wide hover:bg-brown-dark transition-colors disabled:opacity-50"
               >
-                {submitting ? "…" : t("vendorInfo.submit")}
+                {submitting ? t("vendorInfo.submitting") : t("vendorInfo.submit")}
               </button>
             </div>
         </form>

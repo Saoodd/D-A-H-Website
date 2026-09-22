@@ -33,15 +33,16 @@ interface Application {
 
 export function ApplicationDetailAdminClient({ application: a }: { application: Application }) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const busy = busyAction !== null;
   const [extendHours, setExtendHours] = useState("3");
   const [overrideHours, setOverrideHours] = useState("");
   const [adjAmount, setAdjAmount] = useState("");
   const [adjReason, setAdjReason] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
 
-  async function call(path: string, body?: unknown) {
-    setBusy(true);
+  async function call(action: string, path: string, body?: unknown) {
+    setBusyAction(action);
     setNotice(null);
     try {
       const res = await fetch(path, {
@@ -56,7 +57,7 @@ export function ApplicationDetailAdminClient({ application: a }: { application: 
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "Action failed");
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   }
 
@@ -93,11 +94,11 @@ export function ApplicationDetailAdminClient({ application: a }: { application: 
       <section className="mt-6 flex flex-wrap gap-3">
         {(a.status === "PENDING") && (
           <>
-            <button disabled={busy} onClick={() => call(`/api/admin/applications/${a.id}/approve`)} className="px-4 py-2 rounded-full bg-green-700 text-white text-sm disabled:opacity-50">
-              Approve
+            <button disabled={busy} onClick={() => call("approve", `/api/admin/applications/${a.id}/approve`)} className="px-4 py-2 rounded-full bg-green-700 text-white text-sm disabled:opacity-50">
+              {busyAction === "approve" ? "Approving…" : "Approve"}
             </button>
-            <button disabled={busy} onClick={() => call(`/api/admin/applications/${a.id}/reject`)} className="px-4 py-2 rounded-full bg-red-700 text-white text-sm disabled:opacity-50">
-              Reject
+            <button disabled={busy} onClick={() => call("reject", `/api/admin/applications/${a.id}/reject`)} className="px-4 py-2 rounded-full bg-red-700 text-white text-sm disabled:opacity-50">
+              {busyAction === "reject" ? "Rejecting…" : "Reject"}
             </button>
           </>
         )}
@@ -115,20 +116,20 @@ export function ApplicationDetailAdminClient({ application: a }: { application: 
             <button
               disabled={busy}
               onClick={() =>
-                call(`/api/admin/applications/${a.id}/approve`, {
+                call("reaccept", `/api/admin/applications/${a.id}/approve`, {
                   deadlineHoursOverride: overrideHours ? Number(overrideHours) : undefined,
                 })
               }
               className="px-4 py-2 rounded-full bg-green-700 text-white text-sm disabled:opacity-50"
             >
-              Re-accept
+              {busyAction === "reaccept" ? "Re-accepting…" : "Re-accept"}
             </button>
           </div>
         )}
         {a.status === "ACCEPTED" && (
           <>
-            <button disabled={busy} onClick={() => call(`/api/admin/applications/${a.id}/resend`)} className="px-4 py-2 rounded-full border border-brown/30 text-sm disabled:opacity-50">
-              Resend approval email
+            <button disabled={busy} onClick={() => call("resend", `/api/admin/applications/${a.id}/resend`)} className="px-4 py-2 rounded-full border border-brown/30 text-sm disabled:opacity-50">
+              {busyAction === "resend" ? "Sending…" : "Resend approval email"}
             </button>
             <div className="flex items-end gap-2">
               <label className="text-xs text-brown-light flex flex-col gap-1">
@@ -141,14 +142,14 @@ export function ApplicationDetailAdminClient({ application: a }: { application: 
               </label>
               <button
                 disabled={busy}
-                onClick={() => call(`/api/admin/applications/${a.id}/extend`, { hours: Number(extendHours) })}
+                onClick={() => call("extend", `/api/admin/applications/${a.id}/extend`, { hours: Number(extendHours) })}
                 className="px-4 py-2 rounded-full border border-brown/30 text-sm disabled:opacity-50"
               >
-                Extend
+                {busyAction === "extend" ? "Extending…" : "Extend"}
               </button>
             </div>
-            <button disabled={busy} onClick={() => call(`/api/admin/applications/${a.id}/revoke`)} className="px-4 py-2 rounded-full bg-red-700 text-white text-sm disabled:opacity-50">
-              Revoke acceptance
+            <button disabled={busy} onClick={() => call("revoke", `/api/admin/applications/${a.id}/revoke`)} className="px-4 py-2 rounded-full bg-red-700 text-white text-sm disabled:opacity-50">
+              {busyAction === "revoke" ? "Revoking…" : "Revoke acceptance"}
             </button>
           </>
         )}
@@ -208,7 +209,7 @@ export function ApplicationDetailAdminClient({ application: a }: { application: 
           <button
             disabled={busy || !adjAmount || !adjReason}
             onClick={async () => {
-              await call(`/api/admin/applications/${a.id}/adjustments`, {
+              await call("adjustment", `/api/admin/applications/${a.id}/adjustments`, {
                 amountAedFils: Math.round(Number(adjAmount) * 100),
                 reason: adjReason,
               });
@@ -217,7 +218,7 @@ export function ApplicationDetailAdminClient({ application: a }: { application: 
             }}
             className="px-4 py-2 rounded-full bg-brown text-cream-soft text-sm disabled:opacity-50"
           >
-            Add adjustment
+            {busyAction === "adjustment" ? "Adding…" : "Add adjustment"}
           </button>
         </div>
       </section>

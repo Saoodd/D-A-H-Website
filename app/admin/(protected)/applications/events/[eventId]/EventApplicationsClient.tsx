@@ -246,6 +246,7 @@ export function EventApplicationsClient({
                   <td className="px-2 py-3">
                     <div className="flex items-center gap-2.5">
                       {a.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- vendor-uploaded logo via Blob, not a local static asset
                         <img src={a.logoUrl} alt="" className="w-8 h-8 rounded-full object-cover shrink-0 border border-brown/10" />
                       ) : (
                         <span className="w-8 h-8 rounded-full bg-cream-deep shrink-0 flex items-center justify-center text-[10px] text-brown-light">

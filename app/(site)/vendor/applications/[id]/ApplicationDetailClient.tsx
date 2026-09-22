@@ -2,17 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useLocale } from "@/lib/i18n/context";
 import { Countdown } from "@/components/Countdown";
 import { formatAed, splitVatInclusiveTotal, formatBoothCodes, MAX_BOOTHS_PER_BOOKING, DisplayStatus } from "@/lib/constants";
 import { BoothSelector } from "@/components/vendor/BoothSelector";
 import { BoothConfirmModal } from "@/components/vendor/BoothConfirmModal";
-import { SelectedBoothCard } from "@/components/vendor/SelectedBoothCard";
 import { ReceiptSummaryCard } from "@/components/vendor/ReceiptSummaryCard";
 import { PhoneVerifyModal } from "@/components/vendor/PhoneVerifyModal";
 import { SetupSizeModal } from "@/components/vendor/SetupSizeModal";
 import { FloorPlan } from "@/components/floorplan/FloorPlan";
 import { Legend } from "@/components/floorplan/Legend";
+import { SkeletonFloorPlan } from "@/components/ui/Skeleton";
 import type { FloorBooth, FloorFeature, SizeStyle } from "@/components/floorplan/types";
 import type { ApplicationView } from "@/lib/applicationView";
 import { checkMultiBoothFit, isProvablyAdjacent } from "@/lib/boothFit";
@@ -57,6 +58,7 @@ export function ApplicationDetailClient({
 }) {
   const { t, locale } = useLocale();
   const isAr = locale === "ar";
+  const router = useRouter();
   const [view, setView] = useState(initialView);
   const [floorplan, setFloorplan] = useState<FloorplanData | null>(null);
   const [busy, setBusy] = useState(false);
@@ -98,6 +100,20 @@ export function ApplicationDetailClient({
   }, [applicationId, view.event.id]);
 
   const hasHold = view.boothHolds.length > 0;
+  const holdStage = hasHold ? view.boothHolds[0].holdStage : null;
+
+  // No intermediate "confirmed booth" screen — a hold in REVIEW stage
+  // always belongs on the single combined Booking Review page. This only
+  // fires for edge cases that land here directly (e.g. browser back button,
+  // a bookmarked URL, or the status poller flipping holdStage under an
+  // already-mounted page) rather than via the normal confirm action, which
+  // already pushes straight to /review itself. replace() so back/forward
+  // doesn't bounce between the two.
+  useEffect(() => {
+    if (holdStage === "REVIEW") {
+      router.replace(`/vendor/applications/${applicationId}/review`);
+    }
+  }, [holdStage, router, applicationId]);
 
   useEffect(() => {
     if (view.displayStatus === "ACCEPTED_UNPAID" && !hasHold) {
@@ -234,7 +250,11 @@ export function ApplicationDetailClient({
         return;
       }
       setPendingBooth(null);
-      await refreshStatus();
+      // Go straight to the single combined Booking Review page — no
+      // intermediate "your confirmed booth" screen. BookingReviewPage
+      // independently re-derives from holdStage === "REVIEW" server-side,
+      // so this push is safe even if the hold response races a status poll.
+      router.push(`/vendor/applications/${applicationId}/review`);
     } catch {
       setNotice(isAr ? "حدث خطأ ما" : "Something went wrong");
     } finally {
@@ -265,7 +285,8 @@ export function ApplicationDetailClient({
       }
       setStagedBooths([]);
       setMultiMode(false);
-      await refreshStatus();
+      // Same as confirmPendingBooth — skip straight to Booking Review.
+      router.push(`/vendor/applications/${applicationId}/review`);
     } catch {
       setNotice(isAr ? "حدث خطأ ما" : "Something went wrong");
     } finally {
@@ -277,27 +298,9 @@ export function ApplicationDetailClient({
     setStagedBooths((prev) => prev.filter((b) => b.id !== id));
   }
 
-  async function changeBooth() {
-    if (!hasHold) return;
-    setBusy(true);
-    try {
-      await Promise.all(
-        view.boothHolds.map((h) =>
-          fetch(`/api/booths/${h.boothId}/release`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ applicationId }),
-          })
-        )
-      );
-      setStagedBooths([]);
-      setMultiMode(false);
-      await refreshStatus();
-      await loadFloorplan();
-    } finally {
-      setBusy(false);
-    }
-  }
+  // "Change Booth Selection" once a hold exists now lives entirely on the
+  // Booking Review page (BookingReviewClient's own chooseDifferentBooths),
+  // since that's the only page a vendor sees once a booth is held.
 
   async function pay(outcome: "SUCCEEDED" | "FAILED") {
     const paymentId = view.latestPayment?.id;
@@ -362,7 +365,6 @@ export function ApplicationDetailClient({
   }
 
   const holdCodes = view.boothHolds.map((h) => h.code);
-  const heldTotals = combinedTotals(holdCodes);
 
   return (
     <div className="container-page py-16 max-w-3xl">
@@ -504,7 +506,7 @@ export function ApplicationDetailClient({
                   />
                 </>
               ) : (
-                <p className="text-brown-light text-sm">{isAr ? "جارٍ التحميل…" : "Loading floor plan…"}</p>
+                <SkeletonFloorPlan />
               )}
               {pendingBooth && (
                 <BoothConfirmModal
@@ -523,40 +525,24 @@ export function ApplicationDetailClient({
             </div>
           )}
 
-          {hasHold && view.boothHolds[0].holdStage === "REVIEW" && (
-            <div className="space-y-5">
-              {view.boothHolds.map((h) => {
-                const { raw, tier } = boothLine(h.code);
-                return <SelectedBoothCard key={h.boothId} code={h.code} sizeLabel={tier?.label} priceAedFils={raw?.priceAedFils ?? h.priceAedFils ?? undefined} eventName={view.event.name} />;
-              })}
-              {view.boothHolds.length > 1 && (
-                <div className="rounded-[10px] border border-brown/10 bg-cream p-4 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-brown-light">{isAr ? "المجموع الفرعي" : "Subtotal"}</span>
-                    <span className="text-brown-dark">{formatAed(heldTotals.subtotal)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-brown-light">{isAr ? "ضريبة القيمة المضافة" : "VAT"}</span>
-                    <span className="text-brown-dark">{formatAed(heldTotals.vat)}</span>
-                  </div>
-                  <div className="flex items-center justify-between pt-1.5 mt-1.5 border-t border-brown/10">
-                    <span className="text-brown-dark font-medium">{isAr ? "الإجمالي" : "Total"}</span>
-                    <span className="text-brown-dark font-semibold">{formatAed(heldTotals.total)}</span>
-                  </div>
-                </div>
-              )}
-              <div className="flex gap-3">
-                <Link href={`/vendor/applications/${applicationId}/review`} className="px-6 py-2.5 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark">
-                  {isAr ? "متابعة مراجعة الحجز" : "Continue to Booking Review"}
-                </Link>
-                <button onClick={changeBooth} disabled={busy} className="px-6 py-2.5 rounded-full border border-brown/30 text-sm disabled:opacity-50">
-                  {view.boothHolds.length > 1 ? (isAr ? "اختيار أكشاك أخرى" : "Choose different booths") : isAr ? "اختيار كشك آخر" : "Choose a different booth"}
-                </button>
-              </div>
-            </div>
+          {/* No intermediate "confirmed booth" screen here anymore — a
+              successful hold (confirmPendingBooth / confirmStagedBooths)
+              redirects straight to /review, the single combined Booking
+              Review page (event info, pricing/VAT, setup fit, floor plan,
+              Change Booth Selection, Continue). If a vendor lands back on
+              this page mid-REVIEW (e.g. browser back button), send them
+              straight there too rather than showing a stale in-between
+              state. */}
+          {holdStage === "REVIEW" && (
+            <p className="text-sm text-brown-light">
+              {isAr ? "جارٍ التوجيه إلى مراجعة الحجز…" : "Redirecting to Booking Review…"}
+              <Link href={`/vendor/applications/${applicationId}/review`} className="ms-1 underline text-brown">
+                {isAr ? "متابعة" : "Continue"}
+              </Link>
+            </p>
           )}
 
-          {hasHold && view.boothHolds[0].holdStage === "PAYMENT" && (
+          {holdStage === "PAYMENT" && (
             <div className="rounded-xl border border-brown/10 bg-cream p-6">
               <h2 className="font-heading text-xl text-brown-dark mb-1">{t("checkout.title")}</h2>
               <p className="text-xs text-brown-light mb-4">{t("checkout.sandboxNotice")}</p>
@@ -640,6 +626,8 @@ export function ApplicationDetailClient({
               </a>
             </div>
           )}
+
+          {view.soldBooths.length > 0 && !floorplan && <SkeletonFloorPlan />}
 
           {floorplan && view.soldBooths.length > 0 && (
             <div className="rounded-[10px] border border-brown/10 bg-cream p-5 sm:p-6">

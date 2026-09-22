@@ -259,3 +259,59 @@ html[dir="rtl"] .label-caps {
     animation: none;
   }
 }
+
+/* Sitewide clickable-element affordances — cursor + a restrained press/tap
+   effect, added centrally so every button/pill-link across the app picks
+   it up without per-component edits. Two real gaps this closes:
+   1) <button> has no pointer cursor by default in any browser (unlike
+      <a>, which already gets one) — most buttons here relied on that
+      default and never set cursor-pointer themselves (e.g. the header's
+      Sign Out button).
+   2) No control anywhere had tap/press feedback.
+   [role="button"] covers non-<button> elements built as controls (custom
+   dropdown triggers, etc). Anchors styled as pill CTAs (rounded-full —
+   this app's established Link-as-button convention, see
+   components/ui/Button.tsx's LinkButton) get the same treatment as real
+   buttons; plain text links keep only the browser's default pointer
+   cursor, no scale dip. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/* Only where a component hasn't already declared its own Tailwind
+   transition-* utility (e.g. "transition-colors") — setting our own
+   `transition` shorthand there would silently replace that utility's own
+   transition-property list (dropping its color/border transitions) since
+   a plain type/attribute selector already outranks the universal `*` rule
+   above but a utility class still outranks this. Elements that already
+   animate via their own transition class still get the scale on :active,
+   just following whichever duration that class already sets instead of
+   this default 120ms. */
+button:not(:disabled):not([class*="transition"]),
+a[class*="rounded-full"]:not([class*="transition"]) {
+  transition: transform 120ms ease;
+}
+
+button:not(:disabled):active,
+a[class*="rounded-full"]:active {
+  transform: scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button:active,
+  a[class*="rounded-full"]:active {
+    transform: none;
+  }
+  /* Skeleton loading blocks (components/ui/Skeleton.tsx) use Tailwind's
+     animate-pulse utility, which doesn't respect this preference on its
+     own — every other custom animation in this file already does. */
+  .animate-pulse {
+    animation: none;
+  }
+}

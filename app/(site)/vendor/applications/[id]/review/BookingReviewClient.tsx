@@ -13,6 +13,7 @@ import { FloorPlan } from "@/components/floorplan/FloorPlan";
 import { Legend } from "@/components/floorplan/Legend";
 import { getFloorplanViewBox, worldRectOf } from "@/lib/floorplan/transform";
 import { DAH_SIZE_PALETTE } from "@/lib/theme/brand";
+import { SkeletonFloorPlan } from "@/components/ui/Skeleton";
 import type { FloorFeature, FloorBooth } from "@/components/floorplan/types";
 
 interface BookingSummaryLine {
@@ -325,7 +326,7 @@ export function BookingReviewClient({
             <Legend sizeStyles={sizeStyles} showMineKey />
           </>
         ) : (
-          <p className="text-sm text-brown-light">{isAr ? "جارٍ التحميل…" : "Loading…"}</p>
+          <SkeletonFloorPlan />
         )}
       </div>
 
