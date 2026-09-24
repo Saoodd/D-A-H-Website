@@ -24,7 +24,7 @@ commit → push. Never lose completed work or silently reduce scope.
 | Phase | Title | Status |
 |---|---|---|
 | 0 | Full repository audit | ✅ Done — `docs/PHASE_0_AUDIT.md` |
-| 1 | Local development environment | ⏳ Not started |
+| 1 | Local development environment | ✅ Done — see "Phase 1" below |
 | 2 | Dependency audit + controlled upgrades | ⏳ Not started (facts gathered in Phase 0 audit) |
 | 3 | Complete security audit | 🟡 In progress — `docs/SECURITY_AUDIT.md` written; 2 of ~6 actionable findings fixed |
 | 4 | Auth modernization + active sessions + OAuth | ⏳ Not started |
@@ -61,14 +61,36 @@ commit → push. Never lose completed work or silently reduce scope.
      had no interpolated input, so this was not an active vulnerability, just
      hardening).
 
+- **Phase 1**: Crawled 20 public/vendor-auth/admin pages in a real browser
+  capturing console errors, CSP violations, hydration warnings, and failed
+  requests.
+  - Found: every page logged a CSP error in `next dev` — React's dev build
+    needs `eval()` for error-stack reconstruction and `script-src` blocked
+    it. Fixed with a dev-only `'unsafe-eval'` in `next.config.ts` (the exact
+    pattern from Next 16's bundled CSP guide). Verified the **production**
+    CSP header is byte-for-byte unchanged by building and serving a
+    production instance.
+  - Found: no hydration warnings, no theme-flash warnings.
+  - Found: missing env vars failed silently per-feature. Added `lib/env.ts`
+    (a registry of every env var and what breaks without it) and
+    `instrumentation.ts` (logs a one-time startup report — names only,
+    never values; informational in dev, `console.error` in production so it
+    surfaces in Vercel logs; never throws).
+  - Remaining noise: one failed image request on `/events` and
+    `/admin/events`, caused by a fake Blob URL
+    (`xyz123.public.blob.vercel-storage.com/...`) saved on an event's
+    `coverImage` in the **local dev database only** — test data from an
+    earlier session, not code. Left untouched.
+  - Noted for Phase 4: Next 16 renamed `middleware.ts` to `proxy.ts`
+    (confirmed in the bundled docs) — relevant to centralizing vendor route
+    protection.
+  - Dev prerequisite (unchanged, already in README): Postgres must be
+    running before `npm run dev`.
+
 ## Current
 
-Finishing Phase 0/3 write-up and committing. Next: present audit findings to
-the user and get direction on sequencing before undertaking the higher-risk
-phases (auth framework migration, payment architecture, dependency major
-upgrades, vendor route restructure) — per this task's own "measure twice"
-instruction and the standard practice of confirming before hard-to-reverse
-changes.
+Phase 2 — dependency audit and controlled upgrades (patch/minor group first,
+Prisma major jump isolated as its own slice).
 
 ## Remaining (high level)
 

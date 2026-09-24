@@ -10,9 +10,16 @@ import type { NextConfig } from "next";
 // for: loading a remote script/resource from an attacker-controlled
 // domain, framing the site (clickjacking), and submitting a form to a
 // foreign origin.
+// React's development build uses eval() to reconstruct server error stacks
+// in the browser; without 'unsafe-eval' every page logs a CSP error in
+// `next dev`. Production React/Next never use eval, so it's dev-only — the
+// production policy is unchanged (see Next's own CSP guide, bundled at
+// node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md).
+const isDev = process.env.NODE_ENV === "development";
+
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   // blob: is only for local, client-side file previews (URL.createObjectURL
   // on a picked-but-not-yet-uploaded image, e.g. Admin Gallery) — never
