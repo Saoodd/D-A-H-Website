@@ -14,6 +14,25 @@ export function isValidHttpUrl(value: string | null | undefined): value is strin
   }
 }
 
+/** Returns `value` only if it is a same-site path, else `fallback`. For
+ *  user-controlled redirect targets (e.g. `?next=` on login) — prevents an
+ *  open redirect. Prefix checks alone aren't enough: browsers treat "\" as
+ *  "/" and strip tabs/newlines, so "/\evil.com" or "/\t/evil.com" pass a
+ *  `startsWith("/") && !startsWith("//")` check yet navigate off-site.
+ *  This resolves the value the way a browser would and requires the
+ *  origin to be unchanged. */
+export function safeInternalPath(value: string | null | undefined, fallback: string): string {
+  if (!value || !value.startsWith("/") || /[\\\u0000-\u001f\u007f]/.test(value)) return fallback;
+  try {
+    const base = "http://internal.invalid";
+    const url = new URL(value, base);
+    if (url.origin !== base) return fallback;
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return fallback;
+  }
+}
+
 /** The one, server-side-trusted base URL used to build every link that
  *  leaves the app (emails, SMS, webhooks) — reads NEXT_PUBLIC_SITE_URL
  *  (set to the real production domain in Vercel), never a client-supplied

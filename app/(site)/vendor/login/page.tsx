@@ -1,15 +1,10 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getVendorSession } from "@/lib/auth";
+import { safeInternalPath } from "@/lib/url";
 import { LoginClient } from "./LoginClient";
 
 export const metadata: Metadata = { title: "Vendor Login" };
-
-function safeNext(next: string | undefined): string {
-  // Only ever redirect within the site — never follow an external "next".
-  if (next && next.startsWith("/") && !next.startsWith("//")) return next;
-  return "/vendor/dashboard";
-}
 
 export default async function VendorLoginPage({
   searchParams,
@@ -17,7 +12,7 @@ export default async function VendorLoginPage({
   searchParams: Promise<{ next?: string }>;
 }) {
   const { next } = await searchParams;
-  const target = safeNext(next);
+  const target = safeInternalPath(next, "/vendor/dashboard");
   const session = await getVendorSession();
   if (session) redirect(target);
   return <LoginClient next={target} />;

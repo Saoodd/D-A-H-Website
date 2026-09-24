@@ -93,15 +93,53 @@ if the app is ever placed behind another proxy layer.
 
 ### M1 — Vendor route protection is convention-based, not structural
 **Files**: `app/(site)/vendor/*` (no shared protected layout, unlike admin)
-**Status**: 🟡 Deferred to Phase 4 (folder restructure, needs its own tested slice)
+**Status**: ✅ **Fixed** — `proxy.ts`, no files moved
 
 See `docs/PHASE_0_AUDIT.md` §3 for full detail. Every current vendor page
-correctly checks `getVendorSession()`, but nothing in the framework enforces
+correctly checks `getVendorSession()`, but nothing in the framework enforced
 this for a *future* page the way `app/admin/(protected)/layout.tsx` does for
-admin. Recommended fix (restructuring into `(public)`/`(protected)` route
-groups) is real, file-path-changing work that needs careful regression
-testing across every vendor link/redirect — scheduled into Phase 4 rather
-than done as a drive-by change here.
+admin.
+
+**Fix applied**: instead of the invasive folder restructure originally
+proposed, a Next 16 `proxy.ts` (the renamed middleware) now gates the
+private vendor paths — `/vendor/dashboard`, `/applications`, `/payments`,
+`/agreements`, `/receipts` (all with sub-paths) and `/vendor/profile`
+(exactly: `/vendor/profile/confirm-email` is a public emailed link). It
+checks the session cookie's signature, expiry, and shape (a vendor token,
+not an admin one) and redirects to `/vendor/login?next=<path>` otherwise.
+Per Next's guidance this is an optimistic check only; every page keeps its
+full database check (revocation, closed accounts). Cookie names and JWT
+helpers moved to a dependency-free `lib/sessionToken.ts` shared by
+`lib/auth.ts` and the proxy.
+
+**Verification** (28 cases against the running app): all 10 private paths
+redirect without a cookie; all 9 public paths (login, forgot-*,
+reset-password, verify/email, profile/confirm-email, public site) are
+untouched; forged signatures and admin-shaped tokens are redirected; a real
+session gets 200 on every private page; a revoked session still ends at
+`/vendor/login` in a real browser (the page's own check, delivered in-band
+because those pages stream a `loading.tsx` skeleton).
+
+### M3 — Open redirect via the login `next` parameter
+**File**: `app/(site)/vendor/login/page.tsx`
+**Status**: ✅ **Fixed**
+
+`safeNext()` accepted any value starting with `/` but not `//`. Browsers
+treat `\` as `/` and strip tabs/newlines, so `?next=/%5Cevil.com`,
+`/%5C/evil.com` and `/%09/evil.com` all passed the check yet navigated to
+`evil.com`.
+
+**Exploit scenario**: a phishing link to the genuine
+`…/vendor/login?next=/%5Cevil.com` — the vendor signs in on the real DAH
+site, then lands on an attacker's lookalike ("session expired, sign in
+again") that harvests their credentials.
+
+**Fix applied**: `safeInternalPath()` in `lib/url.ts` rejects backslashes
+and control characters, then resolves the value the way a browser would and
+requires the origin to be unchanged. Verified with 13 unit cases and live
+against the server with a real session: every payload now redirects to
+`/vendor/dashboard`; legitimate deep links (e.g. `/vendor/payments`) still
+work. This was the only user-controlled redirect parameter in the app.
 
 ---
 
@@ -186,9 +224,30 @@ WHERE e.status = 'PUBLISHED'
 ```
 If it returns rows, publish Terms for those events in Admin → Event Terms.
 
+### L4 — Viewing a warning is recorded by a GET request
+**File**: `app/api/vendor/warnings/[id]/route.ts`
+**Status**: 🟡 Noted, not changed
+
+Opening a warning sets `viewedAt` in a `GET` handler. `SameSite=Lax`
+cookies *are* sent on top-level cross-site GET navigations, so a link on
+another site could mark a vendor's warning "viewed" without them reading
+it, slightly weakening that audit trail. Impact is low: it is scoped to the
+signed-in vendor's own warnings, and the meaningful action
+(*acknowledge*) is a separate `POST`, which cross-site requests can't
+trigger. Worth moving to a `POST` if `viewedAt` is ever relied on for
+anything consequential.
+
 ---
 
 ## Reviewed and found sound (⚪ no fix needed)
+
+- **CSRF** — session cookies are explicitly `SameSite=Lax`, so browsers
+  don't attach them to cross-site `POST`/`PUT`/`DELETE` requests; every
+  state-changing API is a non-GET route. The only GET handlers that write
+  are the two floor-plan GETs (they run `runExpiryPass`, an idempotent
+  release of already-expired holds — not attacker-directed) and L4 above.
+- **CORS** — no `Access-Control-Allow-*` headers anywhere, so other origins
+  can't read API responses.
 
 - **Session/auth core** (`lib/auth.ts`) — `jose`-signed JWTs carrying only a
   DB-row session ID (hybrid model, not pure stateless JWT); `VendorSession`/
@@ -277,11 +336,13 @@ If it returns rows, publish Terms for those events in Admin → Event Terms.
 |---|---|---|---|
 | C1 | CRITICAL | Payment confirm trusts client outcome, no webhook | 🟡 Phase 6 |
 | H1 | HIGH | In-memory rate limiter, not multi-instance safe | ✅ Fixed (Postgres-backed) |
-| M1 | MEDIUM-HIGH | Vendor routes lack structural auth gate | 🟡 Phase 4 |
+| M1 | MEDIUM-HIGH | Vendor routes lack structural auth gate | ✅ Fixed (proxy.ts) |
 | M2 | MEDIUM | Infobip webhook unauthenticated | ✅ Fixed |
+| M3 | MEDIUM | Open redirect via login `next` parameter | ✅ Fixed |
 | L1 | LOW | Register endpoint enumerates accounts | 🟡 product decision, noted |
 | L2 | LOW | Non-parameterized raw SQL (no actual injection) | ✅ Fixed |
 | L3 | LOW | Legacy events published without Terms skip the Terms gate | 🟡 data check provided |
+| L4 | LOW | Warning "viewed" recorded via GET (cross-site link can set it) | 🟡 noted |
 
 Everything else audited across authentication, sessions, OTP, IDOR,
 booth-hold concurrency, checkout pricing, receipts, uploads, secrets, CSP,

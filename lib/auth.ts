@@ -1,39 +1,11 @@
 import "server-only";
-import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
-
-const encoder = new TextEncoder();
-
-function secretKey() {
-  const secret = process.env.AUTH_SECRET;
-  if (!secret) throw new Error("AUTH_SECRET is not set");
-  return encoder.encode(secret);
-}
-
-export const ADMIN_COOKIE = "dah_admin_session";
-export const VENDOR_COOKIE = "dah_vendor_session";
+import { ADMIN_COOKIE, VENDOR_COOKIE, signToken, verifyToken } from "./sessionToken";
 
 const ADMIN_SESSION_SECONDS = 60 * 60 * 12; // 12h
 const VENDOR_SESSION_SECONDS = 60 * 60 * 24 * 60; // 60 days
-
-async function signToken(payload: Record<string, unknown>, expiresInSeconds: number) {
-  return new SignJWT(payload)
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime(Math.floor(Date.now() / 1000) + expiresInSeconds)
-    .sign(secretKey());
-}
-
-async function verifyToken<T>(token: string): Promise<T | null> {
-  try {
-    const { payload } = await jwtVerify(token, secretKey());
-    return payload as T;
-  } catch {
-    return null;
-  }
-}
 
 export async function hashPassword(pw: string): Promise<string> {
   return bcrypt.hash(pw, 12);
