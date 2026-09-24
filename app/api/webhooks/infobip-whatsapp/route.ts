@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/prisma";
 
 // Infobip WhatsApp delivery-report webhook — updates WhatsAppDelivery
@@ -19,12 +20,24 @@ import { prisma } from "@/lib/prisma";
 // shape) specifically so a real payload that doesn't match exactly still
 // gets acknowledged (200) rather than retried forever by Infobip, while
 // logging the raw shape for a developer to reconcile against a live
-// account. No signature verification exists yet — Infobip's own
-// webhook-signing scheme couldn't be confirmed while this was built, and
-// DAH's Infobip config is deliberately limited to exactly three env vars
-// (INFOBIP_WHATSAPP_BASE_URL/API_KEY/SENDER), so no webhook-secret env
-// var exists to check against; treat this endpoint as best-effort until
-// verified against a real account.
+// account.
+//
+// AUTH: Infobip's own webhook-signing scheme couldn't be confirmed while
+// this was built (no docs access), so this uses DAH's own shared secret
+// instead — the same pattern as CRON_SECRET (see app/api/cron/notifications
+// /route.ts). Configure Infobip's WhatsApp DLR callback URL as
+// `<site>/api/webhooks/infobip-whatsapp?secret=<INFOBIP_WEBHOOK_SECRET>` in
+// the Infobip portal. Without INFOBIP_WEBHOOK_SECRET set, the route refuses
+// every request (fails closed) rather than trusting an unauthenticated
+// payload — mirrors CRON_SECRET's own unset-fails-closed behavior.
+function isAuthorized(req: NextRequest): boolean {
+  const secret = process.env.INFOBIP_WEBHOOK_SECRET;
+  if (!secret) return false;
+  const provided = req.nextUrl.searchParams.get("secret") || "";
+  const a = Buffer.from(provided);
+  const b = Buffer.from(secret);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 const STATUS_MAP: Record<string, "SENT" | "DELIVERED" | "FAILED"> = {
   PENDING: "SENT",
@@ -46,6 +59,8 @@ interface DlrResult {
 }
 
 export async function POST(req: NextRequest) {
+  if (!isAuthorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const raw = await req.text();
   let payload: { results?: DlrResult[] } | DlrResult;
   try {

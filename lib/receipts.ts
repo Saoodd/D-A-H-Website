@@ -19,7 +19,7 @@ export async function assignReceiptNumber(paymentId: string, paidAt: Date, db: D
   const existing = await db.payment.findUnique({ where: { id: paymentId }, select: { receiptNumber: true } });
   if (existing?.receiptNumber) return existing.receiptNumber;
 
-  const rows = await db.$queryRawUnsafe<{ nextval: string | bigint }[]>(`SELECT nextval('"ReceiptNumberSeq"') as nextval`);
+  const rows = await db.$queryRaw<{ nextval: string | bigint }[]>(Prisma.sql`SELECT nextval('"ReceiptNumberSeq"') as nextval`);
   const seq = String(rows[0].nextval);
   const receiptNumber = `DAH-RCP-${paidAt.getFullYear()}-${seq.padStart(6, "0")}`;
 
