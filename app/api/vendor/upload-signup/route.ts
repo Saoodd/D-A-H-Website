@@ -23,7 +23,7 @@ type Purpose = keyof typeof PURPOSES;
 // when /api/vendor/register creates it.
 export async function POST(req: NextRequest) {
   const ip = clientIp(req.headers);
-  if (!rateLimit(`vendor-upload-signup:${ip}`, 10, 10 * 60 * 1000)) {
+  if (!(await rateLimit(`vendor-upload-signup:${ip}`, 10, 10 * 60 * 1000))) {
     return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
   }
 

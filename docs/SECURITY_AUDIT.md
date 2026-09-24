@@ -54,7 +54,7 @@ the trust source for "did it succeed" changes.
 
 ### H1 — Rate limiting is in-memory, not safe across serverless instances
 **File**: `lib/rateLimit.ts`
-**Status**: 🟡 Deferred — remediation path documented, not implemented this session
+**Status**: ✅ **Fixed** — Postgres-backed, see "Fix applied" below
 
 Pure in-memory `Map`, explicitly self-documented in the file's own comment
 as a "soft limit" on multi-instance deployments. Affects every consumer:
@@ -64,14 +64,22 @@ lambda instance (and every cold start) gets its own empty map, so an
 attacker spreading requests across instances/regions can exceed the
 nominal limit.
 
-**Recommended fix**: back the limiter with Postgres (already provisioned —
-no new external credential needed) via a small `RateLimitBucket` table and
-an atomic `UPSERT ... ON CONFLICT DO UPDATE` incrementing a counter with a
-window-reset check, keeping `rateLimit()`'s existing signature so none of
-its ~10 call sites need to change. This is real, scoped work (new table +
-migration + swap the function body) best done as its own tested slice in a
-Phase 2/3 continuation, not a rushed inline edit — flagged rather than
-rushed.
+**Fix applied**: counters now live in a `RateLimitBucket` Postgres table
+(additive migration `20260924232716_rate_limit_bucket` — one new table, no
+changes to existing data; no new external service). Each check is one
+atomic `INSERT ... ON CONFLICT DO UPDATE ... RETURNING count`, using the
+database clock. The resend cooldowns (`peekCooldown`/`armCooldown`) moved
+to the same table. The hourly cron purges buckets expired for over a day.
+The limiter is now async; all 30 call sites across 16 routes were
+converted to `await` — TypeScript did **not** flag an un-awaited
+`!rateLimit(...)` (it would silently never limit), so completeness was
+verified by grep (zero un-awaited calls remain).
+
+**Verification** (vendor login, limit 10): 12 sequential → 10×401 then
+429s; 25 concurrent on one server → exactly 10 allowed; **24 concurrent
+split across two separate server processes (dev + production build) sharing
+one database → exactly 10 allowed** (the old per-process map would have
+allowed 20). Cooldown arm/peek/expiry and purge verified directly.
 
 **Secondary note**: `clientIp()` trusts `x-forwarded-for`/`x-real-ip`
 directly with no allowlist of trusted proxy hops. On Vercel specifically
@@ -268,7 +276,7 @@ If it returns rows, publish Terms for those events in Admin → Event Terms.
 | ID | Severity | Finding | Status |
 |---|---|---|---|
 | C1 | CRITICAL | Payment confirm trusts client outcome, no webhook | 🟡 Phase 6 |
-| H1 | HIGH | In-memory rate limiter, not multi-instance safe | 🟡 documented, path defined |
+| H1 | HIGH | In-memory rate limiter, not multi-instance safe | ✅ Fixed (Postgres-backed) |
 | M1 | MEDIUM-HIGH | Vendor routes lack structural auth gate | 🟡 Phase 4 |
 | M2 | MEDIUM | Infobip webhook unauthenticated | ✅ Fixed |
 | L1 | LOW | Register endpoint enumerates accounts | 🟡 product decision, noted |

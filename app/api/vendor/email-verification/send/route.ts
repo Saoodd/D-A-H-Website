@@ -28,14 +28,14 @@ export async function POST(req: NextRequest) {
   // Cooldown gives a friendly "resend available in Ns" — the hourly caps
   // beneath it are the hard abuse ceiling (matches PART 8's "do not allow
   // spamming thousands of emails").
-  const cd = peekCooldown(`email-verify-cooldown:${vendor.id}`);
+  const cd = await peekCooldown(`email-verify-cooldown:${vendor.id}`);
   if (cd.onCooldown) {
     return NextResponse.json({ error: `Please wait before requesting another email.`, retryAfterSeconds: cd.retryAfterSeconds }, { status: 429 });
   }
-  if (!rateLimit(`email-verify-send:${vendor.id}`, 6, 60 * 60 * 1000) || !rateLimit(`email-verify-send-ip:${ip}`, 20, 60 * 60 * 1000)) {
+  if (!(await rateLimit(`email-verify-send:${vendor.id}`, 6, 60 * 60 * 1000)) || !(await rateLimit(`email-verify-send-ip:${ip}`, 20, 60 * 60 * 1000))) {
     return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
   }
-  armCooldown(`email-verify-cooldown:${vendor.id}`, RESEND_COOLDOWN_MS);
+  await armCooldown(`email-verify-cooldown:${vendor.id}`, RESEND_COOLDOWN_MS);
 
   // Invalidate any still-usable prior tokens so only the newest link works.
   await prisma.emailVerificationToken.updateMany({ where: { vendorId: vendor.id, usedAt: null }, data: { usedAt: new Date() } });

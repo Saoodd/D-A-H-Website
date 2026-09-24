@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   }
 
   const cooldownKey = `phone-verify-cooldown:${vendor.id}`;
-  const cd = peekCooldown(cooldownKey);
+  const cd = await peekCooldown(cooldownKey);
   if (cd.onCooldown) {
     return NextResponse.json(
       { error: "Please wait before requesting another code.", code: "RATE_LIMITED", retryAfterSeconds: cd.retryAfterSeconds },
@@ -61,9 +61,9 @@ export async function POST(req: NextRequest) {
   // abuse cap.
   const ip = clientIp(req.headers);
   if (
-    !rateLimit(`phone-verify-send:${vendor.id}`, 6, 60 * 60 * 1000) ||
-    !rateLimit(`phone-verify-send-num:${normalizedPhone}`, 6, 60 * 60 * 1000) ||
-    !rateLimit(`phone-verify-send-ip:${ip}`, 20, 60 * 60 * 1000)
+    !(await rateLimit(`phone-verify-send:${vendor.id}`, 6, 60 * 60 * 1000)) ||
+    !(await rateLimit(`phone-verify-send-num:${normalizedPhone}`, 6, 60 * 60 * 1000)) ||
+    !(await rateLimit(`phone-verify-send-ip:${ip}`, 20, 60 * 60 * 1000))
   ) {
     return NextResponse.json({ error: "Too many requests. Please try again later.", code: "RATE_LIMITED" }, { status: 429 });
   }
@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
 
   // Only now — after Infobip actually accepted the request — does the
   // vendor's resend window start counting down.
-  armCooldown(cooldownKey, RESEND_COOLDOWN_MS);
+  await armCooldown(cooldownKey, RESEND_COOLDOWN_MS);
 
   return NextResponse.json({
     ok: true,

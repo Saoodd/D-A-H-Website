@@ -13,7 +13,7 @@ const INVALID_TOKEN_ERROR = "This confirmation link is invalid or has expired. P
 // is required to open this link, since it's opened from a different inbox.
 export async function POST(req: NextRequest) {
   const ip = clientIp(req.headers);
-  if (!rateLimit(`email-confirm:${ip}`, 15, 15 * 60 * 1000)) {
+  if (!(await rateLimit(`email-confirm:${ip}`, 15, 15 * 60 * 1000))) {
     return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
   }
 

@@ -1042,3 +1042,16 @@ model ContactMessage {
   message   String
   createdAt DateTime @default(now())
 }
+
+// Fixed-window rate-limit counters (lib/rateLimit.ts). Kept in Postgres so
+// every serverless instance shares one counter per key — an in-memory map
+// is per-instance, so on Vercel an attacker spreading requests across
+// instances/cold starts could exceed the limit. `key` is e.g.
+// "vendor-login:<ip>". Expired rows are purged by the hourly cron.
+model RateLimitBucket {
+  key     String   @id
+  count   Int
+  resetAt DateTime
+
+  @@index([resetAt])
+}

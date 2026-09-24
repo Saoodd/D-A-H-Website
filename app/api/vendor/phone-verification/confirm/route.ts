@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   const ip = clientIp(req.headers);
-  if (!rateLimit(`phone-verify-check:${session.vendorId}`, 10, 15 * 60 * 1000) || !rateLimit(`phone-verify-check-ip:${ip}`, 30, 15 * 60 * 1000)) {
+  if (!(await rateLimit(`phone-verify-check:${session.vendorId}`, 10, 15 * 60 * 1000)) || !(await rateLimit(`phone-verify-check-ip:${ip}`, 30, 15 * 60 * 1000))) {
     return NextResponse.json({ error: "Too many attempts. Please request a new code." }, { status: 429 });
   }
 

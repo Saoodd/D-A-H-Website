@@ -14,7 +14,7 @@ const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 // be used to enumerate registered vendors.
 export async function POST(req: NextRequest) {
   const ip = clientIp(req.headers);
-  if (!rateLimit(`forgot-password:${ip}`, 5, 15 * 60 * 1000)) {
+  if (!(await rateLimit(`forgot-password:${ip}`, 5, 15 * 60 * 1000))) {
     return NextResponse.json({ message: GENERIC_MESSAGE });
   }
 
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   const email = parsed.data.email.toLowerCase();
   // Also rate limit per-email, independent of IP, so a distributed attempt
   // against one target address is still capped.
-  if (!rateLimit(`forgot-password-email:${email}`, 5, 15 * 60 * 1000)) {
+  if (!(await rateLimit(`forgot-password-email:${email}`, 5, 15 * 60 * 1000))) {
     return NextResponse.json({ message: GENERIC_MESSAGE });
   }
 

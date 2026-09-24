@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ip = clientIp(req.headers);
-  if (!rateLimit(`email-change:${session.vendorId}`, 5, 15 * 60 * 1000) || !rateLimit(`email-change-ip:${ip}`, 10, 15 * 60 * 1000)) {
+  if (!(await rateLimit(`email-change:${session.vendorId}`, 5, 15 * 60 * 1000)) || !(await rateLimit(`email-change-ip:${ip}`, 10, 15 * 60 * 1000))) {
     return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
   }
 

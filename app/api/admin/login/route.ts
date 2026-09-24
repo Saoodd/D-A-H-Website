@@ -13,7 +13,7 @@ function safeCompare(a: string, b: string) {
 
 export async function POST(req: NextRequest) {
   const ip = clientIp(req.headers);
-  if (!rateLimit(`admin-login:${ip}`, 8, 10 * 60 * 1000)) {
+  if (!(await rateLimit(`admin-login:${ip}`, 8, 10 * 60 * 1000))) {
     return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
   }
 

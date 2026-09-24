@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { runExpiryPass } from "@/lib/expiry";
 import { notifyVendorWhatsApp } from "@/lib/notifications/notify";
 import { applicationUrl } from "@/lib/notifications/links";
+import { purgeExpiredRateLimits } from "@/lib/rateLimit";
 
 // The one periodic sweep for every reminder-shaped WhatsApp use case —
 // there is no other scheduled-job infrastructure in this codebase (no
@@ -162,5 +163,9 @@ export async function GET(req: NextRequest) {
   await runEventReminders(now, 3);
   await runVendorSetupReminders(now, 2);
 
-  return NextResponse.json({ ok: true, ranAt: now.toISOString() });
+  // Housekeeping piggybacking on the only scheduled job: rate-limit buckets
+  // are keyed by IP/email, so without this the table only ever grows.
+  const purgedRateLimits = await purgeExpiredRateLimits();
+
+  return NextResponse.json({ ok: true, ranAt: now.toISOString(), purgedRateLimits });
 }

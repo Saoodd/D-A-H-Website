@@ -10,7 +10,7 @@ const GENERIC_MESSAGE = "If an account exists with that email, we've sent your u
 // response, rate limited by both IP and target email.
 export async function POST(req: NextRequest) {
   const ip = clientIp(req.headers);
-  if (!rateLimit(`forgot-username:${ip}`, 5, 15 * 60 * 1000)) {
+  if (!(await rateLimit(`forgot-username:${ip}`, 5, 15 * 60 * 1000))) {
     return NextResponse.json({ message: GENERIC_MESSAGE });
   }
 
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ message: GENERIC_MESSAGE });
 
   const email = parsed.data.email.toLowerCase();
-  if (!rateLimit(`forgot-username-email:${email}`, 5, 15 * 60 * 1000)) {
+  if (!(await rateLimit(`forgot-username-email:${email}`, 5, 15 * 60 * 1000))) {
     return NextResponse.json({ message: GENERIC_MESSAGE });
   }
 

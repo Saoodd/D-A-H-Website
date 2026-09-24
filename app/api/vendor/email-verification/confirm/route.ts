@@ -9,7 +9,7 @@ import { rateLimit, clientIp } from "@/lib/rateLimit";
 // authorization; this route never trusts anything else client-supplied.
 export async function POST(req: NextRequest) {
   const ip = clientIp(req.headers);
-  if (!rateLimit(`email-verify-confirm:${ip}`, 20, 15 * 60 * 1000)) {
+  if (!(await rateLimit(`email-verify-confirm:${ip}`, 20, 15 * 60 * 1000))) {
     return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
   }
 

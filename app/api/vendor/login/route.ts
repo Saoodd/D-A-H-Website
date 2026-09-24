@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   const ip = clientIp(req.headers);
   // Keyed on IP only, same as before — works identically regardless of
   // which identifier type (email or username) is being attempted.
-  if (!rateLimit(`vendor-login:${ip}`, 10, 10 * 60 * 1000)) {
+  if (!(await rateLimit(`vendor-login:${ip}`, 10, 10 * 60 * 1000))) {
     return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
   }
 
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   // credential-stuffing attempt against one target account is still capped
   // — matches the same dual-limit pattern already used on password reset,
   // username recovery, email change and account deletion.
-  if (!rateLimit(`vendor-login-id:${normalizedIdentifier}`, 10, 10 * 60 * 1000)) {
+  if (!(await rateLimit(`vendor-login-id:${normalizedIdentifier}`, 10, 10 * 60 * 1000))) {
     return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
   }
 

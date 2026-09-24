@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   const ip = clientIp(req.headers);
-  if (!rateLimit(`apply-event:${ip}`, 20, 10 * 60 * 1000)) {
+  if (!(await rateLimit(`apply-event:${ip}`, 20, 10 * 60 * 1000))) {
     return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
   }
 

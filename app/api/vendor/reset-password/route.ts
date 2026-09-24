@@ -9,7 +9,7 @@ const INVALID_TOKEN_ERROR = "This reset link is invalid or has expired. Please r
 
 export async function POST(req: NextRequest) {
   const ip = clientIp(req.headers);
-  if (!rateLimit(`reset-password:${ip}`, 10, 15 * 60 * 1000)) {
+  if (!(await rateLimit(`reset-password:${ip}`, 10, 15 * 60 * 1000))) {
     return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
   }
 

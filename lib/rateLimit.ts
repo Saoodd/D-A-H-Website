@@ -1,23 +1,33 @@
 import "server-only";
+import { Prisma } from "@/lib/generated/prisma/client";
+import { prisma } from "./prisma";
 
-// Minimal in-memory sliding-window rate limiter. Good enough to blunt naive
-// bot/abuse traffic on a single-instance deployment. Note: on a multi-instance
-// serverless deployment each instance has its own memory, so this is a soft
-// limit, not a hard guarantee — swap for a shared store (e.g. Upstash Redis)
-// if you need a hard limit across instances.
+// Fixed-window rate limiter backed by Postgres (RateLimitBucket), so every
+// serverless instance shares one counter per key. The previous in-memory
+// Map was per-instance: on Vercel, requests spread across instances or cold
+// starts could exceed the limit.
+//
+// Each check is a single atomic INSERT ... ON CONFLICT DO UPDATE, so
+// concurrent requests for the same key serialize on that row — two
+// simultaneous requests can't both read "under the limit". Times use the
+// database clock (now()), never an app server's, so instances with skewed
+// clocks can't disagree about window boundaries.
+//
+// All functions here are async: callers MUST await them — `!rateLimit(...)`
+// without await tests a Promise (always truthy) and silently never limits.
 
-const buckets = new Map<string, { count: number; resetAt: number }>();
-
-export function rateLimit(key: string, limit: number, windowMs: number): boolean {
-  const now = Date.now();
-  const bucket = buckets.get(key);
-  if (!bucket || bucket.resetAt < now) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
-    return true;
-  }
-  if (bucket.count >= limit) return false;
-  bucket.count += 1;
-  return true;
+export async function rateLimit(key: string, limit: number, windowMs: number): Promise<boolean> {
+  const rows = await prisma.$queryRaw<{ count: number }[]>(Prisma.sql`
+    INSERT INTO "RateLimitBucket" ("key", "count", "resetAt")
+    VALUES (${key}, 1, now() + (${windowMs}::double precision * interval '1 millisecond'))
+    ON CONFLICT ("key") DO UPDATE SET
+      "count" = CASE WHEN "RateLimitBucket"."resetAt" <= now() THEN 1
+                     ELSE "RateLimitBucket"."count" + 1 END,
+      "resetAt" = CASE WHEN "RateLimitBucket"."resetAt" <= now() THEN EXCLUDED."resetAt"
+                       ELSE "RateLimitBucket"."resetAt" END
+    RETURNING "count"
+  `);
+  return Number(rows[0].count) <= limit;
 }
 
 /** Single-slot "cooldown" (e.g. resend verification email/SMS), split into a
@@ -29,15 +39,29 @@ export function rateLimit(key: string, limit: number, windowMs: number): boolean
  *  sent anything (invalid number, provider outage, etc.). Callers: peek
  *  before attempting, armCooldown only once the attempt has actually
  *  succeeded. */
-export function peekCooldown(key: string): { onCooldown: boolean; retryAfterSeconds?: number } {
-  const now = Date.now();
-  const bucket = buckets.get(key);
-  if (!bucket || bucket.resetAt < now) return { onCooldown: false };
-  return { onCooldown: true, retryAfterSeconds: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)) };
+export async function peekCooldown(key: string): Promise<{ onCooldown: boolean; retryAfterSeconds?: number }> {
+  const rows = await prisma.$queryRaw<{ remaining: number | null }[]>(Prisma.sql`
+    SELECT EXTRACT(EPOCH FROM ("resetAt" - now()))::double precision AS "remaining"
+    FROM "RateLimitBucket" WHERE "key" = ${key} AND "resetAt" > now()
+  `);
+  if (rows.length === 0 || rows[0].remaining === null) return { onCooldown: false };
+  return { onCooldown: true, retryAfterSeconds: Math.max(1, Math.ceil(Number(rows[0].remaining))) };
 }
 
-export function armCooldown(key: string, windowMs: number): void {
-  buckets.set(key, { count: 1, resetAt: Date.now() + windowMs });
+export async function armCooldown(key: string, windowMs: number): Promise<void> {
+  await prisma.$executeRaw(Prisma.sql`
+    INSERT INTO "RateLimitBucket" ("key", "count", "resetAt")
+    VALUES (${key}, 1, now() + (${windowMs}::double precision * interval '1 millisecond'))
+    ON CONFLICT ("key") DO UPDATE SET "count" = 1, "resetAt" = EXCLUDED."resetAt"
+  `);
+}
+
+/** Deletes long-expired buckets so the table doesn't grow without bound
+ *  (keys include IPs and emails). Called by the hourly cron. */
+export async function purgeExpiredRateLimits(): Promise<number> {
+  return prisma.$executeRaw(Prisma.sql`
+    DELETE FROM "RateLimitBucket" WHERE "resetAt" < now() - interval '1 day'
+  `);
 }
 
 export function clientIp(headers: Headers): string {

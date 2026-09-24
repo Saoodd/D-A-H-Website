@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   }
 
   const ip = clientIp(req.headers);
-  if (!rateLimit(`vendor-register:${ip}`, 5, 10 * 60 * 1000)) {
+  if (!(await rateLimit(`vendor-register:${ip}`, 5, 10 * 60 * 1000))) {
     return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
   }
 
