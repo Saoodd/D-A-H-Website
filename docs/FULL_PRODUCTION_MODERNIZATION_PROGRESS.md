@@ -25,7 +25,7 @@ commit → push. Never lose completed work or silently reduce scope.
 |---|---|---|
 | 0 | Full repository audit | ✅ Done — `docs/PHASE_0_AUDIT.md` |
 | 1 | Local development environment | ✅ Done — see "Phase 1" below |
-| 2 | Dependency audit + controlled upgrades | ⏳ Not started (facts gathered in Phase 0 audit) |
+| 2 | Dependency audit + controlled upgrades | ✅ Done — see "Phase 2" below |
 | 3 | Complete security audit | 🟡 In progress — `docs/SECURITY_AUDIT.md` written; 2 of ~6 actionable findings fixed |
 | 4 | Auth modernization + active sessions + OAuth | ⏳ Not started |
 | 5 | Legal content CMS | ⏳ Not started |
@@ -87,10 +87,34 @@ commit → push. Never lose completed work or silently reduce scope.
   - Dev prerequisite (unchanged, already in README): Postgres must be
     running before `npm run dev`.
 
+- **Phase 2**: Dependency audit + three controlled upgrade groups, each
+  verified (tsc, lint, build, browser crawl) and committed separately.
+
+  | Package | Was | Now | Security relevance | Breaking risk | Decision |
+  |---|---|---|---|---|---|
+  | next / eslint-config-next | 16.3.4 | 16.3.6 | patch fixes | low | ✅ upgraded (2A) |
+  | react / react-dom (+types) | 19.2.8 | 19.3.0 | — | low | ✅ upgraded (2A) |
+  | zod | 4.5.4 | 4.6.5 | validation lib | low | ✅ upgraded (2A) |
+  | resend | 6.26.0 | 6.29.0 | email | low | ✅ upgraded (2A) |
+  | isomorphic-dompurify | 4.2.0 | 4.3.0 | HTML sanitizer | low | ✅ upgraded (2A) |
+  | libphonenumber-js | 1.13.13 | 1.13.14 | OTP phone normalization | low | ✅ upgraded (2A) |
+  | tsx | 4.23.13 | 4.23.15 | dev only | low | ✅ upgraded (2A) |
+  | uuid (via exceljs) | 8.3.2 | 11.1.1 | moderate advisory, unreachable path | low | ✅ npm override (2A) |
+  | typescript | 5.9.3 | **6.0.3** | — | medium | ✅ upgraded (2B). 7.0.2 trialled: works with Next, but typescript-eslint refuses TS 7 → would break lint. Revisit when typescript-eslint supports it. |
+  | eslint | 9.39.5 | 9.39.5 | — | high | ❌ held. ESLint 10 trialled: eslint-plugin-react (inside eslint-config-next) crashes. Revisit with next eslint-config-next. |
+  | @prisma/client / prisma | 5.20.0 | **7.10.0** | v5 unsupported | high | ✅ upgraded (2C) — see commit 95b5b6c for full migration + verification. npm's `latest` tag on `prisma` points at 8.0.0-rc.17 (a release candidate) — deliberately not used. |
+  | deepmerge-ts, mysql2 (via Prisma 7 CLI) | 7.1.5, 3.15.3 | 8.0.2, 3.24.4 | 4 high advisories, build-time only | low | ✅ npm overrides (2C) |
+  | @types/node | 20.x | 20.x | types only | — | ⏸ held: should match the Node version Vercel runs, which can't be checked from here (see Phase 7). |
+  | bcryptjs, jose, @vercel/blob, exceljs, tiptap, dxf-parser, obscenity | current | current | — | — | no action needed |
+
+  Result: `npm audit` → **0 vulnerabilities** (was 2 moderate).
+  Also: `npm run lint` now exits 0 (vendored `.claude/**` scripts and the
+  generated Prisma client excluded).
+
 ## Current
 
-Phase 2 — dependency audit and controlled upgrades (patch/minor group first,
-Prisma major jump isolated as its own slice).
+Phase 3 continuation — H1 (rate limiting not shared across serverless
+instances).
 
 ## Remaining (high level)
 
