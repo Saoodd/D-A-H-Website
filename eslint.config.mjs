@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored Claude Code skill tooling (CommonJS helper scripts), not app
+    // code — linting it against the app's TS rules only produced noise.
+    ".claude/**",
   ]),
 ]);
 
