@@ -16,7 +16,7 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
-    "@prisma/client": "^5.20.0",
+    "@prisma/client": "^5.22.0",
     "@tiptap/extension-link": "^3.31.3",
     "@tiptap/pm": "^3.31.3",
     "@tiptap/react": "^3.31.3",
@@ -25,28 +25,31 @@
     "bcryptjs": "^3.0.3",
     "dxf-parser": "^1.1.2",
     "exceljs": "^4.4.0",
-    "isomorphic-dompurify": "^4.2.0",
+    "isomorphic-dompurify": "^4.3.0",
     "jose": "^6.2.12",
-    "libphonenumber-js": "^1.13.13",
-    "next": "16.3.4",
+    "libphonenumber-js": "^1.13.14",
+    "next": "16.3.6",
     "obscenity": "^0.4.6",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "resend": "^6.26.0",
-    "zod": "^4.5.4"
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "resend": "^6.29.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@tailwindcss/typography": "^0.5.20",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "eslint": "^9",
-    "eslint-config-next": "16.3.4",
-    "prisma": "^5.20.0",
+    "eslint-config-next": "16.3.6",
+    "prisma": "^5.22.0",
     "tailwindcss": "^4",
-    "tsx": "^4.23.13",
+    "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
   }
 }
