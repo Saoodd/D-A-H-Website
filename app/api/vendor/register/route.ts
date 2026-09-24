@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { vendorRegisterSchema } from "@/lib/validation";
 import { hashPassword, createVendorSession, getVendorSession } from "@/lib/auth";

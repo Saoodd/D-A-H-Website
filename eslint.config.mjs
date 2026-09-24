@@ -15,6 +15,8 @@ const eslintConfig = defineConfig([
     // Vendored Claude Code skill tooling (CommonJS helper scripts), not app
     // code — linting it against the app's TS rules only produced noise.
     ".claude/**",
+    // Prisma 7 generated client (see prisma/schema.prisma generator).
+    "lib/generated/**",
   ]),
 ]);
 

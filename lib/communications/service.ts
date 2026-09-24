@@ -1,6 +1,6 @@
 import "server-only";
 import crypto from "crypto";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "../prisma";
 import { sendEmail } from "../email/core";
 import { sendWhatsAppTemplate } from "../whatsapp/infobip";

@@ -1,5 +1,5 @@
 import "server-only";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "./prisma";
 import { splitVatInclusiveTotal, formatBoothCodes } from "./constants";
 

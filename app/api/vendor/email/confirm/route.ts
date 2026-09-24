@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { emailChangeConfirmSchema } from "@/lib/validation";
 import { rateLimit, clientIp } from "@/lib/rateLimit";

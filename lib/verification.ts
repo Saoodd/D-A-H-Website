@@ -2,7 +2,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { prisma } from "./prisma";
 import { normalizePhoneToE164 } from "./phone";
-import type { Vendor } from "@prisma/client";
+import type { Vendor } from "@/lib/generated/prisma/client";
 
 // Phone verification is the one real eligibility gate before a vendor can
 // apply/book (see requirePhoneVerifiedVendor below) — distinct from

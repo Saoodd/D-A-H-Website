@@ -9,10 +9,8 @@
 //
 // Run with: npm run db:seed
 
-import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-
-const prisma = new PrismaClient();
+import { prisma } from "../lib/prisma";
 
 async function main() {
   await prisma.settings.upsert({

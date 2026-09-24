@@ -1,6 +1,6 @@
 import "server-only";
 import { Resend } from "resend";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "../prisma";
 
 // Every outbound email in the app goes through sendEmail() below — no

@@ -153,6 +153,31 @@ doesn't need it is unnecessary risk if the code is ever modified later.
 Swapped to the parameterized `$queryRaw` + `Prisma.sql` tagged template as
 defense-in-depth. Verified via `tsc --noEmit` and `eslint` — clean.
 
+### L3 — Legacy events published without Event Terms skip the Terms gate
+**File**: `lib/agreements.ts` (`hasAcceptedCurrentEventTerms`)
+**Status**: 🟡 Noted — data check for the user, no code change
+
+Found during the Phase 2 end-to-end booking test. Checkout requires the
+vendor to have accepted the event's *current published* Terms — but when
+an event has **no** published Terms at all, the gate passes (documented,
+intentional: nothing to accept). That's safe for every event published
+today, because `app/api/admin/events/[id]/route.ts` refuses to publish an
+event without published Terms, and no code path can remove a published
+event's Terms afterwards (drafts are deletable; a published version is
+only ever archived atomically when a newer one is published, in
+`publishDraft`). The exposure is limited to **events published before that
+rule existed**, which can still take payment without any Terms step.
+
+**Check in production** (lists any such events):
+```sql
+SELECT e.slug FROM "Event" e
+WHERE e.status = 'PUBLISHED'
+  AND NOT EXISTS (SELECT 1 FROM "Agreement" a
+                  WHERE a."eventId" = e.id AND a.type = 'EVENT_TERMS'
+                    AND a.status = 'PUBLISHED');
+```
+If it returns rows, publish Terms for those events in Admin → Event Terms.
+
 ---
 
 ## Reviewed and found sound (⚪ no fix needed)
@@ -248,6 +273,7 @@ defense-in-depth. Verified via `tsc --noEmit` and `eslint` — clean.
 | M2 | MEDIUM | Infobip webhook unauthenticated | ✅ Fixed |
 | L1 | LOW | Register endpoint enumerates accounts | 🟡 product decision, noted |
 | L2 | LOW | Non-parameterized raw SQL (no actual injection) | ✅ Fixed |
+| L3 | LOW | Legacy events published without Terms skip the Terms gate | 🟡 data check provided |
 
 Everything else audited across authentication, sessions, OTP, IDOR,
 booth-hold concurrency, checkout pricing, receipts, uploads, secrets, CSP,

@@ -1,32 +1,22 @@
-// Dar Al Hay (DAH) — data model
-// SQLite for local dev / small deployments. Swap `provider`/`url` to point at
-// Postgres (e.g. Vercel Postgres, Neon, Supabase) for a production deployment
-// with concurrent serverless writes — see README "Database" section.
+// Dar Al Hay (DAH) — data model (PostgreSQL).
 //
-// NOTE: SQLite has no native enum support in Prisma, so status-like fields
-// below are plain Strings. The allowed values are enforced in TypeScript —
-// see lib/constants.ts for the canonical lists (kept in sync with the
-// comments here).
+// NOTE: status-like fields below are plain Strings (the schema originally
+// targeted SQLite, which has no native enums). The allowed values are
+// enforced in TypeScript — see lib/constants.ts for the canonical lists
+// (kept in sync with the comments here).
 
+// Prisma 7 generator: the client is generated into lib/generated/prisma
+// (gitignored, rebuilt by `prisma generate` on every install) and imported
+// from "@/lib/generated/prisma/client" — not from "@prisma/client".
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
 }
 
+// Connection URLs live in prisma.config.ts (CLI: migrations) and
+// lib/prisma.ts (runtime driver adapter) since Prisma 7.
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  // Migrations need a direct (non-pooled) connection — Postgres advisory
-  // locks, which `prisma migrate deploy` uses to prevent concurrent
-  // migration races, don't work reliably over a PgBouncer-style pooler in
-  // transaction mode: the lock can be granted and released on different
-  // underlying connections, so Prisma's wait for the lock times out (P1002)
-  // even though the pooled connection itself is reachable. DIRECT_URL must
-  // be set everywhere DATABASE_URL is (Prisma does not fall back if it's
-  // missing) — locally it's fine for both to point at the same database;
-  // in production set DIRECT_URL to the provider's non-pooled connection
-  // string — for Vercel Postgres/Neon that's the value normally exposed as
-  // POSTGRES_URL_NON_POOLING.
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
 }
 
 // ---------------------------------------------------------------------------
