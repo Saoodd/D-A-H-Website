@@ -6,6 +6,7 @@ import { ContactClient } from "./ContactClient";
 export const metadata: Metadata = {
   title: "Contact & Socials",
   description: "Get in touch with Dar Al Hay (DAH), or join our WhatsApp community.",
+  alternates: { canonical: "/contact" },
 };
 
 export default async function ContactPage() {

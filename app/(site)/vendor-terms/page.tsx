@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import { ensureVendorTermsExist, getPublishedAgreement } from "@/lib/agreements";
 import { sanitizeAgreementHtml } from "@/lib/sanitizeHtml";
 
-export const metadata: Metadata = { title: "Vendor Terms & Conditions" };
+export const metadata: Metadata = {
+  title: "Vendor Terms & Conditions",
+  description: "The Terms & Conditions every Dar Al Hay vendor accepts when creating a business account.",
+  alternates: { canonical: "/vendor-terms" },
+};
 
 export default async function VendorTermsPage() {
   await ensureVendorTermsExist();

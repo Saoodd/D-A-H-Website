@@ -25,6 +25,8 @@ const arabic = Cairo({
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
+import { isIndexableDeployment } from "@/lib/seo";
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
@@ -43,6 +45,11 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
   },
+  // Preview/development deployments stay out of search results.
+  ...(isIndexableDeployment() ? {} : { robots: { index: false, follow: false } }),
+  // Google Search Console ownership token (the "HTML tag" method). Only
+  // rendered when set; never hard-coded.
+  ...(process.env.GOOGLE_SITE_VERIFICATION ? { verification: { google: process.env.GOOGLE_SITE_VERIFICATION } } : {}),
 };
 
 export const viewport = {

@@ -5,6 +5,7 @@ import { getVendorSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getApplicationView } from "@/lib/applicationView";
 import { EventDetailClient } from "./EventDetailClient";
+import { eventJsonLd, jsonLd } from "@/lib/seo";
 
 export async function generateMetadata({
   params,
@@ -17,6 +18,7 @@ export async function generateMetadata({
   return {
     title: event.name,
     description: event.description || `${event.name} — a Dar Al Hay event in ${event.location}.`,
+    alternates: { canonical: `/events/${event.slug}` },
     openGraph: {
       title: event.name,
       description: event.description,
@@ -77,7 +79,10 @@ export default async function EventDetailPage({
   }
 
   return (
-    <EventDetailClient
+    <>
+      {/* schema.org Event: makes the event eligible for Google's event results. */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(eventJsonLd(event)) }} />
+      <EventDetailClient
       event={{
         slug: event.slug,
         name: event.name,
@@ -92,5 +97,6 @@ export default async function EventDetailPage({
       }}
       vendorState={vendorState}
     />
+    </>
   );
 }

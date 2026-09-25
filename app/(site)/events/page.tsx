@@ -5,6 +5,7 @@ import { EventsClient } from "./EventsClient";
 export const metadata: Metadata = {
   title: "Upcoming Events",
   description: "Dar Al Hay's upcoming events and pop-ups in Dubai — dates, locations and vendor categories.",
+  alternates: { canonical: "/events" },
 };
 
 export default async function EventsPage() {

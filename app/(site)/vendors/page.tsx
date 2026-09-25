@@ -8,6 +8,7 @@ import { AlreadySignedInNotice } from "@/components/vendor/AlreadySignedInNotice
 export const metadata: Metadata = {
   title: "Become a DAH Vendor",
   description: "Create your DAH business account, then apply to individual Dar Al Hay events once you're verified.",
+  alternates: { canonical: "/vendors" },
 };
 
 export default async function VendorsPage() {

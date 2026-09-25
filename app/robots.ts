@@ -1,15 +1,21 @@
 import type { MetadataRoute } from "next";
+import { isIndexableDeployment, siteUrl } from "@/lib/seo";
 
 export default function robots(): MetadataRoute.Robots {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  // Preview / development deployments: keep the whole site out of search.
+  if (!isIndexableDeployment()) {
+    return { rules: [{ userAgent: "*", disallow: "/" }] };
+  }
   return {
     rules: [
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/admin", "/api", "/vendor/dashboard", "/vendor/applications"],
+        // "/vendor/" (with the slash) is the private vendor account area;
+        // the public "/vendors" and "/vendor-terms" pages stay crawlable.
+        disallow: ["/admin", "/api/", "/vendor/"],
       },
     ],
-    sitemap: `${siteUrl}/sitemap.xml`,
+    sitemap: `${siteUrl()}/sitemap.xml`,
   };
 }

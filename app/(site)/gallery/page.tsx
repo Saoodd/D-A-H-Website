@@ -5,6 +5,7 @@ import { GalleryClient } from "./GalleryClient";
 export const metadata: Metadata = {
   title: "Gallery",
   description: "Photos from past Dar Al Hay events.",
+  alternates: { canonical: "/gallery" },
 };
 
 export default async function GalleryPage() {

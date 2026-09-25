@@ -34,6 +34,7 @@ const ENV_VARS: EnvVar[] = [
   { names: ["ADMIN_NOTIFY_EMAIL"], level: "optional", effect: "admin is not emailed about new applications/messages" },
   { names: ["AGREEMENTS_SHEETS_WEBHOOK_URL"], level: "optional", effect: "agreement acceptances are not mirrored to Google Sheets" },
   { names: ["PAYMENT_PROVIDER"], level: "optional", effect: "defaults to the sandbox payment gateway" },
+  { names: ["GOOGLE_SITE_VERIFICATION"], level: "optional", effect: "no Google Search Console verification meta tag (use DNS verification instead, or set this)" },
   { names: ["GOOGLE_CLIENT_ID"], level: "optional", effect: "\"Continue with Google\" sign-in is hidden (needs GOOGLE_CLIENT_SECRET too)" },
   {
     names: ["ALLOW_SANDBOX_PAYMENTS"],

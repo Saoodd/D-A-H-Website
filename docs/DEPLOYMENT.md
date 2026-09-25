@@ -111,6 +111,23 @@ that the Build Command is not overridden. An override would bypass
    years with includeSubDomains, CSP, and frame, content-type and referrer
    policies. Don't add HSTS `preload` until every subdomain serves HTTPS.
 
+## Search Console (BLOCKED EXTERNAL STEP: needs DAH's Google account)
+
+1. Google Search Console → Add property → **Domain** property for the
+   primary domain. Verify with the DNS TXT record Google shows, added at
+   the registrar. This covers apex, www, http and https at once.
+   (Alternative: a URL-prefix property with the "HTML tag" method. Put
+   the token in `GOOGLE_SITE_VERIFICATION` and redeploy.)
+2. Sitemaps → submit `https://<domain>/sitemap.xml`.
+3. URL Inspection → test one event page. The Rich Results test should
+   detect the schema.org **Event** markup.
+
+What the site already does: canonical URLs on public pages, a sitemap
+(pages, legal pages, published events), and robots rules. Private
+vendor/admin pages are `noindex` and disallowed. Preview deployments are
+entirely `noindex` and disallowed. Organization JSON-LD is on the home
+page, Event JSON-LD on each event page, plus Open Graph/Twitter cards.
+
 ## Launch-day check
 
 Once DNS is live:

@@ -31,7 +31,7 @@ commit → push. Never lose completed work or silently reduce scope.
 | 5 | Legal content CMS | ✅ Done — Admin → Content → Legal Pages |
 | 6 | Live payment gateway architecture | ✅ Done (provider-neutral) — real provider is a BLOCKED EXTERNAL STEP; see `docs/PAYMENTS.md` |
 | 7 | Vercel/deployment + domain audit | ✅ Repo side done — `docs/DEPLOYMENT.md`; dashboard/DNS checks are BLOCKED EXTERNAL STEPs |
-| 8 | SEO / search visibility | ⏳ Not started (robots.ts/sitemap.ts/manifest.ts already exist — gaps found, see audit) |
+| 8 | SEO / search visibility | ✅ Done — Search Console submission is a BLOCKED EXTERNAL STEP |
 | 9 | Developer standards | ⏳ Not started |
 | 10 | Design system / component library | ⏳ Not started |
 | 11 | Data table modernization + data fetching | ⏳ Not started |
@@ -248,9 +248,34 @@ Full write-up: `docs/PAYMENTS.md`.
     plan (the hourly cron needs Pro), Preview database isolation.
   - Registrar DNS, and the Resend, Infobip and Google console URLs.
 
+## Phase 8 — SEO
+
+- **Private pages:** `/vendor/*` and `/admin/*` layouts set
+  `noindex, nofollow`. robots.txt disallows `/admin`, `/api/` and
+  `/vendor/`, while the public `/vendors` and `/vendor-terms` stay
+  crawlable.
+- **Preview deployments:** fully `noindex` and disallowed
+  (`isIndexableDeployment`).
+- **Canonical URLs:** on all public pages (home, events, event detail,
+  vendors, gallery, contact, vendor terms, legal). The home page uses the
+  full site title rather than "Home — …".
+- **Structured data:** Organization JSON-LD (with Instagram from Settings)
+  on the home page, schema.org Event JSON-LD on event pages. `<` is
+  escaped so admin text can't break out of the script tag.
+- **Sitemap:** adds `/vendor-terms`; legal pages carry `lastModified` from
+  their published versions.
+- **Search Console:** optional `GOOGLE_SITE_VERIFICATION` meta tag; DNS
+  verification is recommended.
+- **Verified on a production build:** robots, sitemap, canonicals, JSON-LD
+  parse, noindex on a vendor page, verification meta. The indexability
+  matrix was checked for prod, Vercel prod, preview and dev.
+- **BLOCKED EXTERNAL STEP:** create the Search Console property and submit
+  the sitemap (steps in `docs/DEPLOYMENT.md`).
+
 ## Current
 
-Phase 8 — SEO / search visibility.
+Phase 9 — developer standards (README / DEVELOPMENT.md / CONTRIBUTING.md,
+scripts).
 
 ## Remaining (high level)
 
