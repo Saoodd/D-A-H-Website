@@ -32,7 +32,7 @@ export function VendorNav({ businessName }: { businessName?: string }) {
   }
 
   return (
-    <nav className="md:w-48 shrink-0">
+    <nav aria-label="My DAH" className="md:w-48 shrink-0">
       {businessName ? (
         <p className="hidden md:block text-xs uppercase tracking-widest text-brown-light mb-4 truncate">{businessName}</p>
       ) : (

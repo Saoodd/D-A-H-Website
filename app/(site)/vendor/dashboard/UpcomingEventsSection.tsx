@@ -67,7 +67,7 @@ export function UpcomingEventsSection({
 
   return (
     <div>
-      <p className="label-caps mb-3">{locale === "ar" ? "فعاليات دار الحي القادمة" : "Upcoming DAH Events"}</p>
+      <h2 className="label-caps mb-3">{locale === "ar" ? "فعاليات دار الحي القادمة" : "Upcoming DAH Events"}</h2>
       {events.length === 0 ? (
         <EmptyState title={locale === "ar" ? "لا توجد فعاليات قادمة منشورة حالياً" : "No upcoming events published yet"} />
       ) : (

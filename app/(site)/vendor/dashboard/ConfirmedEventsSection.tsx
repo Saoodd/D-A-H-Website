@@ -166,7 +166,7 @@ export function ConfirmedEventsSection({ events }: { events: ConfirmedEventRow[]
 
   return (
     <div>
-      <p className="label-caps mb-3">
+      <h2 className="label-caps mb-3">
         {events.length > 1
           ? locale === "ar"
             ? "فعالياتك المؤكدة"
@@ -174,7 +174,7 @@ export function ConfirmedEventsSection({ events }: { events: ConfirmedEventRow[]
           : locale === "ar"
           ? "فعاليتك القادمة المؤكدة"
           : "Your Next Confirmed Event"}
-      </p>
+      </h2>
       <FeaturedConfirmedCard ev={featured} />
       {rest.length > 0 && (
         <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5 mt-5">

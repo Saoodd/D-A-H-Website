@@ -35,7 +35,7 @@ commit → push. Never lose completed work or silently reduce scope.
 | 9 | Developer standards | ✅ Done |
 | 10 | Design system / component library | ✅ Done — `docs/DESIGN_SYSTEM.md` |
 | 11 | Data table modernization + data fetching | ✅ Done — `docs/DATA_FETCHING.md` |
-| 12 | UX / performance audit | ⏳ Not started (prior session already did a large UX pass — see git log) |
+| 12 | UX / performance audit | ✅ Done |
 | 13 | Floor-plan regression protection | ⏳ Ongoing discipline, re-run after every relevant change |
 | 14 | WhatsApp/Infobip regression protection | ⏳ Ongoing discipline, re-run after every relevant change |
 | 15 | Database/migration safety review | ⏳ Ongoing discipline |
@@ -347,9 +347,38 @@ Full write-up: `docs/PAYMENTS.md`.
   - Browser: on-screen counts equal export row counts for 6 filter
     sets.
 
+## Phase 12 — UX / performance
+
+Measured on a local production build, emulating a mid-range phone (390 px,
+4× CPU slowdown, 9 Mbps, 150 ms RTT):
+
+| Pages | LCP | CLS | JS (first visit) |
+|---|---|---|---|
+| Public: home, events, event detail, gallery, vendors, contact, legal, login | 0.6–0.7 s (warm) | 0 | ~155 KB |
+| Vendor: dashboard, applications, booking, payments, profile | 0.4–0.8 s | 0 | ~165 KB, then cached |
+| Admin: overview, lists, event workspace with floor-plan builder | 0.45–0.7 s | 0 | ~150 KB, plus ~163 KB for the builder |
+
+Changes:
+- **Fonts:** the Arabic font (Cairo) was preloaded on every English page
+  and never used: 4 font files, about 138 KB. It now loads only when the
+  page is in Arabic, so English pages fetch 2 files (about 75 KB).
+  Verified that Arabic pages still switch to RTL and render Cairo.
+- **Accessibility (axe-core, WCAG 2 A/AA + best practice, 22 pages):**
+  - Before: 578 contrast failures across 22 pages plus 6 other issue
+    types. After: **0 violations**.
+  - The secondary-text token `brown-light` went from #7a6c55 (4.1:1 on
+    cream, below AA) to #675944 (4.6–6.2:1 on every cream surface). It
+    reads as the same warm brown, slightly deeper. Dark mode already
+    passed.
+  - Headings on the vendor dashboard are now in order.
+  - Navigation landmarks have distinct labels ("Main", "My DAH").
+  - The vendor sort control has a label, and the email table's actions
+    column has screen-reader text.
+  - The admin login page has a `<main>` landmark.
+
 ## Current
 
-Phase 12 — UX/performance.
+Phase 13 — floor-plan regression protection.
 
 ## Remaining (high level)
 

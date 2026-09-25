@@ -39,7 +39,7 @@ export function SiteHeader({ vendorLoggedIn }: { vendorLoggedIn: boolean }) {
           <Logo />
         </Link>
 
-        <nav className="hidden md:flex items-center gap-7 text-sm">
+        <nav aria-label="Main" className="hidden md:flex items-center gap-7 text-sm">
           {links.map((l) => {
             const active = isActive(l.href);
             return (

@@ -88,6 +88,7 @@ export function VendorsListClient({
           />
         </form>
         <select
+          aria-label="Sort vendors"
           value={sort}
           onChange={(e) => router.push(buildHref({ status: activeStatus, account: activeAccount, q: query, sort: e.target.value }))}
           className="border border-brown/20 rounded-lg px-3 py-2 bg-cream text-sm"

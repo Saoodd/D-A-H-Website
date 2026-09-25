@@ -17,10 +17,14 @@ const body = Inter({
   weight: ["400", "500", "600"],
 });
 
+// Only used when the page is in Arabic (dir="rtl"). Not preloaded, so
+// English visitors don't download it; Arabic pages fetch it on first use
+// (font-display: swap, so text is never invisible while it loads).
 const arabic = Cairo({
   variable: "--font-arabic",
   subsets: ["arabic", "latin"],
   weight: ["300", "400", "600", "700"],
+  preload: false,
 });
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";

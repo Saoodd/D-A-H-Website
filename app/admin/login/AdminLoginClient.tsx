@@ -36,7 +36,7 @@ export function AdminLoginClient() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-cream-soft px-4">
+    <main className="min-h-screen flex flex-col items-center justify-center bg-cream-soft px-4">
       <Link href="/" className="mb-10">
         <Logo />
       </Link>
@@ -78,6 +78,6 @@ export function AdminLoginClient() {
       <Link href="/" className="mt-8 text-xs text-brown-light hover:text-brown underline">
         Back to site
       </Link>
-    </div>
+    </main>
   );
 }

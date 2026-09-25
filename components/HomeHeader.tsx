@@ -86,7 +86,7 @@ export function HomeHeader({ vendorLoggedIn }: { vendorLoggedIn: boolean }) {
           )}
         </Link>
 
-        <nav className="hidden md:flex items-center gap-8 text-sm">
+        <nav aria-label="Main" className="hidden md:flex items-center gap-8 text-sm">
           {links.map((l) => {
             const active = isActive(l.href);
             return (

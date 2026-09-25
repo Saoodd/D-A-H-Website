@@ -18,7 +18,7 @@ dark-mode value, so dark mode works automatically.
 | `bg-cream-deep` | #e2d2b4 | emphasised surfaces, chips |
 | `text-brown-dark` | #25201a | headings, primary text |
 | `text-brown` / `bg-brown` | #2d291d | primary buttons, links |
-| `text-brown-light` | #7a6c55 | secondary text, labels |
+| `text-brown-light` | #675944 | secondary text, labels (≥4.5:1 on every cream surface) |
 | `text-accent` | #743a26 | rare emphasis (terracotta) |
 | `border-brown/10`–`/25` | — | hairlines and card borders (opacity scale) |
 
