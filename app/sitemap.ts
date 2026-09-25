@@ -3,6 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { siteUrl } from "@/lib/seo";
 import { LEGAL_DOC_TYPES, LEGAL_DOCS } from "@/lib/legalDocs";
 
+// Regenerated at most hourly so newly published events appear without a
+// redeploy. Search engines are the only consumer, so this cache is never
+// authoritative for anything.
+export const revalidate = 3600;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = siteUrl();
 

@@ -231,7 +231,7 @@ export function ComposeClient({
       setter([]);
       return;
     }
-    const res = await fetch(`/api/admin/vendors?query=${encodeURIComponent(query)}`).catch(() => null);
+    const res = await fetch(`/api/admin/vendors/search?query=${encodeURIComponent(query)}`).catch(() => null);
     if (!res || !res.ok) return;
     const data = await res.json().catch(() => null);
     const list = Array.isArray(data?.vendors) ? data.vendors : Array.isArray(data) ? data : [];

@@ -45,7 +45,13 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // API responses carry live state (booth availability, payment status,
+      // deadlines, sessions) and are often per-user. Nothing between the
+      // server and the browser may store them; see docs/DATA_FETCHING.md.
+      { source: "/api/:path*", headers: [{ key: "Cache-Control", value: "private, no-store" }] },
+    ];
   },
   async redirects() {
     return [

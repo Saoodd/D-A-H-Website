@@ -6,6 +6,9 @@ import { formatAed } from "@/lib/constants";
 import { paymentMethodLabel } from "@/lib/paymentLabels";
 import { LIFECYCLE_LABEL, lifecycleStatus } from "@/lib/paymentLifecycle";
 
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { EmptyState } from "@/components/ui/Card";
+
 function PaymentStatus({ t }: { t: { status: string; amountAedFils: number; refundedAedFils?: number; needsAttention?: string | null } }) {
   const lc = lifecycleStatus(t);
   const lcTone = lc === "PAID" ? "positive" : lc === "FAILED" ? "negative" : lc === "PENDING" || lc === "AUTHORIZED" || lc === "PARTIALLY_REFUNDED" ? "attention" : "neutral";
@@ -16,8 +19,6 @@ function PaymentStatus({ t }: { t: { status: string; amountAedFils: number; refu
     </span>
   );
 }
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import { EmptyState } from "@/components/ui/Card";
 
 export interface TransactionRow {
   id: string;
@@ -34,6 +35,7 @@ export interface TransactionRow {
   provider: string;
   method?: string | null;
   providerRef: string | null;
+  receiptNumber?: string | null;
   createdAt: string;
   applicationId: string;
 }

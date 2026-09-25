@@ -40,7 +40,7 @@ export default async function AdminEventPaymentsPage({ params }: { params: Promi
         <SummaryTile label="Total collected" value={formatAed(summary.totalCollectedAedFils)} />
         {summary.totalRefundedAedFils > 0 && <SummaryTile label="Refunded" value={formatAed(summary.totalRefundedAedFils)} />}
         <SummaryTile label="Paid bookings" value={String(summary.succeededCount)} />
-        <SummaryTile label="Pending" value={String(summary.pendingCount)} />
+        <SummaryTile label="In progress" value={String(summary.pendingCount)} />
         <SummaryTile label="Failed" value={String(summary.failedCount)} />
       </div>
       {(summary.adjustmentsTotalAedFils !== 0 || summary.unresolvedCancellations > 0) && (
@@ -67,6 +67,7 @@ export default async function AdminEventPaymentsPage({ params }: { params: Promi
           provider: t.provider,
           method: t.method,
           providerRef: t.providerRef,
+          receiptNumber: t.receiptNumber,
           createdAt: t.createdAt.toISOString(),
           paidAt: t.paidAt ? t.paidAt.toISOString() : null,
           applicationId: t.applicationId,

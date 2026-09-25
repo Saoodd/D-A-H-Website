@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { formatBoothCodes } from "@/lib/constants";
 import { PageHeader } from "@/components/ui/Card";
 import { TransactionsList } from "@/components/admin/TransactionsList";
+import { Button } from "@/components/ui/Button";
+import { PAYMENT_FILTER_STATUSES, parsePaymentFilters, paymentFiltersToQuery, paymentWhere } from "@/lib/paymentFilters";
+
+const PAGE_LIMIT = 300;
 
 export const metadata: Metadata = { title: "All Transactions — Admin" };
 
@@ -12,40 +16,23 @@ export default async function AdminAllTransactionsPage({
 }: {
   searchParams: Promise<{ status?: string; q?: string; eventId?: string; provider?: string; dateFrom?: string; dateTo?: string }>;
 }) {
-  const { status, q, eventId, provider, dateFrom, dateTo } = await searchParams;
-  const search = (q || "").trim();
+  const filters = parsePaymentFilters(await searchParams);
+  const { status, q: search = "", eventId, provider, dateFrom, dateTo } = filters;
+  const where = paymentWhere(filters);
 
-  const where: Record<string, unknown> = {
-    ...(status && ["SUCCEEDED", "PENDING", "FAILED"].includes(status) ? { status } : {}),
-    ...(eventId ? { eventId } : {}),
-    ...(provider ? { provider: { equals: provider, mode: "insensitive" as const } } : {}),
-    ...(search ? { application: { businessName: { contains: search, mode: "insensitive" as const } } } : {}),
-  };
-  if (dateFrom || dateTo) {
-    where.createdAt = {
-      ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-      ...(dateTo ? { lte: new Date(new Date(dateTo).getTime() + 24 * 60 * 60 * 1000) } : {}),
-    };
-  }
-
-  const [payments, events, providers] = await Promise.all([
+  const [payments, total, events, providers] = await Promise.all([
     prisma.payment.findMany({
       where,
       include: { application: { include: { event: { select: { name: true } } } }, booths: { include: { booth: true } } },
       orderBy: { createdAt: "desc" },
-      take: 300,
+      take: PAGE_LIMIT,
     }),
+    prisma.payment.count({ where }),
     prisma.event.findMany({ select: { id: true, name: true }, orderBy: { startDate: "desc" } }),
     prisma.payment.findMany({ select: { provider: true }, distinct: ["provider"] }),
   ]);
 
-  const exportQs = new URLSearchParams();
-  if (status) exportQs.set("status", status);
-  if (search) exportQs.set("q", search);
-  if (eventId) exportQs.set("eventId", eventId);
-  if (provider) exportQs.set("provider", provider);
-  if (dateFrom) exportQs.set("dateFrom", dateFrom);
-  if (dateTo) exportQs.set("dateTo", dateTo);
+  const exportQs = paymentFiltersToQuery(filters);
 
   return (
     <div>
@@ -60,8 +47,8 @@ export default async function AdminAllTransactionsPage({
 
       <form className="flex flex-wrap items-end gap-3 mb-6">
         <label className="flex flex-col gap-1 text-xs text-brown-light">
-          Business
-          <input name="q" defaultValue={search} placeholder="Search by vendor…" className="border border-brown/20 rounded-lg px-3 py-2 bg-cream text-sm w-48" />
+          Search
+          <input name="q" defaultValue={search} placeholder="Business, contact, email, receipt…" className="border border-brown/20 rounded-lg px-3 py-2 bg-cream text-sm w-48" />
         </label>
         <label className="flex flex-col gap-1 text-xs text-brown-light">
           Event
@@ -78,9 +65,11 @@ export default async function AdminAllTransactionsPage({
           Status
           <select name="status" defaultValue={status || ""} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream text-sm">
             <option value="">All statuses</option>
-            <option value="SUCCEEDED">Succeeded</option>
-            <option value="PENDING">Pending</option>
-            <option value="FAILED">Failed</option>
+            {PAYMENT_FILTER_STATUSES.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-brown-light">
@@ -102,9 +91,9 @@ export default async function AdminAllTransactionsPage({
           To
           <input type="date" name="dateTo" defaultValue={dateTo || ""} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream text-sm" />
         </label>
-        <button type="submit" className="text-sm px-4 py-2 rounded-[6px] border border-brown/30 hover:bg-brown/10">
+        <Button type="submit" variant="secondary" size="sm">
           Filter
-        </button>
+        </Button>
         {(status || search || eventId || provider || dateFrom || dateTo) && (
           <Link href="/admin/payments/all" className="text-xs text-brown-light underline">
             Clear
@@ -117,6 +106,12 @@ export default async function AdminAllTransactionsPage({
           Export Excel
         </a>
       </form>
+
+      <p className="text-xs text-brown-light mb-3" role="status">
+        {total > payments.length
+          ? `Showing the ${payments.length} most recent of ${total} matching transactions. Narrow the filters to see older ones; exports include all ${total}.`
+          : `${total} matching transaction${total === 1 ? "" : "s"}.`}
+      </p>
 
       <TransactionsList
         showEventColumn
@@ -135,6 +130,7 @@ export default async function AdminAllTransactionsPage({
           provider: p.provider,
           method: p.method,
           providerRef: p.providerRef,
+          receiptNumber: p.receiptNumber,
           createdAt: p.createdAt.toISOString(),
           applicationId: p.application.id,
         }))}

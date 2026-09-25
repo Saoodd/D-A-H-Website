@@ -34,7 +34,7 @@ commit → push. Never lose completed work or silently reduce scope.
 | 8 | SEO / search visibility | ✅ Done — Search Console submission is a BLOCKED EXTERNAL STEP |
 | 9 | Developer standards | ✅ Done |
 | 10 | Design system / component library | ✅ Done — `docs/DESIGN_SYSTEM.md` |
-| 11 | Data table modernization + data fetching | ⏳ Not started |
+| 11 | Data table modernization + data fetching | ✅ Done — `docs/DATA_FETCHING.md` |
 | 12 | UX / performance audit | ⏳ Not started (prior session already did a large UX pass — see git log) |
 | 13 | Floor-plan regression protection | ⏳ Ongoing discipline, re-run after every relevant change |
 | 14 | WhatsApp/Infobip regression protection | ⏳ Ongoing discipline, re-run after every relevant change |
@@ -311,9 +311,45 @@ Full write-up: `docs/PAYMENTS.md`.
 - `docs/DESIGN_SYSTEM.md` documents tokens, typography, layout, the
   component catalogue, interaction rules and deliberate exceptions.
 
+## Phase 11 — data tables and data fetching
+
+- **Caching audit:** nothing uses `"use cache"`, `unstable_cache` or ISR.
+  Every page that reads the database is dynamic. Added
+  `Cache-Control: private, no-store` to all `/api/*` responses so live
+  booth, payment and session state can never be stored by a browser or
+  proxy. The sitemap was frozen at build time; it now refreshes hourly.
+  Rules are in `docs/DATA_FETCHING.md`.
+- **Bug fixed:** the Communications → Compose manual vendor search called
+  `/api/admin/vendors`, which doesn't exist, so it always showed no
+  results. It has done this since Communications shipped. It now uses
+  `/api/admin/vendors/search`.
+- **Payment tables:** new `lib/paymentFilters.ts` is the single filter
+  definition for All Transactions, the per-event table and the CSV/Excel
+  export. This fixed three things:
+  - Exports now match the screen. Before, the per-event export ignored
+    the contact and email search.
+  - The status filter now covers every lifecycle state, plus Refunded and
+    Needs attention.
+  - Dates are Dubai calendar days. Malformed dates used to cause a 500.
+
+  Search also covers receipt numbers and references. All Transactions
+  shows "N of M" when capped, and the export refuses rather than silently
+  truncating. The per-event "Pending" tile now counts
+  created/pending/authorised ("In progress").
+- **Emails log:** it showed only the latest 150 of (locally) 480 sends,
+  so older failed emails couldn't be found or retried. Server-side status
+  and search filters now reach any delivery. Communications history
+  shows its cap when reached.
+- Tests:
+  - `tests/paymentFilters.test.ts`: 5 new unit tests (20 total).
+  - A DB check found server `where` and client predicate identical across
+    210 filter combinations.
+  - Browser: on-screen counts equal export row counts for 6 filter
+    sets.
+
 ## Current
 
-Phase 11 — data tables and data fetching.
+Phase 12 — UX/performance.
 
 ## Remaining (high level)
 

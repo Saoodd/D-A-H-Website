@@ -18,11 +18,14 @@ function fmt(d: Date | null) {
 }
 
 export default async function CommunicationsHistoryPage() {
-  const communications = await prisma.communication.findMany({
-    where: { isTest: false },
-    orderBy: { createdAt: "desc" },
-    take: 200,
-  });
+  const [communications, total] = await Promise.all([
+    prisma.communication.findMany({
+      where: { isTest: false },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }),
+    prisma.communication.count({ where: { isTest: false } }),
+  ]);
 
   if (communications.length === 0) {
     return (
@@ -62,6 +65,11 @@ export default async function CommunicationsHistoryPage() {
           </div>
         </Link>
       ))}
+      {total > communications.length && (
+        <p className="text-xs text-brown-light" role="status">
+          Showing the {communications.length} most recent of {total} messages.
+        </p>
+      )}
     </div>
   );
 }

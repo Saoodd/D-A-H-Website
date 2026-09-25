@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { TransactionsList, type TransactionRow } from "@/components/admin/TransactionsList";
+import { PAYMENT_FILTER_STATUSES, matchesPaymentFilters, parsePaymentFilters, paymentFiltersToQuery } from "@/lib/paymentFilters";
 
 export function EventPaymentsTable({ eventId, eventName, transactions }: { eventId: string; eventName: string; transactions: TransactionRow[] }) {
   const [q, setQ] = useState("");
@@ -9,29 +10,16 @@ export function EventPaymentsTable({ eventId, eventName, transactions }: { event
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return transactions.filter((t) => {
-      if (
-        needle &&
-        !t.businessName.toLowerCase().includes(needle) &&
-        !t.contactName.toLowerCase().includes(needle) &&
-        !t.email.toLowerCase().includes(needle)
-      )
-        return false;
-      if (status && t.status !== status) return false;
-      if (dateFrom && new Date(t.createdAt) < new Date(dateFrom)) return false;
-      if (dateTo && new Date(t.createdAt) > new Date(new Date(dateTo).getTime() + 24 * 60 * 60 * 1000)) return false;
-      return true;
-    });
-  }, [transactions, q, status, dateFrom, dateTo]);
+  const filters = parsePaymentFilters({ q, status, dateFrom, dateTo });
+  const filtered = useMemo(
+    () => transactions.filter((t) => matchesPaymentFilters(t, filters)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- filters is derived from these four inputs
+    [transactions, q, status, dateFrom, dateTo],
+  );
 
   function exportParams(format: "csv" | "xlsx") {
-    const params = new URLSearchParams({ eventId, format });
-    if (q) params.set("q", q);
-    if (status) params.set("status", status);
-    if (dateFrom) params.set("dateFrom", dateFrom);
-    if (dateTo) params.set("dateTo", dateTo);
+    const params = paymentFiltersToQuery({ ...filters, eventId });
+    params.set("format", format);
     return params.toString();
   }
 
@@ -39,7 +27,7 @@ export function EventPaymentsTable({ eventId, eventName, transactions }: { event
     <div>
       <div className="flex flex-wrap items-end gap-3 mb-5">
         <label className="flex flex-col gap-1 text-xs text-brown-light">
-          Business / contact / email
+          Business / contact / email / receipt
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -51,9 +39,11 @@ export function EventPaymentsTable({ eventId, eventName, transactions }: { event
           Status
           <select value={status} onChange={(e) => setStatus(e.target.value)} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft text-sm">
             <option value="">All</option>
-            <option value="SUCCEEDED">Succeeded</option>
-            <option value="PENDING">Pending</option>
-            <option value="FAILED">Failed</option>
+            {PAYMENT_FILTER_STATUSES.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-brown-light">

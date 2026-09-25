@@ -4,37 +4,34 @@ import { requireAdmin } from "@/lib/adminGuard";
 import { toCsv } from "@/lib/csv";
 import { toXlsxBuffer } from "@/lib/xlsx";
 import { filsToAed, formatBoothCodes } from "@/lib/constants";
+import { lifecycleStatus } from "@/lib/paymentLifecycle";
+import { parsePaymentFilters, paymentWhere } from "@/lib/paymentFilters";
+
+const EXPORT_CAP = 20000;
 
 // Shared export for both the per-event Payments workspace (always passes
 // `eventId`, so its file can never contain another event's transactions)
 // and the All Transactions view (omits `eventId`, filters instead by
-// business/status/date/provider) — one query builder, one row shape, so
-// the two exports never drift out of sync with each other or the on-screen
-// table.
+// business/status/date/provider). Filters come from lib/paymentFilters,
+// the same definition the on-screen tables use, so a file never contains
+// different rows from the table the admin exported it from.
 export async function GET(req: NextRequest) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
-  const eventId = searchParams.get("eventId");
-  const q = searchParams.get("q")?.trim() || "";
-  const status = searchParams.get("status");
-  const provider = searchParams.get("provider")?.trim();
-  const dateFrom = searchParams.get("dateFrom");
-  const dateTo = searchParams.get("dateTo");
+  const filters = parsePaymentFilters(searchParams);
+  const eventId = filters.eventId;
   const format = searchParams.get("format");
+  const where = paymentWhere(filters);
 
-  const where: Record<string, unknown> = {};
-  if (eventId) where.eventId = eventId;
-  if (status && ["SUCCEEDED", "PENDING", "FAILED"].includes(status)) where.status = status;
-  if (provider) where.provider = { equals: provider, mode: "insensitive" as const };
-  if (dateFrom || dateTo) {
-    where.createdAt = {
-      ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-      ...(dateTo ? { lte: new Date(new Date(dateTo).getTime() + 24 * 60 * 60 * 1000) } : {}),
-    };
-  }
-  if (q) {
-    where.application = { businessName: { contains: q, mode: "insensitive" as const } };
+  // Never hand over a silently truncated file: a partial ledger looks
+  // complete. Past the cap, ask for narrower filters instead.
+  const total = await prisma.payment.count({ where });
+  if (total > EXPORT_CAP) {
+    return NextResponse.json(
+      { error: `This export would contain ${total} payments (limit ${EXPORT_CAP}). Narrow the date range or filters and export in parts.` },
+      { status: 413 },
+    );
   }
 
   const payments = await prisma.payment.findMany({
@@ -44,7 +41,7 @@ export async function GET(req: NextRequest) {
       booths: { select: { booth: { select: { code: true } } } },
     },
     orderBy: { createdAt: "desc" },
-    take: 5000,
+    take: EXPORT_CAP,
   });
 
   const rows = payments.map((p) => ({
@@ -61,6 +58,12 @@ export async function GET(req: NextRequest) {
     reference: p.providerRef ?? "",
     createdAt: p.createdAt.toISOString(),
     paidAt: p.paidAt ? p.paidAt.toISOString() : "",
+    // Appended after the original columns so existing spreadsheets that
+    // read columns by position keep working.
+    lifecycle: lifecycleStatus(p),
+    refundedAed: filsToAed(p.refundedAedFils),
+    receiptNumber: p.receiptNumber ?? "",
+    needsAttention: p.needsAttention ?? "",
   }));
 
   const filenameBase = eventId ? "dah-event-payments" : "dah-all-transactions";

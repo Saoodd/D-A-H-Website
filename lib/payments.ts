@@ -97,6 +97,7 @@ export interface EventPaymentsDetail {
     provider: string;
     method: string | null;
     providerRef: string | null;
+    receiptNumber: string | null;
     createdAt: Date;
     paidAt: Date | null;
     applicationId: string;
@@ -123,7 +124,7 @@ export async function getEventPaymentsDetail(eventId: string): Promise<EventPaym
   ]);
 
   const succeeded = payments.filter((p) => p.status === "SUCCEEDED");
-  const pending = payments.filter((p) => p.status === "PENDING");
+  const pending = payments.filter((p) => p.status === "CREATED" || p.status === "PENDING" || p.status === "AUTHORIZED");
   const failed = payments.filter((p) => p.status === "FAILED");
 
   return {
@@ -151,6 +152,7 @@ export async function getEventPaymentsDetail(eventId: string): Promise<EventPaym
       provider: p.provider,
       method: p.method,
       providerRef: p.providerRef,
+      receiptNumber: p.receiptNumber,
       createdAt: p.createdAt,
       paidAt: p.paidAt,
       applicationId: p.application.id,
