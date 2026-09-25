@@ -434,6 +434,12 @@ model VendorSession {
   createdAt DateTime  @default(now())
   expiresAt DateTime
   revokedAt DateTime?
+  // For the vendor's "Active sessions" list only: the browser's User-Agent
+  // (shown as e.g. "Safari on iPhone") and roughly when the session was
+  // last used (refreshed at most every few minutes). No IP address is
+  // stored. Null on sessions created before these columns existed.
+  userAgent  String?
+  lastSeenAt DateTime?
 
   @@index([vendorId])
 }
@@ -447,6 +453,9 @@ model AdminSession {
   createdAt DateTime  @default(now())
   expiresAt DateTime
   revokedAt DateTime?
+  // Same purpose as on VendorSession — admin "Active sessions" list.
+  userAgent  String?
+  lastSeenAt DateTime?
 }
 
 // Single-use, expiring "forgot password" token. Only a hash is stored —

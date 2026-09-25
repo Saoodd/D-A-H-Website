@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { getVendorParticipation, computeProfileCompletion } from "@/lib/vendorStats";
 import { isPhoneVerified } from "@/lib/verification";
+import { listVendorSessions } from "@/lib/sessionList";
 import { ProfileClient } from "./ProfileClient";
 
 export const metadata: Metadata = { title: "My Profile" };
@@ -20,7 +21,7 @@ export default async function VendorProfilePage() {
     redirect("/vendor/login");
   }
 
-  const [participation, applicationsCount, warnings, settings] = await Promise.all([
+  const [participation, applicationsCount, warnings, settings, sessions] = await Promise.all([
     getVendorParticipation(vendor.id),
     prisma.application.count({ where: { vendorId: vendor.id } }),
     prisma.vendorWarning.findMany({
@@ -39,6 +40,7 @@ export default async function VendorProfilePage() {
       },
     }),
     getSettings(),
+    listVendorSessions(vendor.id, session.sessionId),
   ]);
 
   const completion = computeProfileCompletion(vendor as unknown as Record<string, unknown>, {
@@ -47,6 +49,7 @@ export default async function VendorProfilePage() {
 
   return (
     <ProfileClient
+      sessions={sessions}
       vendor={{
         businessName: vendor.businessName,
         username: vendor.username,

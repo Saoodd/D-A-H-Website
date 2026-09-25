@@ -1,5 +1,5 @@
 import "server-only";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
 import { ADMIN_COOKIE, VENDOR_COOKIE, signToken, verifyToken } from "./sessionToken";
@@ -28,6 +28,20 @@ export async function verifyPasswordOrDummy(pw: string, hash: string | null): Pr
   return hash !== null && result;
 }
 
+// How often a session's lastSeenAt is refreshed. Keeps "last active"
+// roughly right on the Active sessions list without a database write on
+// every request.
+const LAST_SEEN_RESOLUTION_MS = 5 * 60 * 1000;
+
+async function currentUserAgent(): Promise<string | null> {
+  const ua = (await headers()).get("user-agent");
+  return ua ? ua.slice(0, 400) : null;
+}
+
+function staleLastSeen() {
+  return { OR: [{ lastSeenAt: null }, { lastSeenAt: { lt: new Date(Date.now() - LAST_SEEN_RESOLUTION_MS) } }] };
+}
+
 const cookieOpts = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
@@ -45,7 +59,9 @@ const cookieOpts = {
 
 export async function createAdminSession() {
   const expiresAt = new Date(Date.now() + ADMIN_SESSION_SECONDS * 1000);
-  const session = await prisma.adminSession.create({ data: { expiresAt } });
+  const session = await prisma.adminSession.create({
+    data: { expiresAt, userAgent: await currentUserAgent(), lastSeenAt: new Date() },
+  });
   const token = await signToken({ admin: true, sid: session.id }, ADMIN_SESSION_SECONDS);
   const store = await cookies();
   store.set(ADMIN_COOKIE, token, { ...cookieOpts, maxAge: ADMIN_SESSION_SECONDS });
@@ -64,22 +80,39 @@ export async function destroyAdminSession() {
 }
 
 export async function getAdminSession(): Promise<boolean> {
+  return (await getAdminSessionId()) !== null;
+}
+
+/** The current admin session's id when it is live, else null. */
+export async function getAdminSessionId(): Promise<string | null> {
   const store = await cookies();
   const token = store.get(ADMIN_COOKIE)?.value;
-  if (!token) return false;
+  if (!token) return null;
   const payload = await verifyToken<{ admin: boolean; sid: string }>(token);
-  if (!payload?.admin || !payload.sid) return false;
+  if (!payload?.admin || !payload.sid) return null;
 
   const session = await prisma.adminSession.findUnique({ where: { id: payload.sid } });
-  if (!session || session.revokedAt || session.expiresAt < new Date()) return false;
-  return true;
+  if (!session || session.revokedAt || session.expiresAt < new Date()) return null;
+  await prisma.adminSession.updateMany({ where: { id: session.id, ...staleLastSeen() }, data: { lastSeenAt: new Date() } });
+  return session.id;
+}
+
+/** Signs out every admin session except the given one. */
+export async function revokeOtherAdminSessions(keepSessionId: string): Promise<number> {
+  const res = await prisma.adminSession.updateMany({
+    where: { id: { not: keepSessionId }, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+  return res.count;
 }
 
 // --- Vendor session ----------------------------------------------------------
 
 export async function createVendorSession(vendorId: string) {
   const expiresAt = new Date(Date.now() + VENDOR_SESSION_SECONDS * 1000);
-  const session = await prisma.vendorSession.create({ data: { vendorId, expiresAt } });
+  const session = await prisma.vendorSession.create({
+    data: { vendorId, expiresAt, userAgent: await currentUserAgent(), lastSeenAt: new Date() },
+  });
   const token = await signToken({ vendorId, sid: session.id }, VENDOR_SESSION_SECONDS);
   const store = await cookies();
   store.set(VENDOR_COOKIE, token, { ...cookieOpts, maxAge: VENDOR_SESSION_SECONDS });
@@ -97,7 +130,7 @@ export async function destroyVendorSession() {
   store.delete(VENDOR_COOKIE);
 }
 
-export async function getVendorSession(): Promise<{ vendorId: string } | null> {
+export async function getVendorSession(): Promise<{ vendorId: string; sessionId: string } | null> {
   const store = await cookies();
   const token = store.get(VENDOR_COOKIE)?.value;
   if (!token) return null;
@@ -106,7 +139,27 @@ export async function getVendorSession(): Promise<{ vendorId: string } | null> {
 
   const session = await prisma.vendorSession.findUnique({ where: { id: payload.sid } });
   if (!session || session.revokedAt || session.expiresAt < new Date() || session.vendorId !== payload.vendorId) return null;
-  return { vendorId: payload.vendorId };
+  await prisma.vendorSession.updateMany({ where: { id: session.id, ...staleLastSeen() }, data: { lastSeenAt: new Date() } });
+  return { vendorId: payload.vendorId, sessionId: session.id };
+}
+
+/** Signs out one of this vendor's sessions. Scoped by vendorId, so a
+ *  vendor can never revoke another vendor's session by guessing an id. */
+export async function revokeVendorSession(vendorId: string, sessionId: string): Promise<boolean> {
+  const res = await prisma.vendorSession.updateMany({
+    where: { id: sessionId, vendorId, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+  return res.count > 0;
+}
+
+/** Signs out every session of this vendor except the given one. */
+export async function revokeOtherVendorSessions(vendorId: string, keepSessionId: string): Promise<number> {
+  const res = await prisma.vendorSession.updateMany({
+    where: { vendorId, id: { not: keepSessionId }, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+  return res.count;
 }
 
 /** Revokes every currently-active session for a vendor — used after a

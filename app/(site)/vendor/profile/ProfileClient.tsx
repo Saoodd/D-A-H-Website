@@ -12,6 +12,8 @@ import { MetricCard, EmptyState } from "@/components/ui/Card";
 import { ChangeEmailCard } from "@/components/vendor/ChangeEmailCard";
 import { DeleteAccountCard } from "@/components/vendor/DeleteAccountCard";
 import { PhoneVerifyModal } from "@/components/vendor/PhoneVerifyModal";
+import { ActiveSessionsCard } from "@/components/ActiveSessionsCard";
+import type { SessionRow } from "@/lib/sessionList";
 
 interface Vendor {
   businessName: string;
@@ -87,6 +89,7 @@ export function ProfileClient({
   history,
   upcoming,
   warnings,
+  sessions,
 }: {
   vendor: Vendor;
   stats: { eventsParticipated: number; upcomingConfirmedCount: number; applicationsCount: number };
@@ -94,6 +97,7 @@ export function ProfileClient({
   history: HistoryEntry[];
   upcoming: UpcomingEntry[];
   warnings: WarningEntry[];
+  sessions: SessionRow[];
 }) {
   const { t, locale } = useLocale();
   const router = useRouter();
@@ -478,6 +482,16 @@ export function ProfileClient({
                 ))}
               </div>
             )}
+          </div>
+
+          <div>
+            <p className="label-caps mb-1">{locale === "ar" ? "الجلسات النشطة" : "Active Sessions"}</p>
+            <p className="text-sm text-brown-light mb-4">
+              {locale === "ar"
+                ? "الأجهزة المسجّل دخولها إلى حسابك حالياً. إذا لم تتعرف على جهاز، سجّل خروجه وغيّر كلمة المرور."
+                : "Devices currently signed in to your account. If you don't recognise one, sign it out and change your password."}
+            </p>
+            <ActiveSessionsCard sessions={sessions} apiBase="/api/vendor/sessions" locale={locale === "ar" ? "ar" : "en"} signedOutRedirect="/vendor/login" />
           </div>
 
           <div>
