@@ -109,6 +109,15 @@ const INSUNITS_TO_MM: Record<number, { mm: number; label: string }> = {
   6: { mm: 1000, label: "metres" },
 };
 
+// DXF (like all CAD) is y-up; the floor plan is y-down (SVG). Every DXF
+// coordinate goes through this as it's read, so bounding boxes, "top-left",
+// label matching and rotation angles (clockwise-positive, as SVG rotate()
+// expects) all come out in screen orientation. Without it an imported
+// layout is a top-to-bottom mirror image of the drawing.
+function fromDxf(p: Point): Point {
+  return { x: p.x, y: -p.y };
+}
+
 function dist(a: Point, b: Point): number {
   return Math.hypot(b.x - a.x, b.y - a.y);
 }
@@ -187,11 +196,11 @@ export function parseDxf(source: string, opts?: { boothLayers?: string[]; venue?
     if (e.type === "TEXT") {
       const t = e as unknown as { text: string; startPoint: Point };
       const text = (t.text ?? "").trim();
-      if (text) labelCandidates.push({ text, x: t.startPoint.x, y: t.startPoint.y });
+      if (text) labelCandidates.push({ text, ...fromDxf(t.startPoint) });
     } else if (e.type === "MTEXT") {
       const t = e as unknown as { text: string; position: Point };
       const text = (t.text ?? "").replace(/\\P/g, " ").trim();
-      if (text) labelCandidates.push({ text, x: t.position.x, y: t.position.y });
+      if (text) labelCandidates.push({ text, ...fromDxf(t.position) });
     }
   }
 
@@ -250,7 +259,7 @@ export function parseDxf(source: string, opts?: { boothLayers?: string[]; venue?
   for (const e of entities) {
     if (e.type === "LWPOLYLINE") {
       const poly = e as unknown as { vertices: Point[]; shape: boolean; layer: string; handle: number };
-      const vertices = poly.vertices ?? [];
+      const vertices = (poly.vertices ?? []).map(fromDxf);
       if (VENUE_BOUNDARY_LAYER_PATTERN.test(poly.layer) && vertices.length >= 3) {
         // Checked BEFORE booth detection: a layer named like the venue's
         // own outline is never a booth candidate, even if it happens to be
@@ -265,7 +274,7 @@ export function parseDxf(source: string, opts?: { boothLayers?: string[]; venue?
       }
     } else if (e.type === "LINE") {
       const line = e as unknown as { vertices: Point[]; layer: string };
-      if (line.vertices?.length >= 2) architectureRaw.push({ layer: line.layer, points: line.vertices });
+      if (line.vertices?.length >= 2) architectureRaw.push({ layer: line.layer, points: line.vertices.map(fromDxf) });
     } else if (e.type === "INSERT") {
       const ins = e as unknown as { name: string; position: Point; rotation?: number; xScale?: number; yScale?: number; layer: string; handle: number };
       const layerMatches = usedBoothLayers ? usedBoothLayers.includes(ins.layer) : BOOTH_BLOCK_PATTERN.test(ins.name) || BOOTH_LAYER_PATTERN.test(ins.layer);
@@ -284,7 +293,7 @@ export function parseDxf(source: string, opts?: { boothLayers?: string[]; venue?
           const sy = v.y * yScale;
           const rx = sx * Math.cos(rad) - sy * Math.sin(rad);
           const ry = sx * Math.sin(rad) + sy * Math.cos(rad);
-          return { x: ins.position.x + rx, y: ins.position.y + ry };
+          return fromDxf({ x: ins.position.x + rx, y: ins.position.y + ry });
         });
         if (worldVertices.length >= 3) considerBoothCandidate(ins.layer, worldVertices, `ins${ins.handle}`, "insert");
       }

@@ -36,7 +36,7 @@ commit → push. Never lose completed work or silently reduce scope.
 | 10 | Design system / component library | ✅ Done — `docs/DESIGN_SYSTEM.md` |
 | 11 | Data table modernization + data fetching | ✅ Done — `docs/DATA_FETCHING.md` |
 | 12 | UX / performance audit | ✅ Done |
-| 13 | Floor-plan regression protection | ⏳ Ongoing discipline, re-run after every relevant change |
+| 13 | Floor-plan regression protection | ✅ Done — `tests/floorplan.test.ts` |
 | 14 | WhatsApp/Infobip regression protection | ⏳ Ongoing discipline, re-run after every relevant change |
 | 15 | Database/migration safety review | ⏳ Ongoing discipline |
 | 16 | Automated testing expansion | ⏳ Not started (currently **zero** committed test files) |
@@ -376,9 +376,46 @@ Changes:
     column has screen-reader text.
   - The admin login page has a `<main>` landmark.
 
+## Phase 13 — floor-plan regression protection
+
+`tests/floorplan.test.ts` has 14 tests that lock down the geometry every
+floor-plan surface shares:
+- the viewBox choice (real mm vs legacy percentages) and mm↔grid
+  round-trips;
+- `worldRectOf`, and patch field-naming (an mm value is never sent as
+  `gridX`);
+- uniform background scaling and two-point calibration;
+- boundary containment for rectangles (including rotation), circles, ovals
+  and a concave polygon notch, plus boundary JSON parse/serialize;
+- booth fit, multi-booth caution and adjacency;
+- the JSON layout importer;
+- the CAD (DXF) importer, using the fixture `tests/fixtures/two-booths.dxf`.
+
+Two real bugs were found and fixed while writing these tests. Each has a
+test that fails on the old code:
+- **CAD import mirrored drawings top-to-bottom.** DXF is y-up and the
+  floor plan is y-down, and the importer never flipped the axis. Booths,
+  walls and outline were all mirrored, and rotation angles had the wrong
+  sign. Coordinates are now converted as they're read (`fromDxf`).
+  - Already-committed layouts are **not** changed.
+  - Re-importing a DXF into an event that was imported before this fix
+    will preview the correct (flipped) orientation, so check the preview
+    before committing.
+- **Adjacency for 90°/270°-rotated booths used the wrong edges.** Booths
+  rotate about their centre, but the check kept the original top-left.
+  This only affected the vendor-facing "are these booths next to each
+  other" message for rotated, non-square booths.
+
+Browser check on a production build: the real CAD parse endpoint returns
+the corrected orientation, and the admin builder renders all 24 booths of
+the test event with no page errors.
+
+`npm test` now loads `tests/setup.cjs`, which maps `server-only` to an
+empty module so server libraries can be unit-tested outside Next.
+
 ## Current
 
-Phase 13 — floor-plan regression protection.
+Phase 14 — WhatsApp/Infobip regression protection.
 
 ## Remaining (high level)
 

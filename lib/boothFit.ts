@@ -92,14 +92,22 @@ export function isProvablyAdjacent(a: PositionedFootprint, b: PositionedFootprin
   const spanA = spanOf(a.widthMm, a.depthMm, rotA);
   const spanB = spanOf(b.widthMm, b.depthMm, rotB);
 
-  const aLeft = a.xMm;
-  const aRight = a.xMm + spanA.w;
-  const aTop = a.yMm;
-  const aBottom = a.yMm + spanA.h;
-  const bLeft = b.xMm;
-  const bRight = b.xMm + spanB.w;
-  const bTop = b.yMm;
-  const bBottom = b.yMm + spanB.h;
+  // xMm/yMm are the top-left BEFORE rotation and booths rotate about their
+  // own centre (FloorPlan.tsx, lib/floorplan/boundary.ts), so the rotated
+  // span is centred on the same point, not anchored at xMm/yMm. At 0/180
+  // this is identical to xMm..xMm+width.
+  const aCx = a.xMm + a.widthMm / 2;
+  const aCy = a.yMm + a.depthMm / 2;
+  const bCx = b.xMm + b.widthMm / 2;
+  const bCy = b.yMm + b.depthMm / 2;
+  const aLeft = aCx - spanA.w / 2;
+  const aRight = aCx + spanA.w / 2;
+  const aTop = aCy - spanA.h / 2;
+  const aBottom = aCy + spanA.h / 2;
+  const bLeft = bCx - spanB.w / 2;
+  const bRight = bCx + spanB.w / 2;
+  const bTop = bCy - spanB.h / 2;
+  const bBottom = bCy + spanB.h / 2;
 
   const yOverlap = Math.min(aBottom, bBottom) - Math.max(aTop, bTop);
   const xOverlap = Math.min(aRight, bRight) - Math.max(aLeft, bLeft);
