@@ -37,7 +37,7 @@ commit → push. Never lose completed work or silently reduce scope.
 | 11 | Data table modernization + data fetching | ✅ Done — `docs/DATA_FETCHING.md` |
 | 12 | UX / performance audit | ✅ Done |
 | 13 | Floor-plan regression protection | ✅ Done — `tests/floorplan.test.ts` |
-| 14 | WhatsApp/Infobip regression protection | ⏳ Ongoing discipline, re-run after every relevant change |
+| 14 | WhatsApp/Infobip regression protection | ✅ Done — `tests/whatsapp.test.ts`, `tests/e2e/whatsapp-otp.e2e.ts` |
 | 15 | Database/migration safety review | ⏳ Ongoing discipline |
 | 16 | Automated testing expansion | ⏳ Not started (currently **zero** committed test files) |
 | 17 | Final launch checklist + final report | ⏳ Not started |
@@ -413,9 +413,41 @@ the test event with no page errors.
 `npm test` now loads `tests/setup.cjs`, which maps `server-only` to an
 empty module so server libraries can be unit-tested outside Next.
 
+## Phase 14 — WhatsApp/Infobip regression protection
+
+- **End-to-end (`tests/e2e/whatsapp-otp.e2e.ts`, 30 checks, all pass).**
+  It drives the real send/confirm routes of a production build pointed at
+  a local fake Infobip (`tests/e2e/fake-infobip.mjs`), and verifies:
+  - the exact payload Infobip receives: `App` key auth, the configured
+    sender, recipient in E.164 without `+`, the configured AUTHENTICATION
+    template, and the 6-digit code as both body placeholder and Copy Code
+    button;
+  - storage: only a 64-hex HMAC is stored (not the code, not a bare
+    SHA-256);
+  - limits: the resend cooldown, the 5-attempt cap, and that an old code
+    stops working after a resend;
+  - success: the vendor is verified for that exact number with method
+    WHATSAPP, and an audit-log row is written; an already-verified vendor
+    can't trigger a send;
+  - failure: when the provider fails and echoes the payload, the result is
+    FAILED and the code is redacted;
+  - no OTP code or API key appears in the server log.
+- **Every `npm test`** (`tests/whatsapp.test.ts`) also checks:
+  - no SMS SDK, no `lib/sms`, and no Twilio or SMS endpoint in code;
+  - client components read only `NEXT_PUBLIC_*` env vars, and nothing
+    secret is `NEXT_PUBLIC_`;
+  - the Infobip modules are `server-only`;
+  - E.164 normalisation, and that changing the phone un-verifies;
+  - the template payload shape.
+- Email verification remains optional; phone verification remains the
+  apply gate. Neither was changed.
+- Noted, not changed: a UAE landline (04…) passes phone validation but
+  can't receive WhatsApp. Such a vendor just won't receive the code.
+  Restricting signup to mobile numbers would be a product decision.
+
 ## Current
 
-Phase 14 — WhatsApp/Infobip regression protection.
+Phase 15 — database/migration safety review.
 
 ## Remaining (high level)
 
