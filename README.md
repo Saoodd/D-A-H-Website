@@ -17,8 +17,13 @@ notifications) · Vercel (hosting, cron, Blob storage). English and Arabic
 |---|---|
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Local setup, scripts, test accounts, payment modes, troubleshooting |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to make changes safely: checks, migrations, security rules |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Vercel, environment variables, migrations, domain, Search Console, launch checklist |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Vercel, environment variables, migrations, domain, Search Console |
+| [docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md) | Everything to set up and verify before and on launch day |
 | [docs/PAYMENTS.md](docs/PAYMENTS.md) | Payment lifecycle, offline payments, refunds, webhooks, integrating a real provider |
+| [docs/DATABASE.md](docs/DATABASE.md) | Migrations, safe schema changes, protected records, backups, recovery |
+| [docs/DATA_FETCHING.md](docs/DATA_FETCHING.md) | What may and may never be cached; admin table filters and exports |
+| [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) | Colour tokens, typography, components, interaction rules |
+| [tests/e2e/README.md](tests/e2e/README.md) | End-to-end suites and how to run them |
 | [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) | Security findings and their status |
 | [docs/FLOOR_PLAN_ARCHITECTURE.md](docs/FLOOR_PLAN_ARCHITECTURE.md) | The millimetre-based floor-plan model |
 | [docs/FULL_PRODUCTION_MODERNIZATION_PROGRESS.md](docs/FULL_PRODUCTION_MODERNIZATION_PROGRESS.md) | Progress log of the production-hardening work |

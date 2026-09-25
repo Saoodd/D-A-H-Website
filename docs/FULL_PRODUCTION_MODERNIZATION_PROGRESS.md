@@ -6,7 +6,7 @@ tasks, IDs #318–#335 in this session's tracker).
 
 Companion docs: `docs/PHASE_0_AUDIT.md` (architecture audit),
 `docs/SECURITY_AUDIT.md` (security findings + fix status),
-`docs/LAUNCH_CHECKLIST.md` (Phase 17, not yet created).
+`docs/LAUNCH_CHECKLIST.md` (Phase 17).
 
 **Ground rules carried through every phase** (from the task brief — repeating
 here so they survive compaction): this is an existing, working, production
@@ -40,7 +40,7 @@ commit → push. Never lose completed work or silently reduce scope.
 | 14 | WhatsApp/Infobip regression protection | ✅ Done — `tests/whatsapp.test.ts`, `tests/e2e/whatsapp-otp.e2e.ts` |
 | 15 | Database/migration safety review | ✅ Done — `docs/DATABASE.md` |
 | 16 | Automated testing expansion | ✅ Done — `npm run test:e2e`, `tests/e2e/README.md` |
-| 17 | Final launch checklist + final report | ⏳ Not started |
+| 17 | Final launch checklist + final report | ✅ Done — `docs/LAUNCH_CHECKLIST.md` |
 
 ---
 
@@ -519,33 +519,52 @@ payments-disabled + offline 27, live payment path 32, Google sign-in 21.
   on every pull request, plus `npm run test:e2e` with a Postgres service
   container.
 
+## Phase 17 — launch checklist
+
+`docs/LAUNCH_CHECKLIST.md` covers every area in the brief:
+- production env vars, including a list of what must *not* be set;
+- database, migrations, payment credentials and webhooks;
+- Infobip, domain, SSL, OAuth callbacks, Blob storage, email and cron;
+- Search Console, sitemap and robots;
+- the admin account, backups, logging, monitoring and security;
+- an on-production end-to-end transaction test, and a pre-merge list.
+
+Each item is marked done-in-code (✅) or needs-a-person (☐), with the
+exact URLs and settings.
+
 ## Current
 
-Phase 17 — launch checklist + final report.
+All 17 phases are complete on `claude/dar-al-hay-website-ya2vlu`. **Not
+merged to `main`**: the owner said they will do that later.
 
-## Remaining (high level)
+## Remaining: external / human steps only
 
-See `docs/PHASE_0_AUDIT.md` and `docs/SECURITY_AUDIT.md` for the detailed
-findings driving Phases 1–17.
-
-## Blockers (external, cannot be resolved from inside this environment)
-
-- **Vercel account access** — no Vercel CLI session is authenticated in this
-  environment (`vercel whoami` → logged out). Phase 7 (deploy investigation)
-  needs the user to either share the Vercel project's dashboard settings, or
-  run diagnostic commands themselves and paste output back.
-- **Google OAuth credentials** — Phase 4's OAuth work needs a Google Cloud
-  OAuth client ID/secret from the user before it can be wired to real
-  sign-in (the code path can be built up to that boundary).
-- **Live payment gateway credentials/docs** — Phase 6 needs the bank's actual
-  gateway API docs and credentials before a real provider adapter can be
-  written. Provider-neutral infrastructure will be built up to that boundary.
-- **Google Search Console account** — Phase 8's submission step needs the
-  user's own Search Console access; the technical SEO work (sitemap, robots,
-  metadata) does not.
-- **Domain registrar / DNS access** — Phase 7's final domain configuration
-  needs the user's registrar/DNS access.
-
-Each blocker above will be called out again, explicitly, as **BLOCKED
-EXTERNAL STEP**, when its phase is reached — the plan is to keep working
-unrelated phases rather than stopping entirely.
+Full list: `docs/LAUNCH_CHECKLIST.md`. The BLOCKED EXTERNAL STEPS are:
+1. **Merge** this branch to `main` (owner decision). Check the Preview
+   deployment first.
+2. **Payment provider:** choose the UAE bank/PSP, and provide API docs
+   plus sandbox and live credentials. A developer then implements its
+   `PaymentGateway` (integration points marked in `payments/`). Until
+   then, payments are recorded offline by admins, and the acceptance
+   deadline should be raised.
+3. **Vercel dashboard:**
+   - no build-command override, and Node 22;
+   - function region next to the database;
+   - a plan that supports the hourly cron;
+   - Preview on a separate database, with Deployment Protection;
+   - the production env vars from the checklist.
+4. **Domain/DNS and SSL:** add the domain in Vercel, set the registrar
+   records, and redeploy with the final `NEXT_PUBLIC_SITE_URL`.
+5. **Google OAuth** (optional): create the OAuth client and consent
+   screen, add the redirect URI, and set the client ID and secret.
+6. **Search Console:** verify the domain and submit the sitemap.
+7. **Infobip:** check approved sender and templates, set the
+   delivery-report URL, then sync and map templates in Admin.
+8. **Resend:** domain verification (SPF/DKIM/DMARC) and the webhook.
+9. **Database:** confirm PITR and its retention, and take a pre-launch
+   backup.
+10. **Monitoring:** an uptime check on `/api/health`, and optionally an
+    error tracker.
+11. **CI** (recommended): run check, test and e2e on pull requests.
+12. **Content:** publish the legal pages, signup terms and event terms,
+    and review Admin settings.
