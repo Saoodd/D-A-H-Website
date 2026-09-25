@@ -19,6 +19,7 @@ import type { ApplicationView } from "@/lib/applicationView";
 import { checkMultiBoothFit, isProvablyAdjacent } from "@/lib/boothFit";
 import { getFloorplanViewBox, worldRectOf } from "@/lib/floorplan/transform";
 import { DAH_SIZE_PALETTE } from "@/lib/theme/brand";
+import { Button } from "@/components/ui/Button";
 
 const SIZE_PALETTE = DAH_SIZE_PALETTE;
 
@@ -839,12 +840,12 @@ function StagedBoothsSummary({
         </div>
       )}
       <div className="flex flex-wrap gap-3">
-        <button type="button" onClick={onConfirm} disabled={busy} className="px-6 py-2.5 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark disabled:opacity-50">
+        <Button type="button" onClick={onConfirm} loading={busy} disabled={busy}>
           {stagedBooths.length > 1 ? (isAr ? "تأكيد الأكشاك" : "Confirm Booths") : isAr ? "تأكيد الكشك" : "Confirm Booth"}
-        </button>
-        <button type="button" onClick={onChooseDifferent} disabled={busy} className="px-6 py-2.5 rounded-full border border-brown/30 text-sm disabled:opacity-50">
+        </Button>
+        <Button type="button" variant="secondary" onClick={onChooseDifferent} disabled={busy}>
           {isAr ? "اختيار أكشاك مختلفة" : "Choose Different Booths"}
-        </button>
+        </Button>
       </div>
       {!canAddMore && stagedBooths.length === 0 && null}
     </div>

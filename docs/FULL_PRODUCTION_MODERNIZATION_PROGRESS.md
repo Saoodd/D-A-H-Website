@@ -33,7 +33,7 @@ commit → push. Never lose completed work or silently reduce scope.
 | 7 | Vercel/deployment + domain audit | ✅ Repo side done — `docs/DEPLOYMENT.md`; dashboard/DNS checks are BLOCKED EXTERNAL STEPs |
 | 8 | SEO / search visibility | ✅ Done — Search Console submission is a BLOCKED EXTERNAL STEP |
 | 9 | Developer standards | ✅ Done |
-| 10 | Design system / component library | ⏳ Not started |
+| 10 | Design system / component library | ✅ Done — `docs/DESIGN_SYSTEM.md` |
 | 11 | Data table modernization + data fetching | ⏳ Not started |
 | 12 | UX / performance audit | ⏳ Not started (prior session already did a large UX pass — see git log) |
 | 13 | Floor-plan regression protection | ⏳ Ongoing discipline, re-run after every relevant change |
@@ -296,9 +296,24 @@ Full write-up: `docs/PAYMENTS.md`.
   depending on line width, which is the repo-wide churn the brief rules
   out.
 
+## Phase 10 — design system
+
+- **Audit:** semantic colour tokens with dark-mode values are already in
+  place (`globals.css`). `Button` was used in 46 files. Raw hex exists
+  only in the floor-plan SVG drawing and the Google mark (both
+  legitimate).
+- **Consistency fix:** the last 9 hand-styled pill buttons now use
+  `Button` with the right variant and built-in loading states. That's the
+  admin application page (approve/reject/re-accept/resend/extend/revoke/
+  adjustment), the offline-payment and payment-record cards, the event
+  form, the agreements search and the vendor multi-booth staging. The
+  sandbox checkout buttons are intentionally left alone. Browser-checked.
+- `docs/DESIGN_SYSTEM.md` documents tokens, typography, layout, the
+  component catalogue, interaction rules and deliberate exceptions.
+
 ## Current
 
-Phase 10 — design system / component library audit.
+Phase 11 — data tables and data fetching.
 
 ## Remaining (high level)
 

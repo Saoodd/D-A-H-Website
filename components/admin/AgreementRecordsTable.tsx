@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 
 interface RecordRow {
   id: string;
@@ -96,9 +97,9 @@ export function AgreementRecordsTable({ lockType, eventId }: { lockType?: "VENDO
           To
           <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="border border-brown/20 rounded-lg px-3 py-2 bg-cream-soft text-sm" />
         </label>
-        <button type="submit" className="px-4 py-2 rounded-full bg-brown text-cream-soft text-sm hover:bg-brown-dark">
+        <Button type="submit" size="sm">
           Search
-        </button>
+        </Button>
         <a
           href={`/api/admin/agreements/records?${buildQuery().toString()}&format=csv`}
           className="px-4 py-2 rounded-full border border-brown/30 text-sm hover:bg-brown/5"

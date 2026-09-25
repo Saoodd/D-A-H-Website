@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Button } from "@/components/ui/Button";
 
 interface EventData {
   id: string;
@@ -301,9 +302,9 @@ export function EventForm({
       )}
 
       <div className="sm:col-span-2">
-        <button type="submit" disabled={busy} className="px-6 py-2.5 rounded-full bg-brown text-cream-soft text-sm disabled:opacity-50">
+        <Button type="submit" loading={busy} disabled={busy}>
           {busy ? "Saving…" : initial ? "Save changes" : "Create event"}
-        </button>
+        </Button>
       </div>
     </form>
   );

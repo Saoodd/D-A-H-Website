@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { formatAed } from "@/lib/constants";
 import { LIFECYCLE_LABEL, type LifecycleStatus } from "@/lib/paymentLifecycle";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Button } from "@/components/ui/Button";
 
 export interface AdminPaymentRecord {
   id: string;
@@ -127,13 +128,15 @@ export function PaymentRecordCard({ p }: { p: AdminPaymentRecord }) {
               placeholder="What was done (e.g. refunded by bank transfer)"
               className="min-w-[240px] flex-1 rounded-lg border border-amber-300 bg-white/70 px-2 py-1.5 text-xs text-brown-dark"
             />
-            <button
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={busy === "clear"}
               disabled={busy !== null || note.trim().length < 3}
               onClick={() => post("clear", `/api/admin/payments/${p.id}/clear-attention`, { note })}
-              className="rounded-full border border-amber-400 px-3 py-1.5 text-xs disabled:opacity-50"
             >
               {busy === "clear" ? "Saving…" : "Mark resolved"}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -189,16 +192,12 @@ export function PaymentRecordCard({ p }: { p: AdminPaymentRecord }) {
               <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} className="rounded-lg border border-brown/20 bg-cream-soft px-2 py-1.5" />
             </label>
             <div className="flex gap-2">
-              <button
-                disabled={busy !== null || !amount || reason.trim().length < 3}
-                onClick={submitRefund}
-                className="rounded-full bg-brown px-4 py-1.5 text-xs text-cream-soft disabled:opacity-50"
-              >
+              <Button size="sm" loading={busy === "refund"} disabled={busy !== null || !amount || reason.trim().length < 3} onClick={submitRefund}>
                 {busy === "refund" ? "Recording…" : "Record refund"}
-              </button>
-              <button onClick={() => setRefunding(false)} className="rounded-full border border-brown/25 px-4 py-1.5 text-xs">
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setRefunding(false)}>
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         ) : (

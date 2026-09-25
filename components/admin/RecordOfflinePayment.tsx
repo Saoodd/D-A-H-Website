@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/Button";
 import { formatAed, formatBoothCodes } from "@/lib/constants";
 import { OFFLINE_PAYMENT_METHODS, paymentMethodLabel, type OfflinePaymentMethod } from "@/lib/paymentLabels";
 import type { OfflinePaymentQuote } from "@/lib/offlinePayment";
@@ -126,13 +127,9 @@ export function RecordOfflinePayment({
             </p>
           )}
 
-          <button
-            disabled={saving || !confirmed || !reference.trim()}
-            onClick={submit}
-            className="px-5 py-2 rounded-full bg-brown text-cream-soft text-sm disabled:opacity-50"
-          >
+          <Button loading={saving} disabled={saving || !confirmed || !reference.trim()} onClick={submit}>
             {saving ? "Recording…" : "Record payment & confirm booking"}
-          </button>
+          </Button>
         </div>
       )}
     </section>
