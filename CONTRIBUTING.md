@@ -38,13 +38,17 @@ that way.
 ## Database changes
 
 - Always `npx prisma migrate dev --name <change> --create-only`, **read the
-  generated SQL**, then apply it.
+  generated SQL**, then apply it. The full rules are in
+  [docs/DATABASE.md](docs/DATABASE.md).
 - **Additive by default:** new nullable columns or columns with defaults,
   new tables. Removing or renaming happens in two steps: stop using it
   and deploy, then drop it in a later release.
 - Never edit a migration that has already been applied anywhere shared.
 - Never run `migrate reset`, `db push --force-reset` or the seed against
-  production.
+  production. The seed refuses non-local databases.
+- `npm run check` fails on destructive migration SQL (drops, renames,
+  type changes, bulk updates) unless it's marked
+  `-- destructive-reviewed: <reason>`.
 - Migrations reach production only via the Production build
   (`scripts/build.mjs`).
 

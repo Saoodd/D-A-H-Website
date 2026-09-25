@@ -12,7 +12,30 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma";
 
+// The seed publishes a demo event and creates demo vendor accounts with a
+// published password, so it must never reach a real database. It runs only
+// against a local Postgres, unless SEED_ALLOW_REMOTE=true is set for a
+// dedicated throwaway cloud database, and never on a Vercel Production
+// deployment whatever the flags say.
+function assertSafeSeedTarget() {
+  if (process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production") {
+    throw new Error("Refusing to seed: this is a production environment.");
+  }
+  const url = process.env.DATABASE_URL ?? "";
+  let host = "";
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    throw new Error("Refusing to seed: DATABASE_URL is missing or not a valid URL.");
+  }
+  const local = host === "localhost" || host === "127.0.0.1" || host === "::1";
+  if (!local && process.env.SEED_ALLOW_REMOTE !== "true") {
+    throw new Error(`Refusing to seed a non-local database (${host}). Set SEED_ALLOW_REMOTE=true only for a throwaway dev database.`);
+  }
+}
+
 async function main() {
+  assertSafeSeedTarget();
   await prisma.settings.upsert({
     where: { id: "singleton" },
     create: {

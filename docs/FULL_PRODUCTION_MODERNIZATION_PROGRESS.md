@@ -38,7 +38,7 @@ commit → push. Never lose completed work or silently reduce scope.
 | 12 | UX / performance audit | ✅ Done |
 | 13 | Floor-plan regression protection | ✅ Done — `tests/floorplan.test.ts` |
 | 14 | WhatsApp/Infobip regression protection | ✅ Done — `tests/whatsapp.test.ts`, `tests/e2e/whatsapp-otp.e2e.ts` |
-| 15 | Database/migration safety review | ⏳ Ongoing discipline |
+| 15 | Database/migration safety review | ✅ Done — `docs/DATABASE.md` |
 | 16 | Automated testing expansion | ⏳ Not started (currently **zero** committed test files) |
 | 17 | Final launch checklist + final report | ⏳ Not started |
 
@@ -445,9 +445,49 @@ empty module so server libraries can be unit-tested outside Next.
   can't receive WhatsApp. Such a vendor just won't receive the code.
   Restricting signup to mobile numbers would be a product decision.
 
+## Phase 15 — database / migration safety
+
+- **Audit:**
+  - 34 migrations, status up to date, and a database-vs-schema diff that
+    is empty (no drift).
+  - The 4 migrations added in this modernisation are purely additive.
+  - 9 historical migrations contain destructive SQL: column/table drops,
+    NOT NULL backfills and data repairs. All are already applied; they
+    were reviewed and are listed.
+- **New guard `npm run check:migrations`** (part of `npm run check`): any
+  new migration that drops, renames, retypes or makes a column NOT NULL,
+  or bulk-updates/deletes rows, fails the check. The only way through is a
+  `-- destructive-reviewed: <reason>` line in the migration. Verified
+  against a probe migration.
+- **Seed hardened:** `prisma/seed.ts` would have published a demo event
+  and created demo vendors with a known password on whatever database it
+  was pointed at. It now refuses:
+  - production environments (`VERCEL_ENV`/`NODE_ENV=production`);
+  - any non-local host, unless `SEED_ALLOW_REMOTE=true`.
+
+  Both refusals were verified, and it still seeds locally.
+- **Bug fixed:** deleting an event whose Event Terms had been signed
+  returned a bare HTTP 500. The database correctly refused to cascade
+  away the signed records, but the admin got no explanation. It's now a
+  clear 409 ("set it to Closed instead"), like the existing payments
+  guard. Both guards were verified on a production build, and the records
+  are intact.
+- Cascade review: payments and refunds can't be removed via event
+  deletion (409). Vendor removal anonymises and keeps paid applications
+  and signed agreements. Signed acceptances are protected at the database
+  level.
+- `docs/DATABASE.md` covers:
+  - connections, and when migrations run;
+  - safe vs two-step changes, and the reviewed marker;
+  - what must never run on production;
+  - protected records;
+  - backup/restore and failed-migration recovery.
+  - **BLOCKED EXTERNAL STEP:** confirm PITR is enabled on the production
+    database and its retention.
+
 ## Current
 
-Phase 15 — database/migration safety review.
+Phase 16 — automated testing expansion.
 
 ## Remaining (high level)
 

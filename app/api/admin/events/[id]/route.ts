@@ -159,6 +159,17 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     );
   }
 
+  // Signed Event Terms are legal records. The database already refuses to
+  // cascade them away (AgreementAcceptance.agreementId has no onDelete), so
+  // without this check the admin would just see an unexplained error.
+  const signedTerms = await prisma.agreementAcceptance.count({ where: { agreement: { eventId: id } } });
+  if (signedTerms > 0) {
+    return NextResponse.json(
+      { error: "Vendors have signed this event's terms, and those records must be kept, so it can't be deleted. Set it to Closed instead." },
+      { status: 409 }
+    );
+  }
+
   const event = await prisma.event.findUnique({ where: { id }, select: { coverImage: true, floorPlanImageUrl: true } });
 
   await prisma.event.delete({ where: { id } });
