@@ -3,10 +3,8 @@
 import { formatAed } from "@/lib/constants";
 import { useLocale } from "@/lib/i18n/context";
 import type { ReceiptData } from "@/lib/receipts";
+import { paymentMethodLabel } from "@/lib/paymentLabels";
 
-const PROVIDER_LABEL: Record<string, string> = {
-  sandbox: "Card (Sandbox)",
-};
 
 /** The inline payment summary shown on the confirmed booking page — the
  *  same authoritative computation as the printable receipt (lib/receipts.ts),
@@ -68,7 +66,7 @@ export function ReceiptSummaryCard({ receipt }: { receipt: ReceiptData }) {
           <Row label={locale === "ar" ? "حالة الدفع" : "Payment Status"} value={locale === "ar" ? "مدفوع" : "Paid"} />
           {paidDate && <Row label={locale === "ar" ? "تاريخ الدفع" : "Payment Date"} value={paidDate} />}
           {receipt.providerRef && <Row label={locale === "ar" ? "مرجع الدفع" : "Payment Reference"} value={receipt.providerRef} />}
-          <Row label={locale === "ar" ? "طريقة الدفع" : "Payment Method"} value={PROVIDER_LABEL[receipt.provider] ?? receipt.provider} />
+          <Row label={locale === "ar" ? "طريقة الدفع" : "Payment Method"} value={paymentMethodLabel(receipt, locale === "ar" ? "ar" : "en")} />
           {receipt.receiptNumber && <Row label={locale === "ar" ? "رقم الإيصال" : "Receipt Number"} value={receipt.receiptNumber} />}
         </dl>
       </div>

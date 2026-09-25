@@ -26,10 +26,10 @@ commit → push. Never lose completed work or silently reduce scope.
 | 0 | Full repository audit | ✅ Done — `docs/PHASE_0_AUDIT.md` |
 | 1 | Local development environment | ✅ Done — see "Phase 1" below |
 | 2 | Dependency audit + controlled upgrades | ✅ Done — see "Phase 2" below |
-| 3 | Complete security audit | 🟡 In progress — `docs/SECURITY_AUDIT.md` written; 2 of ~6 actionable findings fixed |
+| 3 | Complete security audit | ✅ Done — `docs/SECURITY_AUDIT.md`; C1 mitigated, H1/M1/M2/M3/L2 fixed, L1/L3/L4 documented |
 | 4 | Auth modernization + active sessions + OAuth | ⏳ Not started |
 | 5 | Legal content CMS | ⏳ Not started |
-| 6 | Live payment gateway architecture | ⏳ Not started |
+| 6 | Live payment gateway architecture | ⏳ Not started (groundwork from the C1 fix: `lib/bookingPayment.ts`, `PaymentEvent` audit log, `lib/paymentMode.ts`) |
 | 7 | Vercel/deployment + domain audit | ⏳ Not started (no Vercel account access in this environment — will need user-provided info) |
 | 8 | SEO / search visibility | ⏳ Not started (robots.ts/sitemap.ts/manifest.ts already exist — gaps found, see audit) |
 | 9 | Developer standards | ⏳ Not started |
@@ -111,10 +111,33 @@ commit → push. Never lose completed work or silently reduce scope.
   Also: `npm run lint` now exits 0 (vendored `.claude/**` scripts and the
   generated Prisma client excluded).
 
+## Phase 3 follow-up fixes (after the first audit commit)
+
+- **H1** (`0cf5c4f`): the rate limiter moved from memory into Postgres
+  (`RateLimitBucket`, one atomic `INSERT … ON CONFLICT … RETURNING`), so
+  limits hold across serverless instances. Verified with two server
+  processes sharing one budget.
+- **M1 + M3** (`a0b4aae`): `proxy.ts` sends every private vendor page to
+  login unless the session cookie is valid. `safeInternalPath()` closes the
+  login `?next=` open redirect (`/%5Cevil.com`).
+- **C1** (this commit): production refuses the sandbox gateway's online
+  checkout, and admins record offline payments (bank transfer, cash, card
+  terminal) with a server-computed amount, the Event Terms gate, the shared
+  `finalizeBoothSale` transaction and an append-only `PaymentEvent` audit
+  log. `ALLOW_SANDBOX_PAYMENTS=true` restores online sandbox checkout on a
+  deployment where fake payments are acceptable. The owner chose this
+  option. Migration `20260925045900_payment_method_and_audit_log` only adds
+  things: two nullable columns plus one new table.
+  - **Operational note for DAH**: vendors now wait for DAH to collect
+    payment manually, and their booth is held only until the acceptance
+    deadline (default 3h, Admin → Settings). Raise that default, or use
+    "Extend" on the application, while payments are collected offline.
+
 ## Current
 
-Phase 3 continuation — H1 (rate limiting not shared across serverless
-instances).
+Phase 4 — auth modernization, active sessions UI and Google OAuth. The
+OAuth credentials are an external blocker; everything up to that boundary
+will be built.
 
 ## Remaining (high level)
 

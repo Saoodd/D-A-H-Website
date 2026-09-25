@@ -7,6 +7,8 @@ import { getGateway } from "@/payments/gateway";
 import { BOOTH_PAYMENT_HOLD_MINUTES } from "@/lib/constants";
 import { hasAcceptedCurrentEventTerms } from "@/lib/agreements";
 import { requirePhoneVerifiedVendor } from "@/lib/verification";
+import { logPaymentEvent } from "@/lib/bookingPayment";
+import { ONLINE_PAYMENT_UNAVAILABLE, onlinePaymentMode } from "@/lib/paymentMode";
 
 // Moves a booth from its 5-minute review hold into a fresh 5-minute payment
 // hold, and opens a charge with the (sandbox) payment gateway.
@@ -46,6 +48,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
     return NextResponse.json(
       { error: "You must review and accept this event's Terms & Conditions before continuing to payment." },
       { status: 403 }
+    );
+  }
+
+  // Production without a live gateway: stop here, before any charge or
+  // stage change. The booths stay in their REVIEW hold (which lasts until
+  // the acceptance deadline) and DAH records the payment from the admin
+  // application page. See lib/paymentMode.ts.
+  if (onlinePaymentMode() === "DISABLED") {
+    return NextResponse.json(
+      {
+        error: "Online payment isn't available yet. Your booth is reserved — DAH will contact you to arrange payment.",
+        code: ONLINE_PAYMENT_UNAVAILABLE,
+      },
+      { status: 503 }
     );
   }
 
@@ -96,7 +112,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
     if (staged.count !== boothIds.length) {
       throw new Error("BOOTH_HOLD_CHANGED");
     }
-    return tx.payment.create({
+    const created = await tx.payment.create({
       data: {
         applicationId,
         eventId: application.eventId,
@@ -111,6 +127,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
         },
       },
     });
+    await logPaymentEvent(tx, {
+      paymentId: created.id,
+      applicationId,
+      type: "CREATED",
+      actor: "VENDOR",
+      detail: { provider: gateway.name, amountAedFils: totalAedFils, boothCodes: priced.map((p) => p.code) },
+    });
+    return created;
   }).catch((err) => {
     if (err instanceof Error && err.message === "BOOTH_HOLD_CHANGED") return null;
     throw err;

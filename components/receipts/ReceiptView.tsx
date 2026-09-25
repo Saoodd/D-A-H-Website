@@ -1,6 +1,7 @@
 import { Logo } from "@/components/Logo";
 import { formatAed } from "@/lib/constants";
 import type { ReceiptData } from "@/lib/receipts";
+import { paymentMethodLabel } from "@/lib/paymentLabels";
 import { PrintButton } from "@/components/agreements/PrintButton";
 import { AutoPrint } from "@/components/receipts/AutoPrint";
 
@@ -19,9 +20,6 @@ function formatEventDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-AE", { day: "numeric", month: "long", year: "numeric" });
 }
 
-const PROVIDER_LABEL: Record<string, string> = {
-  sandbox: "Card (Sandbox)",
-};
 
 /** The printable/downloadable payment receipt — reused by both the
  *  vendor's own copy and the admin view of the same payment, always
@@ -109,7 +107,7 @@ export function ReceiptView({
             <Row label="Payment Status" value="Paid" />
             {receipt.paidAt && <Row label="Payment Date" value={formatDate(receipt.paidAt)} />}
             {receipt.providerRef && <Row label="Payment Reference" value={receipt.providerRef} />}
-            <Row label="Payment Method" value={PROVIDER_LABEL[receipt.provider] ?? receipt.provider} />
+            <Row label="Payment Method" value={paymentMethodLabel(receipt)} />
           </dl>
         </div>
       </div>

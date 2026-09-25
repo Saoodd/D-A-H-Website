@@ -2,6 +2,9 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { runExpiryPass } from "@/lib/expiry";
 import { getDisplayStatus } from "@/lib/status";
+import { getOfflinePaymentQuote } from "@/lib/offlinePayment";
+import { onlinePaymentMode } from "@/lib/paymentMode";
+import { paymentMethodLabel } from "@/lib/paymentLabels";
 import { ApplicationDetailAdminClient } from "./ApplicationDetailAdminClient";
 
 export default async function AdminApplicationDetailPage({
@@ -29,6 +32,8 @@ export default async function AdminApplicationDetailPage({
   });
 
   const succeeded = app.payments.some((p) => p.status === "SUCCEEDED");
+  // Only worth computing while there's something to pay for.
+  const offlineQuote = app.status === "ACCEPTED" && !succeeded ? await getOfflinePaymentQuote(app.id) : null;
 
   return (
     <ApplicationDetailAdminClient
@@ -66,6 +71,10 @@ export default async function AdminApplicationDetailPage({
           amountAedFils: p.amountAedFils,
           status: p.status,
           provider: p.provider,
+          methodLabel: paymentMethodLabel(p),
+          reference: p.providerRef,
+          note: p.note,
+          receiptNumber: p.receiptNumber,
           createdAt: p.createdAt.toISOString(),
           paidAt: p.paidAt ? p.paidAt.toISOString() : null,
         })),
@@ -76,6 +85,8 @@ export default async function AdminApplicationDetailPage({
           createdAt: c.createdAt.toISOString(),
         })),
       }}
+      offlineQuote={offlineQuote}
+      onlinePaymentMode={onlinePaymentMode()}
     />
   );
 }

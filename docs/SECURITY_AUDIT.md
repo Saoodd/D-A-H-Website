@@ -15,7 +15,7 @@ later phase (with reason) · ⚪ No fix needed (reviewed, sound as-is).
 
 ### C1 — Payment confirmation has no independent (webhook/provider) verification
 **Files**: `payments/gateway.ts`, `app/api/checkout/[applicationId]/confirm/route.ts`
-**Status**: 🟡 Deferred to Phase 6 (architectural — cannot be patched in place)
+**Status**: ✅ Mitigated in production (online checkout disabled, admin-recorded payments) · 🟡 real gateway integration still Phase 6
 
 There is no real payment gateway today — `payments/gateway.ts` only
 implements `SandboxGateway`, entirely in-memory, with `handleWebhook()`
@@ -29,10 +29,40 @@ a single `$transaction` with count-based TOCTOU guards — but none of those
 checks verify that money actually moved, because in sandbox mode none ever
 does.
 
-**Exploit scenario (today)**: an authenticated vendor could POST
-`{paymentId, outcome:"SUCCEEDED"}` directly (bypassing the UI) and get a
-booth marked sold without a real charge — but there is no real charge to
-bypass yet, so this has no financial impact in the current sandbox state.
+**Exploit scenario (before the mitigation)**: an authenticated vendor could
+POST `{paymentId, outcome:"SUCCEEDED"}` directly, or just click "Pay with
+card" in the UI. On the production site this sold a real booth, issued a
+real receipt number and sent "payment received" email/WhatsApp messages,
+with no money collected. Production ran the sandbox gateway (no
+`PAYMENT_PROVIDER` set), so this was a live business risk, not a
+theoretical one.
+
+**Interim mitigation (implemented, owner-approved)**: `lib/paymentMode.ts`
+decides whether online checkout is allowed. A production build running
+the sandbox gateway is `DISABLED` unless `ALLOW_SANDBOX_PAYMENTS=true` is
+set deliberately:
+- `checkout/start` returns 503 `ONLINE_PAYMENT_UNAVAILABLE` before
+  creating any charge or Payment row. The booth stays in its REVIEW hold
+  until the acceptance deadline, and the vendor sees "DAH will contact you
+  to arrange payment" in place of the pay buttons.
+- `checkout/confirm` refuses every call in any mode except `SANDBOX`, so
+  no client-chosen outcome can resolve a payment in production. The same
+  applies to a future `LIVE` mode, which must confirm payments through the
+  provider.
+- Admins confirm bookings with **Record offline payment** on the admin
+  application page (`POST /api/admin/applications/[id]/offline-payment`,
+  `lib/offlinePayment.ts`). The server prices the held booths itself, the
+  request must echo that exact total back, and the Event Terms gate still
+  applies. The booth sale runs through the same `finalizeBoothSale`
+  transaction as online checkout (`lib/bookingPayment.ts`), and any stale
+  PENDING online payment is marked FAILED and logged as SUPERSEDED.
+- Every payment state change is appended to `PaymentEvent`: CREATED,
+  SUCCEEDED, FAILED, OFFLINE_RECORDED and SUPERSEDED, with the actor
+  (VENDOR/ADMIN).
+- Verified with an e2e run against a dev server (32/32), a production
+  build in DISABLED mode (26/26) and a production build with the override
+  (32/32), plus a browser walk-through of the vendor notice and the admin
+  form.
 
 **Why CRITICAL anyway**: the exact code pattern (trust a client-supplied
 outcome) is the single most dangerous thing to carry unchanged into a live
@@ -334,7 +364,7 @@ anything consequential.
 
 | ID | Severity | Finding | Status |
 |---|---|---|---|
-| C1 | CRITICAL | Payment confirm trusts client outcome, no webhook | 🟡 Phase 6 |
+| C1 | CRITICAL | Payment confirm trusts client outcome, no webhook | ✅ Mitigated (prod checkout off, offline payments) · 🟡 gateway Phase 6 |
 | H1 | HIGH | In-memory rate limiter, not multi-instance safe | ✅ Fixed (Postgres-backed) |
 | M1 | MEDIUM-HIGH | Vendor routes lack structural auth gate | ✅ Fixed (proxy.ts) |
 | M2 | MEDIUM | Infobip webhook unauthenticated | ✅ Fixed |

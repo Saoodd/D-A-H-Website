@@ -62,6 +62,7 @@ export default async function AdminEventPaymentsPage({ params }: { params: Promi
           amountAedFils: t.amountAedFils,
           status: t.status,
           provider: t.provider,
+          method: t.method,
           providerRef: t.providerRef,
           createdAt: t.createdAt.toISOString(),
           paidAt: t.paidAt ? t.paidAt.toISOString() : null,

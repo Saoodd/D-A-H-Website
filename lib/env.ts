@@ -34,6 +34,11 @@ const ENV_VARS: EnvVar[] = [
   { names: ["ADMIN_NOTIFY_EMAIL"], level: "optional", effect: "admin is not emailed about new applications/messages" },
   { names: ["AGREEMENTS_SHEETS_WEBHOOK_URL"], level: "optional", effect: "agreement acceptances are not mirrored to Google Sheets" },
   { names: ["PAYMENT_PROVIDER"], level: "optional", effect: "defaults to the sandbox payment gateway" },
+  {
+    names: ["ALLOW_SANDBOX_PAYMENTS"],
+    level: "optional",
+    effect: "online checkout stays off in production while the sandbox gateway is configured (admins record payments instead)",
+  },
 ];
 // BLOB_READ_WRITE_TOKEN (private store) is deliberately absent: on Vercel,
 // @vercel/blob resolves the default store via the ambient OIDC token, so an

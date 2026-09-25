@@ -3,6 +3,7 @@
 import { Fragment, useState } from "react";
 import Link from "next/link";
 import { formatAed } from "@/lib/constants";
+import { paymentMethodLabel } from "@/lib/paymentLabels";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/Card";
 
@@ -17,6 +18,7 @@ export interface TransactionRow {
   amountAedFils: number;
   status: string;
   provider: string;
+  method?: string | null;
   providerRef: string | null;
   createdAt: string;
   applicationId: string;
@@ -138,7 +140,7 @@ function DetailGrid({ t }: { t: TransactionRow }) {
           {t.phone}
         </a>
       </DetailRow>
-      <DetailRow label="Provider">{t.provider}</DetailRow>
+      <DetailRow label="Method">{paymentMethodLabel(t)}</DetailRow>
       <DetailRow label="Reference">{t.providerRef ?? "—"}</DetailRow>
       {t.status === "SUCCEEDED" && (
         <DetailRow label="Receipt">

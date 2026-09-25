@@ -114,3 +114,10 @@ export const deleteAccountSchema = z.object({
   password: z.string().min(1),
   confirmation: z.string().min(1), // must equal the vendor's own username, checked in the route
 });
+
+export const offlinePaymentSchema = z.object({
+  method: z.enum(["BANK_TRANSFER", "CASH", "CARD_POS", "OTHER"]),
+  reference: z.string().trim().min(1).max(120),
+  note: z.string().trim().max(1000).optional(),
+  expectedAmountAedFils: z.number().int().positive(),
+});

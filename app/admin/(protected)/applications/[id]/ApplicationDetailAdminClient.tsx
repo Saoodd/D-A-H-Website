@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatAed, formatBoothCodes } from "@/lib/constants";
+import { RecordOfflinePayment } from "@/components/admin/RecordOfflinePayment";
+import type { OfflinePaymentQuote } from "@/lib/offlinePayment";
 
 interface Application {
   id: string;
@@ -27,11 +29,30 @@ interface Application {
   heldBooths: string[];
   soldBooths: { code: string; priceAedFilsAtSale: number | null }[];
   adjustments: { id: string; amountAedFils: number; reason: string; createdAt: string }[];
-  payments: { id: string; amountAedFils: number; status: string; provider: string; createdAt: string; paidAt: string | null }[];
+  payments: {
+    id: string;
+    amountAedFils: number;
+    status: string;
+    provider: string;
+    methodLabel: string;
+    reference: string | null;
+    note: string | null;
+    receiptNumber: string | null;
+    createdAt: string;
+    paidAt: string | null;
+  }[];
   cancellationRequests: { id: string; reason: string; status: string; createdAt: string }[];
 }
 
-export function ApplicationDetailAdminClient({ application: a }: { application: Application }) {
+export function ApplicationDetailAdminClient({
+  application: a,
+  offlineQuote,
+  onlinePaymentMode,
+}: {
+  application: Application;
+  offlineQuote: OfflinePaymentQuote | null;
+  onlinePaymentMode: "LIVE" | "SANDBOX" | "DISABLED";
+}) {
   const router = useRouter();
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const busy = busyAction !== null;
@@ -178,13 +199,28 @@ export function ApplicationDetailAdminClient({ application: a }: { application: 
         <div className="space-y-2 text-sm">
           {a.payments.length === 0 && <p className="text-brown-light">No payment attempts yet.</p>}
           {a.payments.map((p) => (
-            <div key={p.id} className="flex justify-between border-b border-brown/10 pb-2">
-              <span>{p.provider} · {new Date(p.createdAt).toLocaleString()}</span>
-              <span>{formatAed(p.amountAedFils)} — {p.status}</span>
+            <div key={p.id} className="border-b border-brown/10 pb-2">
+              <div className="flex justify-between gap-3">
+                <span>{p.methodLabel} · {new Date(p.createdAt).toLocaleString()}</span>
+                <span className="tabular-nums">{formatAed(p.amountAedFils)} — {p.status}</span>
+              </div>
+              {(p.provider === "offline" || p.receiptNumber) && (
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-brown-light">
+                  {p.provider === "offline" && p.reference && <span>Ref: {p.reference}</span>}
+                  {p.note && <span>Note: {p.note}</span>}
+                  {p.receiptNumber && (
+                    <Link href={`/admin/payments/receipts/${p.id}`} target="_blank" className="underline underline-offset-2 text-brown-dark">
+                      Receipt {p.receiptNumber}
+                    </Link>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
       </section>
+
+      {offlineQuote && <RecordOfflinePayment applicationId={a.id} quote={offlineQuote} onlineMode={onlinePaymentMode} />}
 
       <section className="mt-8">
         <p className="text-xs uppercase tracking-widest text-brown-light mb-3">Adjustments</p>

@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
     amountAed: filsToAed(p.amountAedFils),
     status: p.status,
     provider: p.provider,
+    method: p.method ?? "",
     reference: p.providerRef ?? "",
     createdAt: p.createdAt.toISOString(),
     paidAt: p.paidAt ? p.paidAt.toISOString() : "",

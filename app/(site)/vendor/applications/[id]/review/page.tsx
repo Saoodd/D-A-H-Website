@@ -2,6 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import { getVendorSession } from "@/lib/auth";
 import { getApplicationView } from "@/lib/applicationView";
 import { splitVatInclusiveTotal } from "@/lib/constants";
+import { onlinePaymentMode } from "@/lib/paymentMode";
 import { BookingReviewClient } from "./BookingReviewClient";
 
 export default async function BookingReviewPage({ params }: { params: Promise<{ id: string }> }) {
@@ -47,6 +48,7 @@ export default async function BookingReviewPage({ params }: { params: Promise<{ 
       eventTermsRequired={view.eventTermsRequired}
       eventTermsAccepted={view.eventTermsAccepted}
       bookingSummary={bookingSummary}
+      onlinePaymentAvailable={onlinePaymentMode() !== "DISABLED"}
     />
   );
 }

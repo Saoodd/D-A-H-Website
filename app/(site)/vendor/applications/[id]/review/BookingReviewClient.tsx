@@ -8,6 +8,7 @@ import { Countdown } from "@/components/Countdown";
 import { Button } from "@/components/ui/Button";
 import { formatAed } from "@/lib/constants";
 import { checkMultiBoothFit, isProvablyAdjacent } from "@/lib/boothFit";
+import { PaymentArrangedNotice } from "@/components/vendor/PaymentArrangedNotice";
 import { PhoneVerifyModal } from "@/components/vendor/PhoneVerifyModal";
 import { FloorPlan } from "@/components/floorplan/FloorPlan";
 import { Legend } from "@/components/floorplan/Legend";
@@ -73,6 +74,7 @@ export function BookingReviewClient({
   eventTermsRequired,
   eventTermsAccepted,
   bookingSummary,
+  onlinePaymentAvailable,
 }: {
   applicationId: string;
   eventId: string;
@@ -86,6 +88,7 @@ export function BookingReviewClient({
   eventTermsRequired: boolean;
   eventTermsAccepted: boolean;
   bookingSummary: BookingSummary;
+  onlinePaymentAvailable: boolean;
 }) {
   const { locale } = useLocale();
   const isAr = locale === "ar";
@@ -96,6 +99,10 @@ export function BookingReviewClient({
   const [changing, setChanging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
+  // Also flips on if the server refuses checkout (ONLINE_PAYMENT_UNAVAILABLE)
+  // after this page was rendered with online payment available.
+  const [paymentUnavailable, setPaymentUnavailable] = useState(!onlinePaymentAvailable);
+  const termsDone = !eventTermsRequired || eventTermsAccepted;
 
   const loadFloorplan = useCallback(async () => {
     const res = await fetch(`/api/events/${eventId}/floorplan?applicationId=${applicationId}`);
@@ -188,6 +195,10 @@ export function BookingReviewClient({
         const data = await res.json().catch(() => ({}));
         if (data.code === "VERIFICATION_REQUIRED") {
           setVerifying(true);
+          return;
+        }
+        if (data.code === "ONLINE_PAYMENT_UNAVAILABLE") {
+          setPaymentUnavailable(true);
           return;
         }
         throw new Error(data.error || "Could not continue to payment");
@@ -332,7 +343,14 @@ export function BookingReviewClient({
 
       {error && <p className="text-sm text-red-700 mb-4">{error}</p>}
 
+      {paymentUnavailable && termsDone && (
+        <div className="mb-6">
+          <PaymentArrangedNotice acceptanceExpiresAt={acceptanceExpiresAt} />
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-3">
+        {!(paymentUnavailable && termsDone) && (
         <Button onClick={confirmAndContinue} loading={continuing} disabled={changing} size="lg">
           {eventTermsRequired && !eventTermsAccepted
             ? isAr
@@ -342,6 +360,7 @@ export function BookingReviewClient({
             ? "تأكيد والمتابعة للدفع"
             : "Confirm & Continue to Payment"}
         </Button>
+        )}
         <Button onClick={chooseDifferentBooths} loading={changing} disabled={continuing} variant="secondary" size="lg">
           {bookingSummary.lines.length > 1 ? (isAr ? "اختيار أكشاك أخرى" : "Choose Different Booths") : isAr ? "اختيار كشك آخر" : "Choose a Different Booth"}
         </Button>

@@ -3,6 +3,7 @@ import { getVendorSession } from "@/lib/auth";
 import { getApplicationView } from "@/lib/applicationView";
 import { getPublishedAgreement } from "@/lib/agreements";
 import { formatBoothCodes, splitVatInclusiveTotal } from "@/lib/constants";
+import { onlinePaymentMode } from "@/lib/paymentMode";
 import { EventTermsClient } from "./EventTermsClient";
 
 export default async function EventTermsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -51,6 +52,7 @@ export default async function EventTermsPage({ params }: { params: Promise<{ id:
       title={agreement.title}
       version={agreement.version}
       bodyHtml={agreement.bodyHtml}
+      onlinePaymentAvailable={onlinePaymentMode() !== "DISABLED"}
     />
   );
 }

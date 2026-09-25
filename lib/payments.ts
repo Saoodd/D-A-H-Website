@@ -92,6 +92,7 @@ export interface EventPaymentsDetail {
     amountAedFils: number;
     status: string;
     provider: string;
+    method: string | null;
     providerRef: string | null;
     createdAt: Date;
     paidAt: Date | null;
@@ -142,6 +143,7 @@ export async function getEventPaymentsDetail(eventId: string): Promise<EventPaym
       amountAedFils: p.amountAedFils,
       status: p.status,
       provider: p.provider,
+      method: p.method,
       providerRef: p.providerRef,
       createdAt: p.createdAt,
       paidAt: p.paidAt,

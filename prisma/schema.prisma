@@ -709,8 +709,35 @@ model Payment {
   // the payment. Null for PENDING/FAILED payments, which have no receipt.
   receiptNumber String? @unique
 
+  // Payments an admin records outside the online gateway (provider
+  // "offline" — bank transfer, cash, card terminal) carry how they were
+  // paid here: BANK_TRANSFER | CASH | CARD_POS | OTHER. Null for gateway
+  // payments. `note` is the admin's internal note — never shown to vendors.
+  method String?
+  note   String?
+
   createdAt DateTime  @default(now())
   paidAt    DateTime?
+
+  events PaymentEvent[]
+}
+
+// Append-only payment audit trail: every state change and admin
+// intervention, with who/what caused it. `applicationId` is a plain string
+// (no FK) and `paymentId` is SetNull on delete so the trail outlives the
+// rows it describes. `detail` never holds card data or gateway secrets.
+model PaymentEvent {
+  id            String   @id @default(cuid())
+  paymentId     String?
+  payment       Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  applicationId String
+  type          String // CREATED | SUCCEEDED | FAILED | OFFLINE_RECORDED | SUPERSEDED
+  actor         String // VENDOR | ADMIN | SYSTEM | GATEWAY
+  detail        Json?
+  createdAt     DateTime @default(now())
+
+  @@index([paymentId])
+  @@index([applicationId])
 }
 
 // One row per (payment, booth) pair — lets a single Payment/receipt cover

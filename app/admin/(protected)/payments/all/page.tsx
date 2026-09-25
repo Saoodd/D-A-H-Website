@@ -131,6 +131,7 @@ export default async function AdminAllTransactionsPage({
           amountAedFils: p.amountAedFils,
           status: p.status,
           provider: p.provider,
+          method: p.method,
           providerRef: p.providerRef,
           createdAt: p.createdAt.toISOString(),
           applicationId: p.application.id,

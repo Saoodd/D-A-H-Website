@@ -33,6 +33,7 @@ export function EventTermsClient({
   title,
   version,
   bodyHtml,
+  onlinePaymentAvailable,
 }: {
   applicationId: string;
   eventId: string;
@@ -45,6 +46,7 @@ export function EventTermsClient({
   title: string;
   version: number;
   bodyHtml: string;
+  onlinePaymentAvailable: boolean;
 }) {
   const { locale } = useLocale();
   const router = useRouter();
@@ -192,6 +194,10 @@ export function EventTermsClient({
       const res = await fetch(`/api/checkout/${applicationId}/start`, { method: "POST" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        if (data.code === "ONLINE_PAYMENT_UNAVAILABLE") {
+          router.push(`/vendor/applications/${applicationId}/review`);
+          return;
+        }
         throw new Error(data.error || "Could not continue to payment");
       }
       router.push(`/vendor/applications/${applicationId}`);
@@ -339,13 +345,24 @@ export function EventTermsClient({
 
             {error && <p className="text-sm text-red-700 mt-4">{error}</p>}
 
-            <button
-              onClick={continueToPayment}
-              disabled={continuing}
-              className="mt-6 px-7 py-3 rounded-full bg-brown text-cream-soft text-sm tracking-wide hover:bg-brown-dark transition-colors disabled:opacity-40"
-            >
-              {continuing ? "…" : locale === "ar" ? "المتابعة للدفع" : "Continue to Payment"}
-            </button>
+            {onlinePaymentAvailable ? (
+              <button
+                onClick={continueToPayment}
+                disabled={continuing}
+                className="mt-6 px-7 py-3 rounded-full bg-brown text-cream-soft text-sm tracking-wide hover:bg-brown-dark transition-colors disabled:opacity-40"
+              >
+                {continuing ? "…" : locale === "ar" ? "المتابعة للدفع" : "Continue to Payment"}
+              </button>
+            ) : (
+              // No online checkout to start: go back to Booking Review,
+              // which now shows the "DAH will contact you" notice.
+              <Link
+                href={`/vendor/applications/${applicationId}/review`}
+                className="mt-6 inline-block px-7 py-3 rounded-full bg-brown text-cream-soft text-sm tracking-wide hover:bg-brown-dark transition-colors"
+              >
+                {locale === "ar" ? "متابعة" : "Continue"}
+              </Link>
+            )}
           </div>
         ) : (
           <>

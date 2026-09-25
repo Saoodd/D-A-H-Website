@@ -69,6 +69,9 @@ export interface ReceiptData {
   totalAedFils: number;
   paidAt: string | null;
   provider: string;
+  // BANK_TRANSFER | CASH | CARD_POS | OTHER for admin-recorded payments
+  // (provider "offline"); null for gateway payments.
+  method: string | null;
   providerRef: string | null;
 }
 
@@ -135,6 +138,7 @@ export async function getReceiptData(paymentId: string): Promise<ReceiptData | n
     totalAedFils: payment.amountAedFils,
     paidAt: payment.paidAt ? payment.paidAt.toISOString() : null,
     provider: payment.provider,
+    method: payment.method,
     providerRef: payment.providerRef,
   };
 }
