@@ -205,40 +205,10 @@ needed.
 
 ## Deploying
 
-### Vercel
-
-1. Push this repo to GitHub and import it in Vercel.
-2. Set all variables from `.env.example` in Project Settings → Environment
-   Variables (production + preview).
-3. Point `DATABASE_URL` at a hosted Postgres instance (see
-   [Database](#database)) — don't rely on SQLite in production.
-4. Vercel runs `npm run build`, which includes `postinstall: prisma
-   generate`. After the first deploy, run `npx prisma migrate deploy`
-   against the production database (e.g. via `vercel env pull` +local run,
-   or a one-off Vercel deployment hook).
-
-### Netlify
-
-1. Import the repo, framework preset "Next.js".
-2. Same environment variables as above.
-3. Same Postgres + `prisma migrate deploy` step.
-
-## Connecting a custom domain
-
-You said you already own a domain — here's where to point it:
-
-**On Vercel**: Project → Settings → Domains → add your domain. Vercel shows
-the exact DNS records to add at your registrar — typically an `A` record
-(`76.76.21.21`) or `CNAME` for a subdomain pointing at
-`cname.vercel-dns.com`. Propagation is usually minutes to a few hours.
-
-**On Netlify**: Site settings → Domain management → Add a domain. Netlify
-shows either its own nameservers to delegate to, or an `A`/`CNAME` record
-to add at your existing DNS provider.
-
-Either way, once the domain resolves, set `NEXT_PUBLIC_SITE_URL` to your
-real `https://` domain and redeploy — it's used in email links and
-Open Graph tags.
+See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**: Vercel settings,
+environment variables per environment, how migrations run (Production
+only, never from Preview builds by default), domain and DNS steps, and a
+launch-day checklist. Payments: [docs/PAYMENTS.md](docs/PAYMENTS.md).
 
 ## Project structure
 

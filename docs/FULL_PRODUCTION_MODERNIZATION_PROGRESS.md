@@ -30,7 +30,7 @@ commit → push. Never lose completed work or silently reduce scope.
 | 4 | Auth modernization + active sessions + OAuth | ✅ Code done — Google sign-in waits on credentials (BLOCKED EXTERNAL STEP) |
 | 5 | Legal content CMS | ✅ Done — Admin → Content → Legal Pages |
 | 6 | Live payment gateway architecture | ✅ Done (provider-neutral) — real provider is a BLOCKED EXTERNAL STEP; see `docs/PAYMENTS.md` |
-| 7 | Vercel/deployment + domain audit | ⏳ Not started (no Vercel account access in this environment — will need user-provided info) |
+| 7 | Vercel/deployment + domain audit | ✅ Repo side done — `docs/DEPLOYMENT.md`; dashboard/DNS checks are BLOCKED EXTERNAL STEPs |
 | 8 | SEO / search visibility | ⏳ Not started (robots.ts/sitemap.ts/manifest.ts already exist — gaps found, see audit) |
 | 9 | Developer standards | ⏳ Not started |
 | 10 | Design system / component library | ⏳ Not started |
@@ -227,10 +227,30 @@ Full write-up: `docs/PAYMENTS.md`.
   - A production build refuses `local-test`: webhook and dev routes 404.
   - Browser check of the admin card and the return page.
 
+## Phase 7 — deployment
+
+- **Fixed:** migrations ran on every Vercel build, including Preview
+  builds of unmerged branches. That could change the production schema
+  before review whenever Preview shares the production database.
+  `scripts/build.mjs` now migrates only on Vercel Production, non-Vercel
+  builds, or Preview with `MIGRATE_ON_PREVIEW=true`. Tested with a
+  4-scenario dry run, and a failing migration still fails the build.
+- **Added:** `GET /api/health` (DB reachability, no config exposed) for
+  uptime monitoring; `.nvmrc` = 22.
+- `docs/DEPLOYMENT.md` covers services, env vars per environment, build
+  and migration policy, the Vercel settings to confirm (Node 22, region
+  next to the DB, cron plan limits, Preview protection, rollback), domain
+  and DNS steps, and a launch-day checklist. README deploy section now
+  points there (the old text advised giving Preview the same variables as
+  Production).
+- **BLOCKED EXTERNAL STEPS:**
+  - Vercel dashboard checks: build command override, Node version, region,
+    plan (the hourly cron needs Pro), Preview database isolation.
+  - Registrar DNS, and the Resend, Infobip and Google console URLs.
+
 ## Current
 
-Phase 7 — Vercel / deployment / domain audit (external access needed for
-parts of it).
+Phase 8 — SEO / search visibility.
 
 ## Remaining (high level)
 
