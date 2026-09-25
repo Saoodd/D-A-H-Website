@@ -7,7 +7,9 @@ that way.
 
 1. Branch from `main`. Keep each change focused: one feature or fix per
    branch.
-2. Before pushing: `npm run check` (lint + typecheck) and `npm test`.
+2. Before pushing: `npm run check` (lint, typecheck, migration safety) and
+   `npm test`. For changes to payments, sign-in, sessions, WhatsApp OTP or
+   the legal pages, also run `npm run test:e2e`.
    For anything touching pages or routes, also `npm run build`, and click
    through the affected flow in a browser.
 3. Commit messages: short imperative subject (`Phase 6: …`, `Fix …`,

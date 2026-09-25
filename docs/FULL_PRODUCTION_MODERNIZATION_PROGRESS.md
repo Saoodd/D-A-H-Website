@@ -39,7 +39,7 @@ commit → push. Never lose completed work or silently reduce scope.
 | 13 | Floor-plan regression protection | ✅ Done — `tests/floorplan.test.ts` |
 | 14 | WhatsApp/Infobip regression protection | ✅ Done — `tests/whatsapp.test.ts`, `tests/e2e/whatsapp-otp.e2e.ts` |
 | 15 | Database/migration safety review | ✅ Done — `docs/DATABASE.md` |
-| 16 | Automated testing expansion | ⏳ Not started (currently **zero** committed test files) |
+| 16 | Automated testing expansion | ✅ Done — `npm run test:e2e`, `tests/e2e/README.md` |
 | 17 | Final launch checklist + final report | ⏳ Not started |
 
 ---
@@ -485,9 +485,43 @@ empty module so server libraries can be unit-tested outside Next.
   - **BLOCKED EXTERNAL STEP:** confirm PITR is enabled on the production
     database and its retention.
 
+## Phase 16 — automated testing
+
+The one-off verification scripts from Phases 4–6 are now committed,
+repeatable suites, alongside Phases 13–14's tests:
+
+| Layer | Command | Count |
+|---|---|---|
+| Unit | `npm test` | 39 tests: payment lifecycle and filters, floor-plan geometry and CAD/JSON import, WhatsApp guards, SEO, URLs, misc |
+| Static | `npm run check` | lint, typecheck, migration safety |
+| End-to-end | `npm run test:e2e` | 6 suites, **139 checks, all passing** |
+
+End-to-end breakdown: WhatsApp OTP 30, sessions 12, legal CMS 17,
+payments-disabled + offline 27, live payment path 32, Google sign-in 21.
+
+- `scripts/e2e.mjs` sets everything up:
+  - fakes: Infobip and Google OIDC;
+  - a production-build group and a dev-server group, since the
+    `local-test` gateway and the fake Google issuer are refused in
+    production;
+  - a known configuration whatever `.env` holds: Infobip points at the
+    fake, email sending is off, no real providers.
+
+  It refuses non-local databases and returns a proper exit code.
+- Suites build their own fixture event, booths and vendors, so they no
+  longer depend on local seed data. `tests/e2e/_lib.ts` holds the shared
+  helpers and cleanup. A post-run check found no rows left behind.
+- Not automated: visual/browser checks (Playwright screenshots, axe).
+  They were run by hand in Phases 10, 12 and 13. Wiring them into the
+  runner is a follow-up.
+- **BLOCKED EXTERNAL STEP:** there's no CI configured (no
+  `.github/workflows`). Recommended: run `npm run check` and `npm test`
+  on every pull request, plus `npm run test:e2e` with a Postgres service
+  container.
+
 ## Current
 
-Phase 16 — automated testing expansion.
+Phase 17 — launch checklist + final report.
 
 ## Remaining (high level)
 

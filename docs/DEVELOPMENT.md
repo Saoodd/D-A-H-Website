@@ -70,9 +70,10 @@ Admins can always use **Record offline payment** on an application. See
 ## Checks
 
 ```bash
-npm run check                # lint + typecheck (run before every push)
+npm run check                # lint + typecheck + migration safety (run before every push)
 npm test                     # unit tests (tests/*.test.ts, Node's built-in runner via tsx; tests/setup.cjs stubs `server-only`)
 npm run build                # full production build (also applies local migrations)
+npm run test:e2e             # end-to-end suites against real servers + local fakes (tests/e2e/README.md)
 ```
 
 ## Useful commands

@@ -1,33 +1,39 @@
 # End-to-end tests
 
-These drive the real API routes of a running server against a **local**
-database, with outside providers replaced by local fakes. They never talk
-to Infobip, a bank or Google, and each script refuses to run if
-`DATABASE_URL` isn't a local database.
-
-## WhatsApp OTP (`whatsapp-otp.e2e.ts`)
+`npm run test:e2e` runs every suite here against real servers:
+- a production build (`next start`) and a dev server (`next dev`);
+- the **local** database;
+- local fakes in place of outside providers, so nothing reaches Infobip,
+  Google or a bank.
 
 ```bash
-# 1. Fake Infobip on :4010
-node tests/e2e/fake-infobip.mjs &
-
-# 2. A server pointed at it (a production build on :3200 here)
-export INFOBIP_WHATSAPP_BASE_URL=http://127.0.0.1:4010 \
-       INFOBIP_WHATSAPP_API_KEY=e2e-fake-key \
-       INFOBIP_WHATSAPP_SENDER=+971500000001 \
-       INFOBIP_WHATSAPP_AUTH_TEMPLATE=dah_verify \
-       INFOBIP_WHATSAPP_AUTH_TEMPLATE_LANGUAGE=en
-npm run build && npx next start -p 3200 > /tmp/dah-3200.log 2>&1 &
-
-# 3. The test (same INFOBIP_* exports in this shell)
-E2E_SERVER_LOG=/tmp/dah-3200.log npx tsx --require ./tests/setup.cjs tests/e2e/whatsapp-otp.e2e.ts
+npm run test:e2e                  # build, then run all suites (~3 min)
+npm run test:e2e -- --skip-build  # reuse the existing .next build
+npm run test:e2e -- payments      # only suites whose name matches
 ```
 
-It checks:
-- the exact template payload Infobip receives (sender, recipient, template,
-  code as body placeholder and Copy Code button);
-- that only an HMAC of the code is stored;
-- the 5-attempt cap, the resend cooldown and code invalidation on resend;
-- the successful verification plus its audit-log row;
-- that provider failures are reported honestly;
-- that no code or API key ever appears in the delivery log or server log.
+`scripts/e2e.mjs` starts the fakes and servers with a known configuration,
+whatever your `.env` says:
+- Infobip points at the fake;
+- email sending is off;
+- no real Google or payment provider is used.
+
+Each suite creates its own vendors, events and booths, and removes them
+afterwards. Every script refuses to run if `DATABASE_URL` isn't a local
+database. Don't run it while `npm run dev` is running in this folder.
+
+| Suite | Server | Covers |
+|---|---|---|
+| `whatsapp-otp` | production | Exact Infobip payload, HMAC-only storage, cooldown, attempt cap, verification + audit log, honest failures, no code/API key in logs |
+| `sessions` | production | Device list, revoke one/all others, no cross-vendor access, immediate sign-out |
+| `legal-cms` | production | Default text, draft → publish → versions, HTML sanitising, discard. Skips if your DB already has legal docs. |
+| `payments-offline` | production | Online payment refused in production (booth stays held); admin offline payment: validation, server-quoted amount, receipt, audit, refunds |
+| `payments-live` | dev (`local-test` gateway) | Redirect/return, signed webhooks, replay/stale/forged rejection, amount mismatch, reconciliation, late and lost payments, AUTHORIZED→PAID, refunds incl. concurrent ones |
+| `google-signin` | dev (fake OIDC) | No account creation from Google, link only when signed in, no duplicate identities, state/nonce/PKCE/replay, open redirect, closed accounts, unlink |
+
+Fakes: `fake-infobip.mjs` (WhatsApp template list + send) and
+`fake-oidc.mjs` (Google `/auth`, `/token`, `/certs`). The app only honours
+the fake Google issuer and the `local-test` payment gateway outside
+production builds.
+
+Server and fake logs go to a temp folder; the runner prints its path.
