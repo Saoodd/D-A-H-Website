@@ -32,7 +32,7 @@ commit → push. Never lose completed work or silently reduce scope.
 | 6 | Live payment gateway architecture | ✅ Done (provider-neutral) — real provider is a BLOCKED EXTERNAL STEP; see `docs/PAYMENTS.md` |
 | 7 | Vercel/deployment + domain audit | ✅ Repo side done — `docs/DEPLOYMENT.md`; dashboard/DNS checks are BLOCKED EXTERNAL STEPs |
 | 8 | SEO / search visibility | ✅ Done — Search Console submission is a BLOCKED EXTERNAL STEP |
-| 9 | Developer standards | ⏳ Not started |
+| 9 | Developer standards | ✅ Done |
 | 10 | Design system / component library | ⏳ Not started |
 | 11 | Data table modernization + data fetching | ⏳ Not started |
 | 12 | UX / performance audit | ⏳ Not started (prior session already did a large UX pass — see git log) |
@@ -272,10 +272,33 @@ Full write-up: `docs/PAYMENTS.md`.
 - **BLOCKED EXTERNAL STEP:** create the Search Console property and submit
   the sitemap (steps in `docs/DEPLOYMENT.md`).
 
+## Phase 9 — developer standards
+
+- **README.md** rewritten to match what the site does today. The old one
+  described SQLite, email-gated vendors and a TODO sandbox. Details moved
+  into linked docs.
+- **docs/DEVELOPMENT.md:** local setup, test accounts (manual phone
+  verification locally), payment modes, checks, troubleshooting. The
+  troubleshooting covers the gotchas found in this project: stale
+  `.next/dev` cache, `next typegen`, the local rate limiter, Prisma 7
+  import path.
+- **CONTRIBUTING.md:** workflow, conventions, database-migration rules,
+  and the non-negotiable rules (money, no fake integrations, secrets,
+  authorisation, verification policy, no caching of booking state,
+  sanitised HTML).
+- **Scripts:** `typecheck`, `check` (lint + typecheck) and `test` (Node's
+  built-in runner via tsx, no new dependency).
+- **Unit tests:** `tests/*.test.ts`, 15 passing. They cover the payment
+  lifecycle, open-redirect guard, JSON-LD escaping, indexability, device
+  labels, payment labels, booth fit, usernames and legal doc slugs.
+- **Formatting:** `.editorconfig` only. Prettier was deliberately **not**
+  adopted: measured, it would rewrite 176–283 of 371 source files
+  depending on line width, which is the repo-wide churn the brief rules
+  out.
+
 ## Current
 
-Phase 9 — developer standards (README / DEVELOPMENT.md / CONTRIBUTING.md,
-scripts).
+Phase 10 — design system / component library audit.
 
 ## Remaining (high level)
 
