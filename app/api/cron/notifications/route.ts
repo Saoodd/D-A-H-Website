@@ -4,6 +4,7 @@ import { runExpiryPass } from "@/lib/expiry";
 import { notifyVendorWhatsApp } from "@/lib/notifications/notify";
 import { applicationUrl } from "@/lib/notifications/links";
 import { purgeExpiredRateLimits } from "@/lib/rateLimit";
+import { reconcileOpenPayments } from "@/lib/paymentProcessing";
 
 // The one periodic sweep for every reminder-shaped WhatsApp use case —
 // there is no other scheduled-job infrastructure in this codebase (no
@@ -166,6 +167,12 @@ export async function GET(req: NextRequest) {
   // Housekeeping piggybacking on the only scheduled job: rate-limit buckets
   // are keyed by IP/email, so without this the table only ever grows.
   const purgedRateLimits = await purgeExpiredRateLimits();
+  // Catch payments whose webhook was missed or delayed. No-op until a
+  // provider with getPaymentStatus is configured.
+  const reconciliation = await reconcileOpenPayments().catch((err) => {
+    console.error("[cron] payment reconciliation failed:", err instanceof Error ? err.message : err);
+    return { checked: 0, results: { ERROR: 1 } };
+  });
 
-  return NextResponse.json({ ok: true, ranAt: now.toISOString(), purgedRateLimits });
+  return NextResponse.json({ ok: true, ranAt: now.toISOString(), purgedRateLimits, reconciliation });
 }

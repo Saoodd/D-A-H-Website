@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { getVendorSession } from "@/lib/auth";
 import { getApplicationView } from "@/lib/applicationView";
+import { onlinePaymentMode } from "@/lib/paymentMode";
 import { ApplicationDetailClient } from "./ApplicationDetailClient";
 
 export default async function ApplicationDetailPage({
@@ -15,5 +16,5 @@ export default async function ApplicationDetailPage({
   const view = await getApplicationView(id, session.vendorId);
   if (!view) notFound();
 
-  return <ApplicationDetailClient initialView={view} applicationId={id} />;
+  return <ApplicationDetailClient initialView={view} applicationId={id} sandboxCheckout={onlinePaymentMode() === "SANDBOX"} />;
 }

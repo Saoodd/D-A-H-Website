@@ -52,9 +52,13 @@ interface FloorplanData {
 export function ApplicationDetailClient({
   initialView,
   applicationId,
+  sandboxCheckout = true,
 }: {
   initialView: ApplicationView;
   applicationId: string;
+  /** False when online payment goes through a real provider (or is off):
+   *  the sandbox pay buttons must not be shown then. */
+  sandboxCheckout?: boolean;
 }) {
   const { t, locale } = useLocale();
   const isAr = locale === "ar";
@@ -545,7 +549,7 @@ export function ApplicationDetailClient({
           {holdStage === "PAYMENT" && (
             <div className="rounded-xl border border-brown/10 bg-cream p-6">
               <h2 className="font-heading text-xl text-brown-dark mb-1">{t("checkout.title")}</h2>
-              <p className="text-xs text-brown-light mb-4">{t("checkout.sandboxNotice")}</p>
+              {sandboxCheckout && <p className="text-xs text-brown-light mb-4">{t("checkout.sandboxNotice")}</p>}
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-brown-light">{view.boothHolds.length > 1 ? (isAr ? "الأكشاك" : "Booths") : isAr ? "الكشك" : "Booth"}</span>
                 <span>{formatBoothCodes(holdCodes)}</span>
@@ -562,6 +566,7 @@ export function ApplicationDetailClient({
                   <Countdown target={view.boothHolds[0].holdExpiresAt} variant="mmss" onExpire={refreshStatus} className="font-semibold text-brown-dark text-lg" />
                 </div>
               )}
+              {sandboxCheckout ? (
               <div className="flex flex-col gap-3">
                 <button onClick={() => pay("SUCCEEDED")} disabled={busy} className="w-full py-3 rounded-full bg-black text-white text-sm font-medium disabled:opacity-50">
                    {t("checkout.payWithApplePay")}
@@ -575,6 +580,20 @@ export function ApplicationDetailClient({
                   </button>
                 )}
               </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm text-brown-dark">
+                    {isAr
+                      ? "أكمل الدفع في صفحة مزود الدفع. إذا كنت قد دفعت بالفعل، سيتم تحديث حجزك تلقائياً — لا تدفع مرة أخرى."
+                      : "Finish paying on the payment provider's page. If you've already paid, your booking updates automatically, so please don't pay again."}
+                  </p>
+                  {view.latestPayment && (
+                    <Link href={`/vendor/payments/return/${view.latestPayment.id}`} className="inline-block text-sm text-brown underline underline-offset-2">
+                      {isAr ? "التحقق من حالة الدفع" : "Check payment status"}
+                    </Link>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

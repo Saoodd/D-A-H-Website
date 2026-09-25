@@ -7,6 +7,7 @@ import { notifyVendorWhatsApp } from "./notifications/notify";
 import { applicationUrl } from "./notifications/links";
 import { trustedSiteUrl } from "./url";
 import { formatAed } from "./constants";
+import { legalSourcesFor } from "./paymentLifecycle";
 
 // The one place a booking becomes "confirmed and paid". Used by the online
 // checkout confirm route and by the admin "Record offline payment" route,
@@ -15,7 +16,18 @@ import { formatAed } from "./constants";
 
 type Db = typeof prisma | Prisma.TransactionClient;
 
-export type PaymentEventType = "CREATED" | "SUCCEEDED" | "FAILED" | "OFFLINE_RECORDED" | "SUPERSEDED";
+export type PaymentEventType =
+  | "CREATED"
+  | "AUTHORIZED"
+  | "SUCCEEDED"
+  | "FAILED"
+  | "CANCELLED"
+  | "OFFLINE_RECORDED"
+  | "SUPERSEDED"
+  | "REFUNDED"
+  | "AMOUNT_MISMATCH"
+  | "NEEDS_ATTENTION"
+  | "ATTENTION_CLEARED";
 export type PaymentEventActor = "VENDOR" | "ADMIN" | "SYSTEM" | "GATEWAY";
 
 /** Appends one row to the payment audit log. Rows are never updated or
@@ -83,9 +95,12 @@ export async function finalizeBoothSale(
   await Promise.all(
     booths.map((b) => tx.booth.update({ where: { id: b.boothId }, data: { priceAedFilsAtSale: b.priceAedFils } }))
   );
-  // Only a still-PENDING payment can succeed — never one already FAILED or
-  // superseded by an admin-recorded payment.
-  const paid = await tx.payment.updateMany({ where: { id: paymentId, status: "PENDING" }, data: { status: "SUCCEEDED", paidAt } });
+  // Only a still-open payment (PENDING / AUTHORIZED / CREATED) can
+  // succeed — never one already FAILED, CANCELLED or superseded.
+  const paid = await tx.payment.updateMany({
+    where: { id: paymentId, status: { in: legalSourcesFor("SUCCEEDED") } },
+    data: { status: "SUCCEEDED", paidAt },
+  });
   if (paid.count !== 1) throw new BoothHoldChangedError();
   await tx.application.update({ where: { id: applicationId }, data: { acceptanceExpiresAt: null } });
   const receiptNumber = await assignReceiptNumber(paymentId, paidAt, tx);

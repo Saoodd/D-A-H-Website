@@ -8,6 +8,7 @@ import { BOOTH_PAYMENT_HOLD_MINUTES } from "@/lib/constants";
 import { hasAcceptedCurrentEventTerms } from "@/lib/agreements";
 import { requirePhoneVerifiedVendor } from "@/lib/verification";
 import { logPaymentEvent } from "@/lib/bookingPayment";
+import { trustedSiteUrl } from "@/lib/url";
 import { ONLINE_PAYMENT_UNAVAILABLE, onlinePaymentMode } from "@/lib/paymentMode";
 
 // Moves a booth from its 5-minute review hold into a fresh 5-minute payment
@@ -79,70 +80,89 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
 
   const gateway = getGateway();
   const boothCodes = priced.map((p) => p.code).join(" + ");
-  // The gateway call is external I/O and must never happen inside a DB
-  // transaction (it would hold a connection open for the network round
-  // trip) — so it runs first, standalone. The REVIEW->PAYMENT stage
-  // transition and the Payment row that records the resulting charge are
-  // then written together in one transaction: previously these were two
-  // separate writes, so a crash between them could leave a booth stuck in
-  // holdStage "PAYMENT" with no corresponding Payment row (harmless — it
-  // just sits until the 5-minute hold expires and releases — but not
-  // atomic). The updateMany's WHERE re-asserts the exact state this route
-  // already confirmed (HELD + still held by this application), the same
-  // race-safe guard pattern used everywhere else a booth's stage changes;
-  // a mismatched count rolls back the whole transaction rather than
-  // silently proceeding with a stale set of booths.
   const holdExpiresAt = new Date(Date.now() + BOOTH_PAYMENT_HOLD_MINUTES * 60 * 1000);
-  const charge = await gateway.createCharge({
-    amountAedFils: totalAedFils,
-    currency: "AED",
-    applicationId,
-    boothId: priced[0].boothId, // representative booth for the single-booth-shaped gateway metadata — the real per-booth breakdown lives in PaymentBooth
-    eventId: application.eventId,
-    vendorEmail: application.email,
-    description: `Booth ${boothCodes} — ${application.eventId}`,
-  });
-
   const boothIds = booths.map((b) => b.id);
-  const payment = await prisma.$transaction(async (tx) => {
-    const staged = await tx.booth.updateMany({
-      where: { id: { in: boothIds }, heldByApplicationId: applicationId, status: "HELD", holdStage: "REVIEW" },
-      data: { holdStage: "PAYMENT", holdExpiresAt },
-    });
-    if (staged.count !== boothIds.length) {
-      throw new Error("BOOTH_HOLD_CHANGED");
-    }
-    const created = await tx.payment.create({
-      data: {
-        applicationId,
-        eventId: application.eventId,
-        boothId: priced[0].boothId,
-        amountAedFils: totalAedFils,
-        currency: "AED",
-        status: "PENDING",
-        provider: gateway.name,
-        providerRef: charge.providerRef,
-        booths: {
-          create: priced.map((p) => ({ boothId: p.boothId, priceAedFilsAtCharge: p.priceAedFils })),
+
+  // Step 1 (one transaction): stage the booths REVIEW -> PAYMENT and create
+  // the Payment row as CREATED. The row exists before the provider is
+  // called, so the provider's return URL and metadata can carry its id.
+  // The updateMany re-asserts the state checked above (HELD, held by this
+  // application, REVIEW stage); a count mismatch rolls everything back.
+  const payment = await prisma
+    .$transaction(async (tx) => {
+      const staged = await tx.booth.updateMany({
+        where: { id: { in: boothIds }, heldByApplicationId: applicationId, status: "HELD", holdStage: "REVIEW" },
+        data: { holdStage: "PAYMENT", holdExpiresAt },
+      });
+      if (staged.count !== boothIds.length) {
+        throw new Error("BOOTH_HOLD_CHANGED");
+      }
+      const created = await tx.payment.create({
+        data: {
+          applicationId,
+          eventId: application.eventId,
+          boothId: priced[0].boothId,
+          amountAedFils: totalAedFils,
+          currency: "AED",
+          status: "CREATED",
+          provider: gateway.name,
+          booths: {
+            create: priced.map((p) => ({ boothId: p.boothId, priceAedFilsAtCharge: p.priceAedFils })),
+          },
         },
-      },
+      });
+      await logPaymentEvent(tx, {
+        paymentId: created.id,
+        applicationId,
+        type: "CREATED",
+        actor: "VENDOR",
+        detail: { provider: gateway.name, amountAedFils: totalAedFils, boothCodes: priced.map((p) => p.code) },
+      });
+      return created;
+    })
+    .catch((err) => {
+      if (err instanceof Error && err.message === "BOOTH_HOLD_CHANGED") return null;
+      throw err;
     });
-    await logPaymentEvent(tx, {
-      paymentId: created.id,
-      applicationId,
-      type: "CREATED",
-      actor: "VENDOR",
-      detail: { provider: gateway.name, amountAedFils: totalAedFils, boothCodes: priced.map((p) => p.code) },
-    });
-    return created;
-  }).catch((err) => {
-    if (err instanceof Error && err.message === "BOOTH_HOLD_CHANGED") return null;
-    throw err;
-  });
 
   if (!payment) {
     return NextResponse.json({ error: "Your booth hold changed — please select a booth again." }, { status: 409 });
   }
+
+  // Step 2: open the charge with the provider. External I/O, so never
+  // inside a transaction. On failure the payment is FAILED and the booths
+  // go back to their review hold, so nothing is left stuck.
+  let charge;
+  try {
+    charge = await gateway.createCharge({
+      amountAedFils: totalAedFils,
+      currency: "AED",
+      applicationId,
+      boothId: priced[0].boothId, // representative booth; the per-booth breakdown lives in PaymentBooth
+      eventId: application.eventId,
+      vendorEmail: application.email,
+      description: `Booth ${boothCodes} — ${application.eventId}`,
+      returnUrl: `${trustedSiteUrl()}/vendor/payments/return/${payment.id}`,
+      cancelUrl: `${trustedSiteUrl()}/vendor/payments/return/${payment.id}?cancelled=1`,
+    });
+  } catch (err) {
+    console.error("[checkout] provider createCharge failed:", err instanceof Error ? err.message : err);
+    await prisma.$transaction(async (tx) => {
+      await tx.payment.updateMany({ where: { id: payment.id, status: "CREATED" }, data: { status: "FAILED" } });
+      await logPaymentEvent(tx, { paymentId: payment.id, applicationId, type: "FAILED", actor: "SYSTEM", detail: { reason: "CREATE_CHARGE_FAILED" } });
+      await tx.booth.updateMany({
+        where: { id: { in: boothIds }, heldByApplicationId: applicationId, holdStage: "PAYMENT" },
+        data: { holdStage: "REVIEW", holdExpiresAt: freshApp.acceptanceExpiresAt },
+      });
+    });
+    return NextResponse.json({ error: "The payment provider couldn't be reached. Please try again in a moment." }, { status: 502 });
+  }
+
+  // Step 3: record the provider's reference. CREATED -> PENDING, guarded.
+  await prisma.payment.updateMany({
+    where: { id: payment.id, status: "CREATED" },
+    data: { status: "PENDING", providerRef: charge.providerRef },
+  });
 
   return NextResponse.json({
     paymentId: payment.id,
@@ -150,5 +170,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ app
     amountAedFils: totalAedFils,
     boothCode: boothCodes,
     holdExpiresAt: holdExpiresAt.toISOString(),
+    // Redirect-style providers: the client sends the payer here.
+    redirectUrl: charge.redirectUrl ?? null,
   });
 }

@@ -15,7 +15,7 @@ later phase (with reason) · ⚪ No fix needed (reviewed, sound as-is).
 
 ### C1 — Payment confirmation has no independent (webhook/provider) verification
 **Files**: `payments/gateway.ts`, `app/api/checkout/[applicationId]/confirm/route.ts`
-**Status**: ✅ Mitigated in production (online checkout disabled, admin-recorded payments) · 🟡 real gateway integration still Phase 6
+**Status**: ✅ Mitigated in production (online checkout disabled, admin-recorded payments) · ✅ provider-neutral live architecture built (Phase 6, docs/PAYMENTS.md) · 🟡 BLOCKED EXTERNAL: a real provider's API/credentials
 
 There is no real payment gateway today — `payments/gateway.ts` only
 implements `SandboxGateway`, entirely in-memory, with `handleWebhook()`
@@ -364,7 +364,7 @@ anything consequential.
 
 | ID | Severity | Finding | Status |
 |---|---|---|---|
-| C1 | CRITICAL | Payment confirm trusts client outcome, no webhook | ✅ Mitigated (prod checkout off, offline payments) · 🟡 gateway Phase 6 |
+| C1 | CRITICAL | Payment confirm trusts client outcome, no webhook | ✅ Mitigated; verified-webhook architecture built · 🟡 provider credentials external |
 | H1 | HIGH | In-memory rate limiter, not multi-instance safe | ✅ Fixed (Postgres-backed) |
 | M1 | MEDIUM-HIGH | Vendor routes lack structural auth gate | ✅ Fixed (proxy.ts) |
 | M2 | MEDIUM | Infobip webhook unauthenticated | ✅ Fixed |

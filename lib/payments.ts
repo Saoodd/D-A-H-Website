@@ -76,6 +76,7 @@ export interface EventPaymentsDetail {
   event: { id: string; name: string; slug: string; startDate: Date; location: string };
   summary: {
     totalCollectedAedFils: number;
+    totalRefundedAedFils: number;
     succeededCount: number;
     pendingCount: number;
     failedCount: number;
@@ -91,6 +92,8 @@ export interface EventPaymentsDetail {
     boothCode: string;
     amountAedFils: number;
     status: string;
+    refundedAedFils: number;
+    needsAttention: string | null;
     provider: string;
     method: string | null;
     providerRef: string | null;
@@ -127,6 +130,7 @@ export async function getEventPaymentsDetail(eventId: string): Promise<EventPaym
     event,
     summary: {
       totalCollectedAedFils: succeeded.reduce((sum, p) => sum + p.amountAedFils, 0),
+      totalRefundedAedFils: succeeded.reduce((sum, p) => sum + p.refundedAedFils, 0),
       succeededCount: succeeded.length,
       pendingCount: pending.length,
       failedCount: failed.length,
@@ -142,6 +146,8 @@ export async function getEventPaymentsDetail(eventId: string): Promise<EventPaym
       boothCode: formatBoothCodes(p.booths.map((pb) => pb.booth.code)),
       amountAedFils: p.amountAedFils,
       status: p.status,
+      refundedAedFils: p.refundedAedFils,
+      needsAttention: p.needsAttention,
       provider: p.provider,
       method: p.method,
       providerRef: p.providerRef,

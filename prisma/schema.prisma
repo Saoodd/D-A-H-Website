@@ -727,7 +727,23 @@ model Payment {
 
   amountAedFils Int
   currency      String @default("AED")
-  status        String @default("PENDING") // PENDING | SUCCEEDED | FAILED
+  // Stored lifecycle state. SUCCEEDED is the stored value for "paid" (kept
+  // from before the lifecycle was formalised; many queries depend on it).
+  // Allowed values and transitions: lib/payments/lifecycle.ts —
+  // CREATED | PENDING | AUTHORIZED | SUCCEEDED | FAILED | CANCELLED.
+  // Refunds do not change this field: see refundedAedFils / refunds.
+  status        String @default("PENDING")
+
+  // Total refunded so far (sum of PaymentRefund rows). 0 = none; equal to
+  // amountAedFils = fully refunded. Refunding records money returned; it
+  // never cancels the booking or frees a booth by itself.
+  refundedAedFils Int @default(0)
+  refunds         PaymentRefund[]
+
+  // Set when the payment needs a human: e.g. the provider reported it paid
+  // after the booth hold had lapsed, or with a different amount. Shown on
+  // the admin payment records until cleared. Null = nothing to do.
+  needsAttention String?
 
   provider    String // e.g. "sandbox", "ziina", "shopify_payments", "adcb"
   providerRef String? // charge/session id from the gateway
@@ -755,6 +771,39 @@ model Payment {
 // intervention, with who/what caused it. `applicationId` is a plain string
 // (no FK) and `paymentId` is SetNull on delete so the trail outlives the
 // rows it describes. `detail` never holds card data or gateway secrets.
+// Money returned against a SUCCEEDED payment. Append-only.
+model PaymentRefund {
+  id               String   @id @default(cuid())
+  paymentId        String
+  payment          Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  amountAedFils    Int
+  reason           String
+  // ORIGINAL_METHOD (refunded through the payment provider) or how DAH paid
+  // it back by hand: BANK_TRANSFER | CASH | OTHER.
+  method           String
+  reference        String?
+  providerRefundId String?
+  createdAt        DateTime @default(now())
+
+  @@index([paymentId])
+}
+
+// Every payment-provider webhook delivery DAH accepted, keyed by the
+// provider's own event id. The unique index is the idempotency guard: a
+// redelivered or replayed event is recognised and not applied twice.
+model PaymentWebhookEvent {
+  id              String    @id @default(cuid())
+  provider        String
+  providerEventId String
+  paymentId       String?
+  receivedAt      DateTime  @default(now())
+  outcome         String // APPLIED | IGNORED | NO_PAYMENT | AMOUNT_MISMATCH | ERROR
+  detail          Json?
+
+  @@unique([provider, providerEventId])
+  @@index([paymentId])
+}
+
 model PaymentEvent {
   id            String   @id @default(cuid())
   paymentId     String?

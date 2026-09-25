@@ -203,6 +203,13 @@ export function BookingReviewClient({
         }
         throw new Error(data.error || "Could not continue to payment");
       }
+      const started = await res.json().catch(() => ({}));
+      // Redirect-style providers: go to their payment page. The sandbox
+      // returns no URL and pays from the booking page instead.
+      if (started.redirectUrl) {
+        window.location.assign(started.redirectUrl);
+        return;
+      }
       router.push(`/vendor/applications/${applicationId}`);
       router.refresh();
     } catch (err) {

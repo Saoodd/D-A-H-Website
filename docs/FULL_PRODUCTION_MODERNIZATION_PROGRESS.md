@@ -29,7 +29,7 @@ commit → push. Never lose completed work or silently reduce scope.
 | 3 | Complete security audit | ✅ Done — `docs/SECURITY_AUDIT.md`; C1 mitigated, H1/M1/M2/M3/L2 fixed, L1/L3/L4 documented |
 | 4 | Auth modernization + active sessions + OAuth | ✅ Code done — Google sign-in waits on credentials (BLOCKED EXTERNAL STEP) |
 | 5 | Legal content CMS | ✅ Done — Admin → Content → Legal Pages |
-| 6 | Live payment gateway architecture | ⏳ Not started (groundwork from the C1 fix: `lib/bookingPayment.ts`, `PaymentEvent` audit log, `lib/paymentMode.ts`) |
+| 6 | Live payment gateway architecture | ✅ Done (provider-neutral) — real provider is a BLOCKED EXTERNAL STEP; see `docs/PAYMENTS.md` |
 | 7 | Vercel/deployment + domain audit | ⏳ Not started (no Vercel account access in this environment — will need user-provided info) |
 | 8 | SEO / search visibility | ⏳ Not started (robots.ts/sitemap.ts/manifest.ts already exist — gaps found, see audit) |
 | 9 | Developer standards | ⏳ Not started |
@@ -188,10 +188,49 @@ commit → push. Never lose completed work or silently reduce scope.
   pages and vendor terms unaffected, admin auth. Browser check on desktop
   and mobile.
 
+## Phase 6 — payment architecture
+
+Full write-up: `docs/PAYMENTS.md`.
+- **Lifecycle:** `lib/paymentLifecycle.ts` defines the state machine
+  (CREATED / PENDING / AUTHORIZED / SUCCEEDED≡PAID / FAILED / CANCELLED)
+  and the 8-state vocabulary (adds REFUNDED / PARTIALLY_REFUNDED).
+  Every write is a guarded conditional update. The stored `SUCCEEDED`
+  was kept on purpose: 33 files and existing production rows depend on it.
+- **Provider interface:** `payments/gateway.ts` gained `getPaymentStatus`,
+  `verifyWebhook`, `refund` and `returnUrl`/`redirectUrl`. All are
+  INTEGRATION POINTs; none is faked.
+- **Webhook:** `/api/webhooks/payments/[provider]` does signature checks
+  via the gateway, event-id idempotency (`PaymentWebhookEvent`), an exact
+  amount/currency check and guarded transitions.
+- **Reconciliation and return page:** `lib/paymentProcessing.ts` does
+  reconciliation (cron) and on-demand refresh. The return page
+  `/vendor/payments/return/[id]` handles success / failure / cancel /
+  pending / needs-review states and never trusts query parameters.
+- **Checkout start:** now creates the Payment first (CREATED), calls the
+  provider outside the transaction, and rolls the booths back to REVIEW if
+  the provider call fails.
+- **Refunds:** `PaymentRefund` plus `Payment.refundedAedFils`, capped
+  atomically. Refunds go through the provider when supported, otherwise
+  are recorded by hand. A refund never unbooks.
+- **Needs attention:** `Payment.needsAttention` catches paid-after-lapse,
+  paid-after-failed and amount mismatches, with an admin "Mark resolved"
+  plus note.
+- **Admin UI:** payment cards on the application page (lifecycle, refunds,
+  attention, history). Payment lists show lifecycle and attention badges;
+  the event payments page shows a Refunded total.
+- **Migration:** `…_payment_lifecycle_refunds_webhooks` only adds things:
+  two columns (one `NOT NULL DEFAULT 0`) and two tables.
+- **Tests:**
+  - LIVE path via the dev-only `local-test` stand-in: 34/34.
+  - Sandbox mode: 34/34.
+  - DISABLED mode on a production build: 28/28.
+  - A production build refuses `local-test`: webhook and dev routes 404.
+  - Browser check of the admin card and the return page.
+
 ## Current
 
-Phase 6 — payment architecture (provider-neutral, no fake live
-integration).
+Phase 7 — Vercel / deployment / domain audit (external access needed for
+parts of it).
 
 ## Remaining (high level)
 

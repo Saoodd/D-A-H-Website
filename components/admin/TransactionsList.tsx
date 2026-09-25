@@ -4,6 +4,18 @@ import { Fragment, useState } from "react";
 import Link from "next/link";
 import { formatAed } from "@/lib/constants";
 import { paymentMethodLabel } from "@/lib/paymentLabels";
+import { LIFECYCLE_LABEL, lifecycleStatus } from "@/lib/paymentLifecycle";
+
+function PaymentStatus({ t }: { t: { status: string; amountAedFils: number; refundedAedFils?: number; needsAttention?: string | null } }) {
+  const lc = lifecycleStatus(t);
+  const lcTone = lc === "PAID" ? "positive" : lc === "FAILED" ? "negative" : lc === "PENDING" || lc === "AUTHORIZED" || lc === "PARTIALLY_REFUNDED" ? "attention" : "neutral";
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <StatusBadge label={LIFECYCLE_LABEL[lc]} tone={lcTone} />
+      {t.needsAttention && <StatusBadge label="Needs attention" tone="attention" />}
+    </span>
+  );
+}
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/Card";
 
@@ -17,18 +29,14 @@ export interface TransactionRow {
   boothCode: string;
   amountAedFils: number;
   status: string;
+  refundedAedFils?: number;
+  needsAttention?: string | null;
   provider: string;
   method?: string | null;
   providerRef: string | null;
   createdAt: string;
   applicationId: string;
 }
-
-const statusTone: Record<string, "positive" | "attention" | "negative"> = {
-  SUCCEEDED: "positive",
-  PENDING: "attention",
-  FAILED: "negative",
-};
 
 // Shared between the per-event Payments workspace and the All Transactions
 // view — one responsive presentation so contact details never appear
@@ -85,7 +93,7 @@ export function TransactionsList({ rows, showEventColumn }: { rows: TransactionR
                     <td className="px-1 py-3 text-brown-dark">{t.contactName}</td>
                     <td className="px-1 py-3 text-brown-dark">{formatAed(t.amountAedFils)}</td>
                     <td className="px-1 py-3">
-                      <StatusBadge label={t.status} tone={statusTone[t.status] ?? "neutral"} />
+                      <PaymentStatus t={t} />
                     </td>
                     <td className="px-1 py-3 text-brown-light whitespace-nowrap">{new Date(t.createdAt).toLocaleString()}</td>
                   </tr>
@@ -114,7 +122,7 @@ export function TransactionsList({ rows, showEventColumn }: { rows: TransactionR
                 </Link>
                 {showEventColumn && <p className="text-xs text-brown-light">{t.eventName}</p>}
               </div>
-              <StatusBadge label={t.status} tone={statusTone[t.status] ?? "neutral"} />
+              <PaymentStatus t={t} />
             </div>
             <p className="text-brown-dark font-medium mb-2">{formatAed(t.amountAedFils)}</p>
             <DetailGrid t={t} />

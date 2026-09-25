@@ -121,3 +121,14 @@ export const offlinePaymentSchema = z.object({
   note: z.string().trim().max(1000).optional(),
   expectedAmountAedFils: z.number().int().positive(),
 });
+
+export const refundSchema = z.object({
+  amountAedFils: z.number().int().positive(),
+  reason: z.string().trim().min(3).max(500),
+  method: z.enum(["ORIGINAL_METHOD", "BANK_TRANSFER", "CASH", "OTHER"]),
+  reference: z.string().trim().max(120).optional(),
+});
+
+export const clearAttentionSchema = z.object({
+  note: z.string().trim().min(3).max(500),
+});

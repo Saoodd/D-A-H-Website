@@ -130,6 +130,8 @@ export default async function AdminAllTransactionsPage({
           boothCode: formatBoothCodes(p.booths.map((pb) => pb.booth.code)),
           amountAedFils: p.amountAedFils,
           status: p.status,
+          refundedAedFils: p.refundedAedFils,
+          needsAttention: p.needsAttention,
           provider: p.provider,
           method: p.method,
           providerRef: p.providerRef,

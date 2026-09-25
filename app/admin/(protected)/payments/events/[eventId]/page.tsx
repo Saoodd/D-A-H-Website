@@ -38,6 +38,7 @@ export default async function AdminEventPaymentsPage({ params }: { params: Promi
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 text-sm">
         <SummaryTile label="Total collected" value={formatAed(summary.totalCollectedAedFils)} />
+        {summary.totalRefundedAedFils > 0 && <SummaryTile label="Refunded" value={formatAed(summary.totalRefundedAedFils)} />}
         <SummaryTile label="Paid bookings" value={String(summary.succeededCount)} />
         <SummaryTile label="Pending" value={String(summary.pendingCount)} />
         <SummaryTile label="Failed" value={String(summary.failedCount)} />
@@ -61,6 +62,8 @@ export default async function AdminEventPaymentsPage({ params }: { params: Promi
           boothCode: t.boothCode,
           amountAedFils: t.amountAedFils,
           status: t.status,
+          refundedAedFils: t.refundedAedFils,
+          needsAttention: t.needsAttention,
           provider: t.provider,
           method: t.method,
           providerRef: t.providerRef,

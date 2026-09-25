@@ -5,6 +5,8 @@ import { getDisplayStatus } from "@/lib/status";
 import { getOfflinePaymentQuote } from "@/lib/offlinePayment";
 import { onlinePaymentMode } from "@/lib/paymentMode";
 import { paymentMethodLabel } from "@/lib/paymentLabels";
+import { lifecycleStatus } from "@/lib/paymentLifecycle";
+import { getGateway } from "@/payments/gateway";
 import { ApplicationDetailAdminClient } from "./ApplicationDetailAdminClient";
 
 export default async function AdminApplicationDetailPage({
@@ -24,7 +26,10 @@ export default async function AdminApplicationDetailPage({
       event: true,
       vendor: true,
       adjustments: { orderBy: { createdAt: "desc" } },
-      payments: { orderBy: { createdAt: "desc" } },
+      payments: {
+        orderBy: { createdAt: "desc" },
+        include: { refunds: { orderBy: { createdAt: "asc" } }, events: { orderBy: { createdAt: "asc" } } },
+      },
       cancellationRequests: { orderBy: { createdAt: "desc" } },
       assignedBooths: true,
       heldBooths: true,
@@ -75,6 +80,19 @@ export default async function AdminApplicationDetailPage({
           reference: p.providerRef,
           note: p.note,
           receiptNumber: p.receiptNumber,
+          lifecycle: lifecycleStatus(p),
+          refundedAedFils: p.refundedAedFils,
+          needsAttention: p.needsAttention,
+          providerRefundable: p.provider === getGateway().name && !!getGateway().refund,
+          refunds: p.refunds.map((r) => ({
+            id: r.id,
+            amountAedFils: r.amountAedFils,
+            method: r.method,
+            reason: r.reason,
+            reference: r.reference,
+            createdAt: r.createdAt.toISOString(),
+          })),
+          events: p.events.map((e) => ({ id: e.id, type: e.type, actor: e.actor, createdAt: e.createdAt.toISOString() })),
           createdAt: p.createdAt.toISOString(),
           paidAt: p.paidAt ? p.paidAt.toISOString() : null,
         })),

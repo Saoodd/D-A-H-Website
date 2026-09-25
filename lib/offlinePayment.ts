@@ -101,11 +101,20 @@ export async function recordOfflinePayment(input: {
       // An online checkout the vendor opened and never finished must not
       // stay PENDING next to a recorded payment.
       const stale = await tx.payment.findMany({
-        where: { applicationId: app.id, status: "PENDING", id: { not: payment.id } },
-        select: { id: true },
+        where: { applicationId: app.id, status: { in: ["CREATED", "PENDING", "AUTHORIZED"] }, id: { not: payment.id } },
+        select: { id: true, status: true },
       });
       if (stale.length > 0) {
         await tx.payment.updateMany({ where: { id: { in: stale.map((p) => p.id) } }, data: { status: "FAILED" } });
+        // An AUTHORISED online payment may be holding the vendor's money at
+        // the provider: flag it so someone voids it there.
+        const authorised = stale.filter((p) => p.status === "AUTHORIZED").map((p) => p.id);
+        if (authorised.length > 0) {
+          await tx.payment.updateMany({
+            where: { id: { in: authorised } },
+            data: { needsAttention: "Authorised online payment superseded by an offline payment. Void the authorisation with the provider." },
+          });
+        }
         for (const p of stale) {
           await logPaymentEvent(tx, {
             paymentId: p.id,
