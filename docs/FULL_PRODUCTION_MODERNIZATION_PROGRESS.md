@@ -27,7 +27,7 @@ commit → push. Never lose completed work or silently reduce scope.
 | 1 | Local development environment | ✅ Done — see "Phase 1" below |
 | 2 | Dependency audit + controlled upgrades | ✅ Done — see "Phase 2" below |
 | 3 | Complete security audit | ✅ Done — `docs/SECURITY_AUDIT.md`; C1 mitigated, H1/M1/M2/M3/L2 fixed, L1/L3/L4 documented |
-| 4 | Auth modernization + active sessions + OAuth | ⏳ Not started |
+| 4 | Auth modernization + active sessions + OAuth | ✅ Code done — Google sign-in waits on credentials (BLOCKED EXTERNAL STEP) |
 | 5 | Legal content CMS | ⏳ Not started |
 | 6 | Live payment gateway architecture | ⏳ Not started (groundwork from the C1 fix: `lib/bookingPayment.ts`, `PaymentEvent` audit log, `lib/paymentMode.ts`) |
 | 7 | Vercel/deployment + domain audit | ⏳ Not started (no Vercel account access in this environment — will need user-provided info) |
@@ -133,11 +133,44 @@ commit → push. Never lose completed work or silently reduce scope.
     deadline (default 3h, Admin → Settings). Raise that default, or use
     "Extend" on the application, while payments are collected offline.
 
+## Phase 4 — authentication
+
+- **Active sessions** (`9585ef1`): VendorSession/AdminSession gained
+  `userAgent` + `lastSeenAt` (additive migration `…_session_device_info`).
+  Vendor Profile → Active Sessions and Admin Settings → Active admin
+  sessions list each device ("Safari on iPhone", last active) with
+  per-device sign-out and "sign out all other devices". No IP address is
+  stored or shown. Tested 12/12 (including cross-vendor revoke refused)
+  plus a browser check.
+- **Sign in with Google** (this commit): OIDC authorization code + PKCE +
+  state + nonce. The ID token is verified against Google's JWKS (issuer,
+  audience, expiry, nonce). New `VendorIdentity` table (additive migration
+  `…_vendor_identity`).
+  - Linking happens only from a signed-in vendor's Profile. "Continue with
+    Google" on the login page works only for an already-linked account. It
+    never creates an account and never matches by email, so there are no
+    duplicate identities and no takeover through a matching email. A
+    Google account linked to one vendor is refused for any other (unique
+    index, too).
+  - Unlink from Profile at any time; passwords are unchanged, so nobody
+    can be locked out. Closing or permanently deleting an account removes
+    the link.
+  - Tested 22/22 against a local fake OIDC issuer: forged state, replayed
+    callback, wrong nonce, PKCE, user cancel, closed account, open-redirect
+    `next`, cross-vendor link. Also a browser walk-through, and a
+    production build confirming the feature is off without credentials and
+    that the test-issuer switch is ignored in production.
+  - **BLOCKED EXTERNAL STEP**: create the Google OAuth client and set
+    `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in Vercel (steps in
+    `.env.example`). Until then nothing Google-related is visible.
+- Not changed, deliberately: passwords (bcrypt 12), the 60-day vendor and
+  12h admin session lifetimes, and phone-only verification for applying
+  to events. Email verification stays optional, as instructed.
+
 ## Current
 
-Phase 4 — auth modernization, active sessions UI and Google OAuth. The
-OAuth credentials are an external blocker; everything up to that boundary
-will be built.
+Phase 5 — admin-managed legal pages (Privacy / Terms / Refund) with
+draft, preview, publish and version history.
 
 ## Remaining (high level)
 

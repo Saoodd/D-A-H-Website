@@ -83,6 +83,9 @@ export async function DELETE(req: NextRequest) {
   // it — a closed account shouldn't leave another open browser tab/device
   // still authenticated.
   await invalidateAllVendorSessions(vendor.id);
+  // A closed account must not be reachable through a linked Google
+  // sign-in either (and the link itself is personal data).
+  await prisma.vendorIdentity.deleteMany({ where: { vendorId: vendor.id } });
   await destroyVendorSession();
 
   await sendAccountClosedEmail({ vendorId: vendor.id, vendorEmail: vendor.email, businessName: vendor.businessName });

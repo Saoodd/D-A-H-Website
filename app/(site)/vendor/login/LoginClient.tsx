@@ -7,8 +7,29 @@ import { Logo } from "@/components/Logo";
 import { useLocale } from "@/lib/i18n/context";
 import { Button } from "@/components/ui/Button";
 import { FieldError, fieldErrorRingClass } from "@/components/ui/FieldError";
+import { GoogleMark } from "@/components/auth/GoogleMark";
 
-export function LoginClient({ next }: { next: string }) {
+const GOOGLE_MESSAGES: Record<string, { en: string; ar: string }> = {
+  not_linked: {
+    en: "This Google account isn't linked to a DAH account. Sign in with your email or username and password, then link Google from My Profile.",
+    ar: "حساب Google هذا غير مرتبط بحساب في دار الحي. سجّل الدخول بالبريد الإلكتروني أو اسم المستخدم وكلمة المرور، ثم اربط Google من ملفك الشخصي.",
+  },
+  cancelled: { en: "Google sign-in was cancelled.", ar: "تم إلغاء تسجيل الدخول عبر Google." },
+  failed: {
+    en: "Signing in with Google didn't work. Please try again or use your password.",
+    ar: "تعذر تسجيل الدخول عبر Google. حاول مرة أخرى أو استخدم كلمة المرور.",
+  },
+};
+
+export function LoginClient({
+  next,
+  googleEnabled = false,
+  googleStatus,
+}: {
+  next: string;
+  googleEnabled?: boolean;
+  googleStatus?: string;
+}) {
   const { t, locale } = useLocale();
   const router = useRouter();
 
@@ -111,9 +132,33 @@ export function LoginClient({ next }: { next: string }) {
                 <FieldError message={identifierError} />
               </label>
 
+              {googleStatus && GOOGLE_MESSAGES[googleStatus] && (
+                <p className="-mt-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="alert">
+                  {GOOGLE_MESSAGES[googleStatus][locale === "ar" ? "ar" : "en"]}
+                </p>
+              )}
+
               <Button type="submit" size="lg" className="w-full">
                 {locale === "ar" ? "متابعة" : "Continue"}
               </Button>
+
+              {googleEnabled && (
+                <>
+                  <div className="flex items-center gap-3 text-xs uppercase tracking-widest text-brown-light">
+                    <span className="h-px flex-1 bg-brown/15" />
+                    {locale === "ar" ? "أو" : "or"}
+                    <span className="h-px flex-1 bg-brown/15" />
+                  </div>
+                  {/* A plain link, not fetch: the route answers with a redirect to Google. */}
+                  <a
+                    href={`/api/auth/google/start?intent=login&next=${encodeURIComponent(next)}`}
+                    className="-mt-4 inline-flex w-full items-center justify-center gap-3 rounded-[6px] border border-brown/25 px-7 py-3 text-sm font-medium text-brown-dark transition-colors hover:bg-brown/5"
+                  >
+                    <GoogleMark />
+                    {locale === "ar" ? "المتابعة باستخدام Google" : "Continue with Google"}
+                  </a>
+                </>
+              )}
 
               <div className="flex items-center justify-center gap-2 text-sm text-brown-light flex-wrap">
                 <span>{locale === "ar" ? "جديد على دار الحي؟" : "New to DAH?"}</span>

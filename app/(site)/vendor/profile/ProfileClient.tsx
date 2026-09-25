@@ -13,6 +13,7 @@ import { ChangeEmailCard } from "@/components/vendor/ChangeEmailCard";
 import { DeleteAccountCard } from "@/components/vendor/DeleteAccountCard";
 import { PhoneVerifyModal } from "@/components/vendor/PhoneVerifyModal";
 import { ActiveSessionsCard } from "@/components/ActiveSessionsCard";
+import { GoogleSignInCard } from "@/components/vendor/GoogleSignInCard";
 import type { SessionRow } from "@/lib/sessionList";
 
 interface Vendor {
@@ -90,6 +91,7 @@ export function ProfileClient({
   upcoming,
   warnings,
   sessions,
+  google,
 }: {
   vendor: Vendor;
   stats: { eventsParticipated: number; upcomingConfirmedCount: number; applicationsCount: number };
@@ -98,6 +100,7 @@ export function ProfileClient({
   upcoming: UpcomingEntry[];
   warnings: WarningEntry[];
   sessions: SessionRow[];
+  google: { enabled: boolean; linked: { email: string | null; createdAt: string } | null; status?: string };
 }) {
   const { t, locale } = useLocale();
   const router = useRouter();
@@ -483,6 +486,13 @@ export function ProfileClient({
               </div>
             )}
           </div>
+
+          {(google.enabled || google.linked) && (
+            <div id="sign-in-methods">
+              <p className="label-caps mb-4">{locale === "ar" ? "طرق تسجيل الدخول" : "Sign-in Methods"}</p>
+              <GoogleSignInCard enabled={google.enabled} linked={google.linked} status={google.status} />
+            </div>
+          )}
 
           <div>
             <p className="label-caps mb-1">{locale === "ar" ? "الجلسات النشطة" : "Active Sessions"}</p>

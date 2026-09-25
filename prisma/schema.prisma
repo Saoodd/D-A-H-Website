@@ -394,6 +394,7 @@ model Vendor {
   passwordResetTokens     PasswordResetToken[]
   emailChangeTokens       EmailChangeToken[]
   sessions                VendorSession[]
+  identities VendorIdentity[]
 
   // Soft-delete: closing an account never deletes the row (agreements,
   // payments and bookings all reference vendorId and must stay readable),
@@ -448,6 +449,25 @@ model VendorSession {
 // (a single shared password, see .env ADMIN_PASSWORD) so there's no vendorId
 // equivalent to scope by — logging out revokes just this session's row,
 // keeping other concurrently-open admin sessions valid.
+// An external sign-in (currently only Google) linked to an existing vendor
+// account. Linking is only ever done by the signed-in vendor from their
+// profile; signing in with an unlinked Google account never creates or
+// matches an account (not even by email), so there is exactly one DAH
+// account per person and no takeover through a matching email address.
+model VendorIdentity {
+  id                String    @id @default(cuid())
+  vendorId          String
+  vendor            Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  provider          String // "google"
+  providerAccountId String // Google's stable account id (the ID token's `sub`)
+  email             String? // shown on the profile only; never used to find the account
+  createdAt         DateTime  @default(now())
+  lastUsedAt        DateTime?
+
+  @@unique([provider, providerAccountId])
+  @@unique([vendorId, provider])
+}
+
 model AdminSession {
   id        String    @id @default(cuid())
   createdAt DateTime  @default(now())

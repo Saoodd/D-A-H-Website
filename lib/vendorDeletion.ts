@@ -87,6 +87,7 @@ export async function permanentlyRemoveVendor(vendorId: string): Promise<VendorD
         ]
       : []),
     prisma.vendorSession.deleteMany({ where: { vendorId } }),
+    prisma.vendorIdentity.deleteMany({ where: { vendorId } }),
     prisma.passwordResetToken.deleteMany({ where: { vendorId } }),
     prisma.emailChangeToken.deleteMany({ where: { vendorId } }),
     prisma.emailVerificationToken.deleteMany({ where: { vendorId } }),

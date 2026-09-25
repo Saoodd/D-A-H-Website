@@ -6,11 +6,13 @@ import { getSettings } from "@/lib/settings";
 import { getVendorParticipation, computeProfileCompletion } from "@/lib/vendorStats";
 import { isPhoneVerified } from "@/lib/verification";
 import { listVendorSessions } from "@/lib/sessionList";
+import { googleSignInEnabled } from "@/lib/oauth/google";
 import { ProfileClient } from "./ProfileClient";
 
 export const metadata: Metadata = { title: "My Profile" };
 
-export default async function VendorProfilePage() {
+export default async function VendorProfilePage({ searchParams }: { searchParams: Promise<{ google?: string }> }) {
+  const { google: googleStatus } = await searchParams;
   const session = await getVendorSession();
   if (!session) redirect("/vendor/login");
 
@@ -21,7 +23,7 @@ export default async function VendorProfilePage() {
     redirect("/vendor/login");
   }
 
-  const [participation, applicationsCount, warnings, settings, sessions] = await Promise.all([
+  const [participation, applicationsCount, warnings, settings, sessions, googleIdentity] = await Promise.all([
     getVendorParticipation(vendor.id),
     prisma.application.count({ where: { vendorId: vendor.id } }),
     prisma.vendorWarning.findMany({
@@ -41,6 +43,7 @@ export default async function VendorProfilePage() {
     }),
     getSettings(),
     listVendorSessions(vendor.id, session.sessionId),
+    prisma.vendorIdentity.findUnique({ where: { vendorId_provider: { vendorId: vendor.id, provider: "google" } } }),
   ]);
 
   const completion = computeProfileCompletion(vendor as unknown as Record<string, unknown>, {
@@ -50,6 +53,11 @@ export default async function VendorProfilePage() {
   return (
     <ProfileClient
       sessions={sessions}
+      google={{
+        enabled: googleSignInEnabled(),
+        linked: googleIdentity ? { email: googleIdentity.email, createdAt: googleIdentity.createdAt.toISOString() } : null,
+        status: googleStatus,
+      }}
       vendor={{
         businessName: vendor.businessName,
         username: vendor.username,
