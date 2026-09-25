@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/Card";
 import { sanitizeAgreementHtml } from "@/lib/sanitizeHtml";
+import { isLegalDocType, type LegalDocType } from "@/lib/legalDocs";
 
 interface AgreementRow {
   id: string;
@@ -29,10 +30,13 @@ export function AgreementEditor({
   eventId,
   scopeLabel,
 }: {
-  type: "VENDOR_TERMS" | "EVENT_TERMS";
+  type: "VENDOR_TERMS" | "EVENT_TERMS" | LegalDocType;
   eventId?: string;
   scopeLabel: string;
 }) {
+  // Public legal pages are published, not accepted: no acceptance counts,
+  // and different wording around publishing.
+  const isPublicDoc = isLegalDocType(type);
   const [published, setPublished] = useState<AgreementRow | null>(null);
   const [draft, setDraft] = useState<AgreementRow | null>(null);
   const [history, setHistory] = useState<AgreementRow[]>([]);
@@ -140,7 +144,9 @@ export function AgreementEditor({
     if (!draft) return;
     if (
       !confirm(
-        `Publish version ${draft.version} of "${title}"? This becomes the live agreement immediately — any vendor who already accepted an earlier version will need to accept this one before continuing.`
+        isPublicDoc
+          ? `Publish version ${draft.version} of "${title}"? It replaces the public page immediately. Earlier versions stay in the version history.`
+          : `Publish version ${draft.version} of "${title}"? This becomes the live agreement immediately — any vendor who already accepted an earlier version will need to accept this one before continuing.`
       )
     ) {
       return;
@@ -194,19 +200,28 @@ export function AgreementEditor({
           {published ? (
             <StatusBadge label={`v${published.version}`} tone="positive" />
           ) : (
-            <StatusBadge label="Not configured" tone="attention" />
+            <StatusBadge label={isPublicDoc ? "Using default text" : "Not configured"} tone={isPublicDoc ? "neutral" : "attention"} />
           )}
         </div>
         {published ? (
           <div>
             <p className="font-heading text-lg text-brown-dark">{published.title}</p>
             <p className="text-xs text-brown-light mt-1">
-              Published {published.publishedAt ? new Date(published.publishedAt).toLocaleString() : "—"} ·{" "}
-              {published.acceptanceCount ?? 0} vendor{(published.acceptanceCount ?? 0) === 1 ? "" : "s"} accepted this version
+              Published {published.publishedAt ? new Date(published.publishedAt).toLocaleString() : "—"}
+              {!isPublicDoc && (
+                <>
+                  {" · "}
+                  {published.acceptanceCount ?? 0} vendor{(published.acceptanceCount ?? 0) === 1 ? "" : "s"} accepted this version
+                </>
+              )}
             </p>
           </div>
         ) : (
-          <p className="text-sm text-brown-light">No {scopeLabel} has been published yet — vendors won&rsquo;t be asked to accept anything until you publish one.</p>
+          <p className="text-sm text-brown-light">
+            {isPublicDoc
+              ? `No version has been published yet. The public page shows DAH's built-in default ${scopeLabel} until you publish one.`
+              : <>No {scopeLabel} has been published yet — vendors won&rsquo;t be asked to accept anything until you publish one.</>}
+          </p>
         )}
       </div>
 
@@ -315,8 +330,7 @@ export function AgreementEditor({
                   </p>
                   <p className="text-xs text-brown-light mt-0.5">
                     {h.status === "PUBLISHED" && h.publishedAt ? `Published ${new Date(h.publishedAt).toLocaleDateString()}` : h.status === "DRAFT" ? "In progress" : "Archived"}
-                    {" · "}
-                    {h.acceptanceCount ?? 0} accepted
+                    {!isPublicDoc && ` · ${h.acceptanceCount ?? 0} accepted`}
                   </p>
                 </div>
                 <StatusBadge label={h.status} tone={statusTone[h.status] ?? "neutral"} />

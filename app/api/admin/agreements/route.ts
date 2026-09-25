@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminGuard";
 import { getPublishedAgreement, getDraftAgreement, getVersionHistory, getAcceptanceCount, ensureVendorTermsExist, type AgreementType } from "@/lib/agreements";
+import { isLegalDocType } from "@/lib/legalDocs";
 
 function parseScope(req: NextRequest): { type: AgreementType; eventId: string | null } | null {
   const type = req.nextUrl.searchParams.get("type");
   const eventId = req.nextUrl.searchParams.get("eventId");
+  if (isLegalDocType(type)) return { type, eventId: null };
   if (type !== "VENDOR_TERMS" && type !== "EVENT_TERMS") return null;
   if (type === "VENDOR_TERMS") return { type, eventId: null };
   if (!eventId) return null;

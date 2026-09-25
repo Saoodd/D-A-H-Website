@@ -28,7 +28,7 @@ commit → push. Never lose completed work or silently reduce scope.
 | 2 | Dependency audit + controlled upgrades | ✅ Done — see "Phase 2" below |
 | 3 | Complete security audit | ✅ Done — `docs/SECURITY_AUDIT.md`; C1 mitigated, H1/M1/M2/M3/L2 fixed, L1/L3/L4 documented |
 | 4 | Auth modernization + active sessions + OAuth | ✅ Code done — Google sign-in waits on credentials (BLOCKED EXTERNAL STEP) |
-| 5 | Legal content CMS | ⏳ Not started |
+| 5 | Legal content CMS | ✅ Done — Admin → Content → Legal Pages |
 | 6 | Live payment gateway architecture | ⏳ Not started (groundwork from the C1 fix: `lib/bookingPayment.ts`, `PaymentEvent` audit log, `lib/paymentMode.ts`) |
 | 7 | Vercel/deployment + domain audit | ⏳ Not started (no Vercel account access in this environment — will need user-provided info) |
 | 8 | SEO / search visibility | ⏳ Not started (robots.ts/sitemap.ts/manifest.ts already exist — gaps found, see audit) |
@@ -167,10 +167,31 @@ commit → push. Never lose completed work or silently reduce scope.
   12h admin session lifetimes, and phone-only verification for applying
   to events. Email verification stays optional, as instructed.
 
+## Phase 5 — legal pages CMS
+
+- Admin → Content → **Legal Pages** manages the public Privacy Policy,
+  Terms & Conditions and Refund & Cancellation Policy (`/legal/*`). Each
+  has a draft, preview, publish and full version history.
+- Reuses the Agreement table's draft/publish/version engine under three
+  new type values (`PRIVACY_POLICY`, `WEBSITE_TERMS`, `REFUND_POLICY`). No
+  schema change or migration was needed. These documents are never
+  "accepted", so they are separate from Signup Terms and per-event Vendor
+  Event Terms, which keep their own pages, acceptance tracking and payment
+  gate unchanged.
+- Until a version is published, each page shows the text it showed before
+  (moved into `lib/legalDocs.ts`), so nothing changes on the live site
+  until an admin publishes. The first draft starts from that text.
+  Published pages show "Last updated". All HTML goes through the existing
+  sanitizer (`sanitizeAgreementHtml`).
+- Tested 20/20: default text, draft not public, publish replaces page,
+  script/`onerror`/`javascript:` stripped, v2 archives v1, discard, other
+  pages and vendor terms unaffected, admin auth. Browser check on desktop
+  and mobile.
+
 ## Current
 
-Phase 5 — admin-managed legal pages (Privacy / Terms / Refund) with
-draft, preview, publish and version history.
+Phase 6 — payment architecture (provider-neutral, no fake live
+integration).
 
 ## Remaining (high level)
 

@@ -1,7 +1,11 @@
 import "server-only";
 import { prisma } from "./prisma";
+import type { LegalDocType } from "./legalDocs";
 
-export type AgreementType = "VENDOR_TERMS" | "EVENT_TERMS";
+// VENDOR_TERMS / EVENT_TERMS are accepted by vendors. The LegalDocType
+// values (public Privacy / Terms / Refund pages, see lib/legalDocs.ts) only
+// borrow the draft/publish/version machinery; they are never accepted.
+export type AgreementType = "VENDOR_TERMS" | "EVENT_TERMS" | LegalDocType;
 
 const DEFAULT_VENDOR_TERMS_HTML = `
 <p>These Terms &amp; Conditions govern any vendor's application for, and booking of, a booth at a Dar Al Hay (DAH) event. By creating a DAH business account, the vendor agrees to be bound by these terms.</p>
@@ -85,7 +89,7 @@ export async function getVersionHistory(type: AgreementType, eventId: string | n
 /** Returns the in-progress draft for this scope, creating one (starting
  *  from the currently published text, or blank) if none exists yet.
  *  There is at most one DRAFT per (type, eventId) at a time. */
-export async function getOrCreateDraft(type: AgreementType, eventId: string | null, defaultTitle: string) {
+export async function getOrCreateDraft(type: AgreementType, eventId: string | null, defaultTitle: string, defaultBodyHtml = "") {
   const existingDraft = await getDraftAgreement(type, eventId);
   if (existingDraft) return existingDraft;
 
@@ -101,7 +105,7 @@ export async function getOrCreateDraft(type: AgreementType, eventId: string | nu
       eventId,
       version: nextVersion,
       title: published?.title ?? defaultTitle,
-      bodyHtml: published?.bodyHtml ?? "",
+      bodyHtml: published?.bodyHtml ?? defaultBodyHtml,
       status: "DRAFT",
     },
   });

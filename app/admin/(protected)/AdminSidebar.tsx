@@ -24,7 +24,13 @@ const groups: { label: string; links: { href: string; label: string }[] }[] = [
       { href: "/admin/pricing", label: "Pricing" },
     ],
   },
-  { label: "Content", links: [{ href: "/admin/gallery", label: "Gallery" }] },
+  {
+    label: "Content",
+    links: [
+      { href: "/admin/gallery", label: "Gallery" },
+      { href: "/admin/legal", label: "Legal Pages" },
+    ],
+  },
   {
     label: "Agreements",
     links: [
