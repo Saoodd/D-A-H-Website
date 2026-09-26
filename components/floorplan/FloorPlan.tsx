@@ -1370,6 +1370,8 @@ export function FloorPlan({
           <button
             type="button"
             onClick={() => setScale((s) => clampScale(s + 0.2))}
+            aria-label="Zoom in"
+            title="Zoom in"
             className="w-7 h-7 rounded-full border border-brown/30 hover:bg-brown/10"
           >
             +
@@ -1379,7 +1381,7 @@ export function FloorPlan({
 
       <div
         ref={containerRef}
-        className={`relative w-full aspect-square max-h-[70vh] overflow-hidden touch-none ${
+        className={`relative w-full aspect-square max-h-[70vh] overflow-hidden touch-none select-none ${
           placementMode ? "cursor-crosshair" : multiSelectMode ? "cursor-default" : "cursor-grab active:cursor-grabbing"
         } ${!backgroundImageUrl ? "bg-[repeating-linear-gradient(45deg,rgba(107,68,41,0.03),rgba(107,68,41,0.03)_10px,transparent_10px,transparent_20px)]" : ""}`}
         onPointerDown={onPointerDown}
